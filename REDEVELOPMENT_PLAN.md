@@ -4,7 +4,7 @@
 
 - The work is split into **phases**. Each task/PR delivers **exactly one phase**. Never one-shot several.
 - Start a phase only when all of its **Depends on** phases are checked `[x]`.
-- Every phase lists **Scope**, **Tasks**, and **Done when** (acceptance checks). A phase is done only when every "Done when" item passes locally and in CI.
+- Every phase lists **Scope**, **Tasks**, and **Done when** (acceptance checks). A phase is done only when every "Done when" item passes locally and in CI. While GitHub Actions is off, "CI" means a green `make ci` in the backend repo (ADR-0004).
 - At the end of a phase:
   - tick its checkbox in §6
   - add a one-line entry to the §9 Progress log (date, phase, PR/commit, notes)
@@ -110,9 +110,9 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
   - Middleware: request ID, recovery, access log, CORS (allowlist from config).
   - `GET /healthz`. Graceful shutdown on SIGTERM.
   - `Makefile` (`run`, `build`, `test`, `lint`, `fmt`), multi-stage `Dockerfile` (distroless/nonroot), `.golangci.yml`.
-  - GitHub Actions: `go vet`, golangci-lint, `go test`, docker build + `/healthz` smoke test.
-- **Done when:** `make run` then `curl /healthz` returns 200 JSON, `make lint test` passes, the Docker image builds and serves `/healthz`, and CI is green.
-- [ ] Phase 1
+  - ~~GitHub Actions~~ `make ci` (ADR-0004): tidy/fmt checks, `go vet`, golangci-lint, `go test -race`, govulncheck, docker build + `/healthz` smoke test.
+- **Done when:** `make run` then `curl /healthz` returns 200 JSON, `make lint test` passes, the Docker image builds and serves `/healthz`, and `make ci` is green.
+- [x] Phase 1
 
 ### Phase 2: Database foundation
 - **Depends on:** 1
@@ -426,14 +426,16 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-25 | Adopt §2 locked decisions; escrow + Transfers payment model; delivery stubbed | ADR-0001 |
 | 2026-09-25 | Phase 1: module path `github.com/dezmymachine/farmish-backend`; minimal error envelope pulled forward from Phase 3; optional `LOG_LEVEL`/`SHUTDOWN_TIMEOUT` env vars; Gin always in release mode | ADR-0002 |
 | 2026-09-25 | Split into two repos (`farmish-backend`, `farmish-frontend`); `~/work/farmish` is a plain folder; plan + ADRs live in the backend repo | ADR-0003 |
+| 2026-09-25 | GitHub Actions removed (account billing lock); local `make ci` is the gate | ADR-0004 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
 |---|---|---|---|
 | 2026-09-25 | 0 | initial commits (both repos) | Redone after the two-repo split (ADR-0003). `.gitignore` excludes `.env*` but keeps `!.env.example` |
-| 2026-09-25 | 1 | Phase 1 commit | Local checks pass: `make run` + `/healthz` 200 JSON, `make lint test`, image builds (26.5 MB distroless/nonroot) and serves `/healthz`, workflow passes actionlint. **Checkbox unticked until CI goes green after the first push**. See ADR-0002 |
+| 2026-09-25 | 1 | Phase 1 commit | Local checks pass: `make run` + `/healthz` 200 JSON, `make lint test`, image builds (26.5 MB distroless/nonroot) and serves `/healthz`, `make ci` green (tidy, fmt, vet, lint, race tests, govulncheck, docker smoke incl. graceful SIGTERM). GitHub Actions removed per ADR-0004. See ADR-0002 |
 
 ## 10. Backlog (not scheduled)
+- Restore GitHub Actions (a workflow that runs `make ci`) once account billing is fixed; retire ADR-0004
 - Courier integration via `DeliveryProvider`, and provider-quoted delivery fees
 - Account linking across Firebase methods
 - Hyperdrive pooling after Neon connection pressure is observed

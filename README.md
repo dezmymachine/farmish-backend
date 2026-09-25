@@ -24,6 +24,9 @@ curl localhost:8080/healthz
 | `make lint` | `go vet` + golangci-lint (pinned, auto-installed into `bin/`) |
 | `make fmt` | gofumpt + goimports |
 | `make docker-build` | Build the distroless image |
+| `make smoke` | Build the image, check `/healthz` and graceful shutdown |
+| `make vuln` | govulncheck |
+| `make ci` | Every check above, plus tidy/fmt checks. **Run before every push** (GitHub Actions is off, see ADR-0004) |
 
 ## Configuration
 

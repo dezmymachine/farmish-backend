@@ -43,7 +43,9 @@ Never edit it or import from it.
 - `make lint`: `go vet` plus golangci-lint v2, which is pinned and auto-installed into `bin/`
 - `make fmt`: gofumpt + goimports
 - `make docker-build`: builds the distroless image
+- `make smoke`: builds the image, then checks `/healthz` and graceful SIGTERM
+- `make ci`: **the required gate** before every push and to close a phase (ADR-0004). It runs tidy-check, fmt-check, lint, test, vuln (govulncheck) and smoke
 
-CI is `.github/workflows/ci.yml`: vet, lint, test, then a docker build with a `/healthz` smoke test.
+GitHub Actions is off for now (account billing lock). Never claim a phase is done without a green `make ci`.
 
 Phase 2 adds `make migrate-up|migrate-down|sqlc`. Update this section as each phase lands.
