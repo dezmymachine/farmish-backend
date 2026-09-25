@@ -17,6 +17,7 @@ func TestFromLookup_Defaults(t *testing.T) {
 	cfg, err := FromLookup(lookup(map[string]string{
 		"APP_ENV":      "development",
 		"CORS_ORIGINS": "http://localhost:3000, https://farmish.gh/",
+		"DATABASE_URL": "postgres://u:p@localhost:5432/farmish",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -31,21 +32,30 @@ func TestFromLookup_Defaults(t *testing.T) {
 	if cfg.IsProduction() {
 		t.Error("development config reported as production")
 	}
+	if cfg.DB.MaxConns != 10 || cfg.DB.StatementTimeout != 30*time.Second {
+		t.Errorf("unexpected DB defaults: %+v", cfg.DB)
+	}
 }
 
 func TestFromLookup_Overrides(t *testing.T) {
 	cfg, err := FromLookup(lookup(map[string]string{
-		"APP_ENV":          "production",
-		"PORT":             "9000",
-		"LOG_LEVEL":        "DEBUG",
-		"SHUTDOWN_TIMEOUT": "5s",
-		"CORS_ORIGINS":     "https://farmish.gh",
+		"APP_ENV":              "production",
+		"PORT":                 "9000",
+		"LOG_LEVEL":            "DEBUG",
+		"SHUTDOWN_TIMEOUT":     "5s",
+		"CORS_ORIGINS":         "https://farmish.gh",
+		"DATABASE_URL":         "postgresql://u:p@db:5432/farmish",
+		"DB_MAX_CONNS":         "25",
+		"DB_STATEMENT_TIMEOUT": "2s",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.Port != 9000 || cfg.LogLevel != "debug" || cfg.ShutdownTimeout != 5*time.Second || !cfg.IsProduction() {
 		t.Errorf("overrides not applied: %+v", cfg)
+	}
+	if cfg.DB.MaxConns != 25 || cfg.DB.StatementTimeout != 2*time.Second {
+		t.Errorf("DB overrides not applied: %+v", cfg.DB)
 	}
 }
 
@@ -55,7 +65,10 @@ func TestFromLookup_Invalid(t *testing.T) {
 		env  map[string]string
 		want []string
 	}{
-		{"missing required", map[string]string{}, []string{"APP_ENV is required", "CORS_ORIGINS is required"}},
+		{"missing required", map[string]string{}, []string{"APP_ENV is required", "CORS_ORIGINS is required", "DATABASE_URL is required"}},
+		{"bad db url", map[string]string{"APP_ENV": "test", "CORS_ORIGINS": "https://a.gh", "DATABASE_URL": "mysql://x"}, []string{"DATABASE_URL must start with"}},
+		{"bad max conns", map[string]string{"APP_ENV": "test", "CORS_ORIGINS": "https://a.gh", "DATABASE_URL": "postgres://x", "DB_MAX_CONNS": "0"}, []string{"DB_MAX_CONNS must be"}},
+		{"bad statement timeout", map[string]string{"APP_ENV": "test", "CORS_ORIGINS": "https://a.gh", "DATABASE_URL": "postgres://x", "DB_STATEMENT_TIMEOUT": "soon"}, []string{"DB_STATEMENT_TIMEOUT must be"}},
 		{"bad env", map[string]string{"APP_ENV": "prod", "CORS_ORIGINS": "https://a.gh"}, []string{"APP_ENV must be one of"}},
 		{"bad port", map[string]string{"APP_ENV": "test", "PORT": "99999", "CORS_ORIGINS": "https://a.gh"}, []string{"PORT must be"}},
 		{"bad log level", map[string]string{"APP_ENV": "test", "LOG_LEVEL": "loud", "CORS_ORIGINS": "https://a.gh"}, []string{"LOG_LEVEL must be"}},

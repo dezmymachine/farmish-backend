@@ -21,6 +21,7 @@ const (
 	CodeNotFound         = "not_found"
 	CodeMethodNotAllowed = "method_not_allowed"
 	CodeInternal         = "internal_error"
+	CodeUnavailable      = "unavailable"
 )
 
 // Abort writes the envelope with status and stops the handler chain.

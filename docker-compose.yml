@@ -1,0 +1,25 @@
+# Local dependencies. `make db-up` starts them; `make db-down` stops them.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: farmish
+      POSTGRES_PASSWORD: farmish
+      POSTGRES_DB: farmish
+    ports:
+      # 54320 on the host avoids clashing with a locally installed Postgres.
+      - "127.0.0.1:${FARMISH_PG_PORT:-54320}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U farmish -d farmish"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:
+
+networks:
+  default:
+    name: farmish-backend # fixed name so scripts/smoke.sh can attach to it

@@ -13,8 +13,13 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/http/middleware"
 )
 
+// Deps are the dependencies handlers need.
+type Deps struct {
+	DB handlers.Pinger
+}
+
 // NewRouter returns the Gin engine with middleware and routes registered.
-func NewRouter(cfg config.Config, log *slog.Logger) *gin.Engine {
+func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) *gin.Engine {
 	// Release mode everywhere: debug mode prints non-JSON banners to stdout.
 	gin.SetMode(gin.ReleaseMode)
 
@@ -38,7 +43,9 @@ func NewRouter(cfg config.Config, log *slog.Logger) *gin.Engine {
 		apierror.Abort(c, http.StatusMethodNotAllowed, apierror.CodeMethodNotAllowed, "Method not allowed")
 	})
 
-	r.GET("/healthz", handlers.Healthz)
+	health := handlers.Health{DB: deps.DB}
+	r.GET("/healthz", health.Healthz)
+	r.GET("/readyz", health.Readyz)
 
 	return r
 }

@@ -10,8 +10,10 @@ Requires Go 1.27+ and Docker.
 
 ```sh
 cp .env.example .env    # optional; `make run` falls back to .env.example
+make db-up              # Postgres 16 on 127.0.0.1:54320
+make migrate-up
 make run                # serves on :8080
-curl localhost:8080/healthz
+curl localhost:8080/healthz localhost:8080/readyz
 ```
 
 ## Make targets
@@ -20,7 +22,10 @@ curl localhost:8080/healthz
 |---|---|
 | `make run` | Run locally, loading `.env` (or `.env.example`) |
 | `make build` | Static binary at `bin/api` |
-| `make test` | `go test -race ./...` |
+| `make test` | `go test -race ./...`, including DB tests against compose Postgres |
+| `make db-up` / `db-down` / `db-reset` | Compose Postgres (`db-reset` wipes data) |
+| `make migrate-up` / `migrate-down N=…` / `migrate-version` / `migrate-new name=…` | Migrations |
+| `make sqlc` | Regenerate `internal/db` |
 | `make lint` | `go vet` + golangci-lint (pinned, auto-installed into `bin/`) |
 | `make fmt` | gofumpt + goimports |
 | `make docker-build` | Build the distroless image |
@@ -34,7 +39,10 @@ Environment variables only; the service exits at startup listing every missing/i
 
 ## Layout
 
-- `cmd/api`: wiring only (config → logger → router → server)
+- `cmd/api`: wiring only (config → logger → db → router → server)
 - `internal/config`: env loading and validation
+- `internal/database`: pgx pool; `dbtest/` gives each test a throwaway database
+- `internal/db`: sqlc-generated queries (from `db/queries/`)
+- `migrations/`: embedded SQL migrations; `cmd/migrate` applies them
 - `internal/http`: router, server, `middleware/`, `handlers/`, `apierror/`
 - `pkg/logger`: slog JSON logger + context helpers

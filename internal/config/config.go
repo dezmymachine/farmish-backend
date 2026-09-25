@@ -28,6 +28,14 @@ type Config struct {
 	LogLevel        string
 	CORSOrigins     []string
 	ShutdownTimeout time.Duration
+	DB              DB
+}
+
+// DB configures the Postgres connection pool.
+type DB struct {
+	URL              string
+	MaxConns         int32
+	StatementTimeout time.Duration
 }
 
 // IsProduction reports whether the service runs in production.
@@ -59,6 +67,11 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 		Port:            8080,
 		LogLevel:        "info",
 		ShutdownTimeout: 15 * time.Second,
+		DB: DB{
+			URL:              required("DATABASE_URL"),
+			MaxConns:         10,
+			StatementTimeout: 30 * time.Second,
+		},
 	}
 
 	switch cfg.Env {
@@ -91,6 +104,28 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 			errs = append(errs, fmt.Errorf("SHUTDOWN_TIMEOUT must be a positive duration, got %q", v))
 		} else {
 			cfg.ShutdownTimeout = d
+		}
+	}
+
+	if u := cfg.DB.URL; u != "" && !strings.HasPrefix(u, "postgres://") && !strings.HasPrefix(u, "postgresql://") {
+		errs = append(errs, errors.New("DATABASE_URL must start with postgres:// or postgresql://"))
+	}
+
+	if v := get("DB_MAX_CONNS"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 32)
+		if err != nil || n < 1 || n > 100 {
+			errs = append(errs, fmt.Errorf("DB_MAX_CONNS must be an integer in 1..100, got %q", v))
+		} else {
+			cfg.DB.MaxConns = int32(n)
+		}
+	}
+
+	if v := get("DB_STATEMENT_TIMEOUT"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d <= 0 {
+			errs = append(errs, fmt.Errorf("DB_STATEMENT_TIMEOUT must be a positive duration, got %q", v))
+		} else {
+			cfg.DB.StatementTimeout = d
 		}
 	}
 

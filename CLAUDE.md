@@ -37,15 +37,23 @@ Never edit it or import from it.
 
 ## Commands
 
-- `make run`: runs the API on `:8080`, loading `.env` if present, else `.env.example`
+- `make db-up` / `db-down` / `db-reset`: compose Postgres 16 on `127.0.0.1:54320`. `db-reset` deletes the data
+- `make run`: runs the API on `:8080`, loading `.env` if present, else `.env.example`. Needs `make db-up` and `make migrate-up`
 - `make build`: static binary at `bin/api`
-- `make test`: `go test -race -count=1 ./...`. For a single test: `go test -race -run TestName ./internal/http/...`
+- `make test`: starts compose Postgres, then `go test -race -count=1 ./...` with DB tests required
+  - single test: `TEST_DATABASE_URL='postgres://farmish:farmish@127.0.0.1:54320/farmish?sslmode=disable' go test -race -run TestName ./internal/...`
+  - without `TEST_DATABASE_URL`, DB tests skip
+- `make migrate-up`, `make migrate-down N=1|all`, `make migrate-version`: run `cmd/migrate` against `DATABASE_URL`
+- `make migrate-new name=snake_case`: creates the next `migrations/NNNNNN_name.{up,down}.sql` pair
+- `make sqlc`: regenerates `internal/db` from `db/queries/*.sql` + `migrations/` (pinned Docker image). Never hand-edit `internal/db`
 - `make lint`: `go vet` plus golangci-lint v2, which is pinned and auto-installed into `bin/`
 - `make fmt`: gofumpt + goimports
 - `make docker-build`: builds the distroless image
-- `make smoke`: builds the image, then checks `/healthz` and graceful SIGTERM
-- `make ci`: **the required gate** before every push and to close a phase (ADR-0004). It runs tidy-check, fmt-check, lint, test, vuln (govulncheck) and smoke
+- `make smoke`: builds the image, migrates a throwaway DB with `/migrate`, checks `/healthz`, `/readyz` (200, then 503 after cutting the DB network) and graceful SIGTERM
+- `make ci`: **the required gate** before every push and to close a phase (ADR-0004). It runs tidy-check, fmt-check, sqlc-check, lint, test, vuln (govulncheck) and smoke
 
 GitHub Actions is off for now (account billing lock). Never claim a phase is done without a green `make ci`.
 
-Phase 2 adds `make migrate-up|migrate-down|sqlc`. Update this section as each phase lands.
+DB tests use `dbtest.Pool(t)` (fresh migrated database per test) or `dbtest.EmptyURL(t)` (unmigrated). Both are in `internal/database/dbtest`.
+
+Update this section as each phase lands.

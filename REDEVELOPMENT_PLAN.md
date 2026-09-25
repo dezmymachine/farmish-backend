@@ -63,10 +63,11 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
     .github/workflows/ci.yml
     cmd/api/main.go              # wiring only: config → logger → db → river → router → run
     api/openapi.yaml             # source of truth for the HTTP contract
-    migrations/                  # NNNNNN_name.{up,down}.sql
+    cmd/migrate/main.go          # embedded golang-migrate runner (ADR-0005)
+    migrations/                  # NNNNNN_name.{up,down}.sql, embedded via embed.FS
     db/queries/*.sql  sqlc.yaml  # sqlc input → internal/db (generated)
     internal/
-      config/ http/ (router, middleware, handlers, api.gen.go) auth/ users/
+      config/ database/ (pgxpool, dbtest) db/ (sqlc) http/ (router, middleware, handlers, api.gen.go) auth/ users/
       catalog/ listings/ media/ search/
       payments/ ledger/ promotions/ checkout/ orders/ escrow/ payouts/ refunds/ delivery/
       messaging/ engagement/ (reviews, favorites, reports) supply/ notify/ jobs/ ratelimit/ audit/
@@ -128,7 +129,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
   - up → down → up migrations run cleanly
   - `/readyz` returns 200 with the DB up and 503 with it down
   - a sample sqlc query compiles and is tested
-- [ ] Phase 2
+- [x] Phase 2
 
 ### Phase 3: API contract & codegen
 - **Depends on:** 1
@@ -418,7 +419,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 - [ ] **F9 Launch:** SEO/meta, performance pass, accessibility pass, production deploy, legacy app retirement plan.
 
 ## 7. Environment variables (backend)
-`APP_ENV`, `PORT`, `LOG_LEVEL`, `SHUTDOWN_TIMEOUT`, `DATABASE_URL`, `CORS_ORIGINS`, `FIREBASE_PROJECT_ID`, `FIREBASE_CREDENTIALS_JSON`, `MNOTIFY_API_KEY`, `MNOTIFY_SENDER`, `OTP_TTL_MINUTES`, `OTP_MAX_ATTEMPTS`, `TURNSTILE_SECRET`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `DATA_ENCRYPTION_KEY`, `ESCROW_AUTO_COMPLETE_DAYS`, `SELLER_ACCEPT_TIMEOUT_HOURS`, `PAYOUT_MIN_PESEWAS`.
+`APP_ENV`, `PORT`, `LOG_LEVEL`, `SHUTDOWN_TIMEOUT`, `DATABASE_URL`, `DB_MAX_CONNS`, `DB_STATEMENT_TIMEOUT`, `CORS_ORIGINS`, `FIREBASE_PROJECT_ID`, `FIREBASE_CREDENTIALS_JSON`, `MNOTIFY_API_KEY`, `MNOTIFY_SENDER`, `OTP_TTL_MINUTES`, `OTP_MAX_ATTEMPTS`, `TURNSTILE_SECRET`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `DATA_ENCRYPTION_KEY`, `ESCROW_AUTO_COMPLETE_DAYS`, `SELLER_ACCEPT_TIMEOUT_HOURS`, `PAYOUT_MIN_PESEWAS`.
 
 ## 8. Decisions log
 | Date | Decision | ADR |
@@ -427,12 +428,14 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-25 | Phase 1: module path `github.com/dezmymachine/farmish-backend`; minimal error envelope pulled forward from Phase 3; optional `LOG_LEVEL`/`SHUTDOWN_TIMEOUT` env vars; Gin always in release mode | ADR-0002 |
 | 2026-09-25 | Split into two repos (`farmish-backend`, `farmish-frontend`); `~/work/farmish` is a plain folder; plan + ADRs live in the backend repo | ADR-0003 |
 | 2026-09-25 | GitHub Actions removed (account billing lock); local `make ci` is the gate | ADR-0004 |
+| 2026-09-25 | Phase 2: own `cmd/migrate` (embedded golang-migrate) instead of the CLI; sqlc via Docker; per-test databases; compose on port 54320; bounded pool close; `DB_MAX_CONNS`/`DB_STATEMENT_TIMEOUT` | ADR-0005 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
 |---|---|---|---|
 | 2026-09-25 | 0 | initial commits (both repos) | Redone after the two-repo split (ADR-0003). `.gitignore` excludes `.env*` but keeps `!.env.example` |
 | 2026-09-25 | 1 | Phase 1 commit | Local checks pass: `make run` + `/healthz` 200 JSON, `make lint test`, image builds (26.5 MB distroless/nonroot) and serves `/healthz`, `make ci` green (tidy, fmt, vet, lint, race tests, govulncheck, docker smoke incl. graceful SIGTERM). GitHub Actions removed per ADR-0004. See ADR-0002 |
+| 2026-09-25 | 2 | Phase 2 commit | `make ci` green. Migrations up→down→up clean (test + Makefile); `/readyz` 200 → 503 (DB stopped) → 200 on the running API; sqlc `ListExtensions` compiled and tested; per-test DB helper. Smoke test caught a pool-close hang on SIGTERM with the DB unreachable, now fixed. See ADR-0005 |
 
 ## 10. Backlog (not scheduled)
 - Restore GitHub Actions (a workflow that runs `make ci`) once account billing is fixed; retire ADR-0004

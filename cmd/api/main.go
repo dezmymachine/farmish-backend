@@ -9,11 +9,17 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/dezmymachine/farmish-backend/internal/config"
+	"github.com/dezmymachine/farmish-backend/internal/database"
 	httpapi "github.com/dezmymachine/farmish-backend/internal/http"
 	"github.com/dezmymachine/farmish-backend/pkg/logger"
 )
+
+// dbCloseTimeout bounds pool shutdown so SIGTERM exits within the platform's
+// grace period even when the database is unreachable.
+const dbCloseTimeout = 5 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -33,7 +39,18 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	router := httpapi.NewRouter(cfg, log)
+	pool, err := database.Open(ctx, cfg.DB)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if !database.Close(pool, dbCloseTimeout) {
+			log.Warn("database pool did not close in time; exiting anyway", "timeout", dbCloseTimeout)
+		}
+	}()
+	log.Info("database connected", "max_conns", cfg.DB.MaxConns)
+
+	router := httpapi.NewRouter(cfg, log, httpapi.Deps{DB: pool})
 	addr := net.JoinHostPort("", strconv.Itoa(cfg.Port))
 	var lc net.ListenConfig
 	ln, err := lc.Listen(ctx, "tcp", addr)
