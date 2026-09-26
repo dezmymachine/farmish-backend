@@ -25,9 +25,15 @@ type Deps struct {
 	Verifier  auth.Verifier
 	Users     UserService
 	Turnstile turnstile.Verifier
-	// Limiter defaults to an in-process ratelimit.Memory; RateLimits
-	// defaults to middleware.DefaultRateLimits().
-	Limiter    ratelimit.Limiter
+	// IPLimiter backs the per-IP flood limit. It stays in-process on purpose:
+	// free, instant, and a flood can't burn the metered Redis quota.
+	// Defaults to ratelimit.Memory.
+	IPLimiter ratelimit.Limiter
+	// SharedLimiter backs per-user and per-operation limits: Upstash Redis
+	// (with in-process fallback) when REDIS_URL is set. Defaults to
+	// ratelimit.Memory.
+	SharedLimiter ratelimit.Limiter
+	// RateLimits defaults to middleware.DefaultRateLimits().
 	RateLimits *middleware.RateLimits
 }
 
@@ -66,15 +72,18 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 	if err := limits.Validate(); err != nil {
 		return nil, err
 	}
-	limiter := deps.Limiter
-	if limiter == nil {
-		limiter = ratelimit.NewMemory()
+	ipLimiter, sharedLimiter := deps.IPLimiter, deps.SharedLimiter
+	if ipLimiter == nil {
+		ipLimiter = ratelimit.NewMemory()
+	}
+	if sharedLimiter == nil {
+		sharedLimiter = ratelimit.NewMemory()
 	}
 	limitSpec, err := api.GetSpec()
 	if err != nil {
 		return nil, fmt.Errorf("load openapi spec: %w", err)
 	}
-	limitOperations, err := middleware.RateLimitOperations(limitSpec, limiter, limits)
+	limitOperations, err := middleware.RateLimitOperations(limitSpec, sharedLimiter, limits)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +105,7 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 	//   - Validation runs last, so anonymous callers learn nothing about request shapes.
 	r.Use(
 		middleware.CORS(cfg.CORSOrigins),
-		middleware.RateLimitIP(limiter, limits.IP, "/healthz", "/readyz"),
+		middleware.RateLimitIP(ipLimiter, limits.IP, "/healthz", "/readyz"),
 		authenticate,
 		limitOperations,
 		requireTurnstile,

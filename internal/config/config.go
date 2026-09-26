@@ -53,6 +53,13 @@ type Config struct {
 	JobsMaxWorkers  int
 	ClientIP        ClientIP
 	TurnstileSecret string
+	// RedisURL enables the shared (Upstash) rate-limit backend. Empty means
+	// in-process limits only.
+	RedisURL string
+	// RedisTimeout bounds each shared rate-limit call before falling back to
+	// in-process limits (REDIS_TIMEOUT). Keep Redis in the API's region so
+	// the default holds.
+	RedisTimeout time.Duration
 }
 
 // ClientIP configures how the real client address is derived (rate limits,
@@ -117,6 +124,7 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 		// grace period (Docker's default is 10s).
 		ShutdownTimeout: 9 * time.Second,
 		RunMode:         RunAll,
+		RedisTimeout:    200 * time.Millisecond,
 		JobsMaxWorkers:  10,
 		DB: DB{
 			URL:              required("DATABASE_URL"),
@@ -231,6 +239,29 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 			errs = append(errs, fmt.Errorf("TRUST_CLOUDFLARE must be true or false, got %q", v))
 		}
 		cfg.ClientIP.TrustCloudflare = b
+	}
+
+	if v := get("REDIS_URL"); v != "" {
+		switch {
+		case strings.HasPrefix(v, "rediss://"):
+		case strings.HasPrefix(v, "redis://"):
+			if cfg.Env == EnvStaging || cfg.Env == EnvProduction {
+				errs = append(errs, fmt.Errorf("REDIS_URL must use rediss:// (TLS) when APP_ENV=%s", cfg.Env))
+			}
+		default:
+			// Never echo the value: it embeds the password.
+			errs = append(errs, errors.New("REDIS_URL must start with redis:// or rediss://"))
+		}
+		cfg.RedisURL = v
+	}
+
+	if v := get("REDIS_TIMEOUT"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d < 10*time.Millisecond || d > 5*time.Second {
+			errs = append(errs, fmt.Errorf("REDIS_TIMEOUT must be a duration between 10ms and 5s, got %q", v))
+		} else {
+			cfg.RedisTimeout = d
+		}
 	}
 
 	cfg.TurnstileSecret = required("TURNSTILE_SECRET")

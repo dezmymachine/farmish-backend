@@ -3,9 +3,10 @@
 #   1. /migrate up on a fresh farmish_smoke database
 #   2. /healthz and /readyz return 200 {"status":"ok"}
 #   2b. /v1/me: 401 without a token, 200 with an Auth-emulator token
+#   2c. shared rate limits run on Redis
 #   3. cut the DB network: /readyz returns 503, /healthz stays 200
 #   4. SIGTERM exits 0 with the graceful-shutdown log
-# Usage: scripts/smoke.sh <image>   (needs `make db-up auth-up`)
+# Usage: scripts/smoke.sh <image>   (needs `make db-up auth-up redis-up`)
 set -euo pipefail
 
 image="${1:?usage: smoke.sh <image>}"
@@ -44,7 +45,7 @@ docker run --rm --network "$net" -e DATABASE_URL="$db_url" --entrypoint /migrate
 docker create --name "$name" -p "127.0.0.1:${port}:8080" \
   -e APP_ENV=test -e CORS_ORIGINS=http://localhost:3000 -e DATABASE_URL="$db_url" \
   -e FIREBASE_PROJECT_ID=demo-farmish -e FIREBASE_AUTH_EMULATOR_HOST=firebase-auth:9099 \
-  -e TURNSTILE_SECRET=1x0000000000000000000000000000000AA "$image" >/dev/null
+  -e TURNSTILE_SECRET=1x0000000000000000000000000000000AA -e REDIS_URL=redis://redis:6379 "$image" >/dev/null
 docker network connect "$net" "$name"
 docker start "$name" >/dev/null
 
@@ -62,6 +63,8 @@ token="$(curl -fsS -X POST "${emu}/identitytoolkit.googleapis.com/v1/accounts:si
   -d "{\"email\":\"smoke-$$-${RANDOM}@farmish.test\",\"password\":\"smoke-pass\",\"returnSecureToken\":true}" \
   | sed -E 's/.*"idToken":"([^"]+)".*/\1/')" || fail "could not get an emulator token"
 expect /v1/me 200 "" -H "Authorization: Bearer ${token}"
+docker logs "$name" 2>&1 | grep -q '"shared":"redis"' || fail "shared rate limiter is not on Redis"
+docker logs "$name" 2>&1 | grep -q '"msg":"redis connected"' || fail "API did not connect to Redis"
 
 docker network disconnect "$net" "$name"
 expect /readyz 503
@@ -72,4 +75,4 @@ code="$(docker inspect -f '{{.State.ExitCode}}' "$name")"
 [[ "$code" == "0" ]] || fail "container exited $code after SIGTERM"
 docker logs "$name" 2>&1 | grep -q '"msg":"http server stopped"' || fail "no graceful shutdown log"
 
-echo "smoke: migrate ok, /healthz ok, /v1/me 401 -> 200 with token, /readyz 200 -> 503 on DB loss, graceful shutdown ok"
+echo "smoke: migrate ok, /healthz ok, redis limits ok, /v1/me 401 -> 200 with token, /readyz 200 -> 503 on DB loss, graceful shutdown ok"

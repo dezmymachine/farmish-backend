@@ -27,6 +27,7 @@ curl -H "Authorization: Bearer $T" localhost:8080/v1/me
 | `make test` | `go test -race ./...`, including DB tests against compose Postgres |
 | `make db-up` / `db-down` / `db-reset` | Compose Postgres (`db-reset` wipes data) |
 | `make auth-up` | Firebase Auth emulator |
+| `make redis-up` | Local Redis (stand-in for Upstash) |
 | `make grant-admin EMAIL=…` / `revoke-admin` | Change a user's role (DB + Firebase claim) |
 | `make migrate-up` / `migrate-down N=…` / `migrate-version` / `migrate-new name=…` | Migrations |
 | `make generate` | Regenerate the API server code from `api/openapi.yaml` |
@@ -49,7 +50,7 @@ Environment variables only; the service exits at startup listing every missing/i
 - `internal/config`: env loading and validation
 - `internal/auth`: Firebase ID-token verification and custom claims; `authtest/` creates emulator users
 - `internal/users`: maps verified identities to `users` rows
-- `internal/ratelimit`: token-bucket limiter; `internal/turnstile`: Cloudflare Turnstile verification
+- `internal/redisx`: Redis client (Upstash); `internal/ratelimit`: token-bucket limiters (in-process, Redis, fallback); `internal/turnstile`: Cloudflare Turnstile verification
 - `internal/jobs`: River background jobs (registry, client, unique helpers); schema in `migrations/000003_river_queue`
 - `internal/database`: pgx pool; `dbtest/` gives each test a throwaway database
 - `internal/db`: sqlc-generated queries (from `db/queries/`)

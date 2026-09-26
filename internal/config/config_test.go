@@ -215,3 +215,45 @@ func TestClientIPAndTurnstile_Invalid(t *testing.T) {
 		})
 	}
 }
+
+func TestRedisURL(t *testing.T) {
+	cfg, err := FromLookup(lookup(base(nil)))
+	if err != nil || cfg.RedisURL != "" || cfg.RedisTimeout != 200*time.Millisecond {
+		t.Fatalf("default: %q %v %v", cfg.RedisURL, cfg.RedisTimeout, err)
+	}
+	if cfg, err := FromLookup(lookup(base(map[string]string{"REDIS_TIMEOUT": "750ms"}))); err != nil || cfg.RedisTimeout != 750*time.Millisecond {
+		t.Errorf("REDIS_TIMEOUT override: %v %v", cfg.RedisTimeout, err)
+	}
+	for _, bad := range []string{"5ms", "10s", "soon"} {
+		if _, err := FromLookup(lookup(base(map[string]string{"REDIS_TIMEOUT": bad}))); err == nil {
+			t.Errorf("REDIS_TIMEOUT=%s accepted", bad)
+		}
+	}
+	for _, ok := range []map[string]string{
+		{"REDIS_URL": "redis://127.0.0.1:63790"},
+		{"REDIS_URL": "rediss://default:tok@x.upstash.io:6379"},
+		{
+			"REDIS_URL": "rediss://default:tok@x.upstash.io:6379", "APP_ENV": "production", "FIREBASE_CREDENTIALS_JSON": saJSON,
+			"TURNSTILE_SECRET": "0x4real",
+		},
+	} {
+		if _, err := FromLookup(lookup(base(ok))); err != nil {
+			t.Errorf("%v: %v", ok["REDIS_URL"], err)
+		}
+	}
+	for want, env := range map[string]map[string]string{
+		"must start with": {"REDIS_URL": "https://default:hunter2@x.upstash.io"},
+		"must use rediss": {
+			"REDIS_URL": "redis://default:hunter2@x:6379", "APP_ENV": "production",
+			"FIREBASE_CREDENTIALS_JSON": saJSON, "TURNSTILE_SECRET": "0x4real",
+		},
+	} {
+		_, err := FromLookup(lookup(base(env)))
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %v, want %q", err, want)
+		}
+		if err != nil && strings.Contains(err.Error(), "hunter2") {
+			t.Error("error leaks the Redis password")
+		}
+	}
+}

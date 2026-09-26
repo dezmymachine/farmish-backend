@@ -19,6 +19,18 @@ services:
       timeout: 3s
       retries: 30
 
+  redis:
+    # Local stand-in for Upstash (tests, smoke, dev without REDIS_URL pointing at Upstash).
+    image: redis:8-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"] # ephemeral
+    ports:
+      - "127.0.0.1:${FARMISH_REDIS_PORT:-63790}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
   firebase-auth:
     build: docker/firebase-emulator
     image: farmish-firebase-auth:15.31.0

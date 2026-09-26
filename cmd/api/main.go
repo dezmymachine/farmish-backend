@@ -19,6 +19,7 @@ import (
 	httpapi "github.com/dezmymachine/farmish-backend/internal/http"
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
 	"github.com/dezmymachine/farmish-backend/internal/ratelimit"
+	"github.com/dezmymachine/farmish-backend/internal/redisx"
 	"github.com/dezmymachine/farmish-backend/internal/turnstile"
 	"github.com/dezmymachine/farmish-backend/internal/users"
 	"github.com/dezmymachine/farmish-backend/pkg/logger"
@@ -35,6 +36,38 @@ func shutdownBudget(total time.Duration) (drain, jobsSoft, jobsHard, dbClose tim
 	jobsSoft = drain * 2 / 3
 	jobsHard = drain - jobsSoft
 	return drain, jobsSoft, jobsHard, dbClose
+}
+
+// sharedLimiter returns the limiter for per-user and per-operation limits:
+// Upstash Redis with an in-process fallback when REDIS_URL is set, otherwise
+// in-process only. An unreachable Redis at startup doesn't block boot.
+func sharedLimiter(ctx context.Context, cfg config.Config, log *slog.Logger) (ratelimit.Limiter, func(), error) {
+	local := ratelimit.NewMemory()
+	go local.RunSweeper(ctx, time.Minute)
+	if cfg.RedisURL == "" {
+		log.Info("rate limiter backend", "shared", "memory")
+		return local, func() {}, nil
+	}
+
+	client, err := redisx.New(cfg.RedisURL)
+	if err != nil {
+		return nil, nil, err
+	}
+	pingCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if rtt, err := redisx.Ping(pingCtx, client); err != nil {
+		log.Warn("redis unreachable at startup; shared limits use in-process fallback until it recovers", "error", err.Error())
+	} else {
+		log.Info("redis connected", "rtt_ms", rtt.Milliseconds())
+	}
+	log.Info("rate limiter backend", "shared", "redis", "timeout_ms", cfg.RedisTimeout.Milliseconds())
+
+	return &ratelimit.Fallback{
+		Primary:   ratelimit.NewRedis(client, "farmish:"+string(cfg.Env)+":rl:"),
+		Secondary: local,
+		Timeout:   cfg.RedisTimeout,
+		Log:       log,
+	}, func() { _ = client.Close() }, nil
 }
 
 // registry lists every job this service knows. Each phase registers its
@@ -110,14 +143,20 @@ func run() error {
 		if cfg.Firebase.EmulatorHost != "" {
 			log.Warn("FIREBASE AUTH EMULATOR IN USE: token signatures are NOT verified", "host", cfg.Firebase.EmulatorHost)
 		}
-		limiter := ratelimit.NewMemory()
-		go limiter.RunSweeper(ctx, time.Minute)
+		ipLimiter := ratelimit.NewMemory()
+		go ipLimiter.RunSweeper(ctx, time.Minute)
+		shared, closeShared, err := sharedLimiter(ctx, cfg, log)
+		if err != nil {
+			return err
+		}
+		defer closeShared()
 		router, err = httpapi.NewRouter(cfg, log, httpapi.Deps{
-			DB:        pool,
-			Verifier:  firebase,
-			Users:     users.New(pool),
-			Turnstile: turnstile.New(cfg.TurnstileSecret),
-			Limiter:   limiter,
+			DB:            pool,
+			Verifier:      firebase,
+			Users:         users.New(pool),
+			Turnstile:     turnstile.New(cfg.TurnstileSecret),
+			IPLimiter:     ipLimiter,
+			SharedLimiter: shared,
 		})
 		if err != nil {
 			return err

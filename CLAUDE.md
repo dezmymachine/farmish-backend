@@ -38,10 +38,11 @@ Never edit it or import from it.
 ## Commands
 
 - `make db-up` / `db-down` / `db-reset`: compose Postgres 18 (matches Neon) on `127.0.0.1:54320`. `db-reset` deletes the data
+- `make redis-up`: local Redis on `127.0.0.1:63790`, a stand-in for Upstash. Tests use it and never touch Upstash
 - `make auth-up`: Firebase Auth emulator on `127.0.0.1:9099` (project `demo-farmish`). `.env.example` points at it by default
 - `make run`: runs the API on `:8080`, loading `.env` if present, else `.env.example`. Needs `make db-up` and `make migrate-up`
 - `make build`: static binary at `bin/api`
-- `make test`: starts compose Postgres + the Auth emulator, then `go test -race -count=1 ./...` with DB and auth tests required
+- `make test`: starts compose Postgres, the Auth emulator and Redis, then `go test -race -count=1 ./...` with DB and auth tests required
   - single test: `TEST_DATABASE_URL='postgres://farmish:farmish@127.0.0.1:54320/farmish?sslmode=disable' FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 go test -race -run TestName ./internal/...`
   - without `TEST_DATABASE_URL` / `FIREBASE_AUTH_EMULATOR_HOST`, DB / auth tests skip
 - `make migrate-up`, `make migrate-down N=1|all`, `make migrate-version`: run `cmd/migrate` against `DATABASE_URL`
@@ -72,7 +73,8 @@ In handlers, get the caller with `users.FromContext(ctx)`. Never take a user ID 
 - `x-farmish-rate-limit: sensitive` adds a stricter limit. Use it for writes that cost money or notify people, and for anonymous forms.
 - `x-farmish-turnstile: true` requires a Cloudflare Turnstile token in `X-Turnstile-Token`.
 - Per-IP and per-user limits apply automatically.
-- Use `middleware.GetClientIP(c)` for the client address, never `c.ClientIP()`. Build errors with `apierror` (stable snake_case codes). Never return `err.Error()` to clients.
+- Use `middleware.GetClientIP(c)` for the client address, never `c.ClientIP()`.
+- The per-IP limit is in-process. Per-user and per-operation limits use Upstash Redis when `REDIS_URL` is set, and fall back to in-process after `REDIS_TIMEOUT`. Build errors with `apierror` (stable snake_case codes). Never return `err.Error()` to clients.
 
 Auth tests use `authtest.EmailUser(t)` / `authtest.PhoneUser(t)` (real emulator accounts + tokens) and `authtest.UnsignedToken(claims)` for crafted bad tokens.
 

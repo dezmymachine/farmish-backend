@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +17,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/database/dbtest"
 	"github.com/dezmymachine/farmish-backend/internal/http/api"
 	"github.com/dezmymachine/farmish-backend/internal/http/apierror"
+	"github.com/dezmymachine/farmish-backend/internal/ratelimit"
 	"github.com/dezmymachine/farmish-backend/internal/users"
 )
 
@@ -177,5 +179,44 @@ func TestUpdateMe(t *testing.T) {
 			}
 			assertErrorEnvelope(t, w.Body.Bytes(), apierror.CodeValidationFailed)
 		})
+	}
+}
+
+// countingLimiter wraps a limiter and counts calls.
+type countingLimiter struct {
+	inner ratelimit.Limiter
+	calls atomic.Int32
+}
+
+func (c *countingLimiter) Allow(ctx context.Context, r ratelimit.Rule, key string) (ratelimit.Decision, error) {
+	c.calls.Add(1)
+	return c.inner.Allow(ctx, r, key)
+}
+
+// Hybrid limiting: anonymous traffic (e.g. a flood) only ever touches the
+// in-process IP limiter, never the metered shared (Upstash) one; signed-in
+// requests use the shared limiter for their per-user budget.
+func TestRateLimit_HybridBackends(t *testing.T) {
+	fb := authtest.Firebase(t)
+	ip := &countingLimiter{inner: ratelimit.NewMemory()}
+	shared := &countingLimiter{inner: ratelimit.NewMemory()}
+	r := newTestRouter(t, Deps{
+		DB: fakePinger{}, Verifier: fb, Users: users.New(dbtest.Pool(t)),
+		IPLimiter: ip, SharedLimiter: shared,
+	})
+
+	for range 20 {
+		serve(t, r, meRequest(http.MethodGet, "", ""))
+	}
+	if ip.calls.Load() != 20 || shared.calls.Load() != 0 {
+		t.Fatalf("anonymous: ip %d, shared %d (want 20, 0)", ip.calls.Load(), shared.calls.Load())
+	}
+
+	eu := authtest.EmailUser(t)
+	if w := serve(t, r, meRequest(http.MethodGet, eu.Token, "")); w.Code != http.StatusOK {
+		t.Fatalf("signed in: %d", w.Code)
+	}
+	if shared.calls.Load() != 1 {
+		t.Errorf("signed-in request: shared limiter calls = %d, want 1", shared.calls.Load())
 	}
 }

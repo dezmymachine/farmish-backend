@@ -32,6 +32,7 @@ Core flows: browse/search → sell (listings) → buyer↔seller messaging → c
 | Auth | **Firebase** for social, email/password **and phone** (Firebase sends and verifies the SMS code via the client SDK + reCAPTCHA/App Check). The backend only verifies Firebase ID tokens; no custom OTP backend (ADR-0007). No account linking in v1 |
 | SMS | mNotify/BMS for **transactional notifications only** (order/payout alerts), behind a `notify.Notifier` interface, introduced in Phase 16. Sign-in codes are Firebase's job |
 | Media | **Cloudflare R2** presigned uploads + CDN |
+| Redis | **Upstash Redis** (TCP + TLS): shared per-user/per-operation rate limits now, caching later. Per-IP limits stay in-process (ADR-0012) |
 | Payments | **Paystack** (card + MoMo). **Farmish is merchant of record**: funds are held in escrow on the Paystack balance and released to sellers via **Paystack Transfers** minus commission |
 | Delivery | v1 stub: delivery method/address/fee/statuses on orders, `DeliveryProvider` interface with a `manual` impl. Courier integration later |
 | Money | **Integer pesewas (`bigint`)** everywhere in DB and API (`amount` + `currency: "GHS"`). Frontend formats for display |
@@ -47,6 +48,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
                                     ├── Firebase Admin (verify ID tokens, custom claims)
                                     ├── Neon Postgres (pgx + sqlc, golang-migrate)
                                     ├── River (jobs + periodic jobs, same process in v1)
+                                    ├── Upstash Redis (shared rate limits, later cache)
                                     ├── R2 (presigned PUT, public CDN GET)
                                     ├── Paystack (charges, refunds, transfers, webhooks)
                                     └── mNotify (transactional SMS alerts)
@@ -421,7 +423,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 - [ ] **F9 Launch:** SEO/meta, performance pass, accessibility pass, production deploy, legacy app retirement plan.
 
 ## 7. Environment variables (backend)
-`APP_ENV`, `PORT`, `LOG_LEVEL`, `SHUTDOWN_TIMEOUT` (total SIGTERM-to-exit budget), `RUN_MODE` (`all|api|worker`), `JOBS_MAX_WORKERS`, `DATABASE_URL`, `DB_MAX_CONNS`, `DB_STATEMENT_TIMEOUT`, `CORS_ORIGINS`, `FIREBASE_PROJECT_ID`, `FIREBASE_CREDENTIALS_JSON`, `FIREBASE_AUTH_EMULATOR_HOST` (dev/test only, refused in staging/production), `TURNSTILE_SECRET`, `TRUSTED_PROXIES`, `TRUST_CLOUDFLARE`, `MNOTIFY_API_KEY`, `MNOTIFY_SENDER` (Phase 16), `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `DATA_ENCRYPTION_KEY`, `ESCROW_AUTO_COMPLETE_DAYS`, `SELLER_ACCEPT_TIMEOUT_HOURS`, `PAYOUT_MIN_PESEWAS`.
+`APP_ENV`, `PORT`, `LOG_LEVEL`, `SHUTDOWN_TIMEOUT` (total SIGTERM-to-exit budget), `RUN_MODE` (`all|api|worker`), `JOBS_MAX_WORKERS`, `DATABASE_URL`, `DB_MAX_CONNS`, `DB_STATEMENT_TIMEOUT`, `CORS_ORIGINS`, `FIREBASE_PROJECT_ID`, `FIREBASE_CREDENTIALS_JSON`, `FIREBASE_AUTH_EMULATOR_HOST` (dev/test only, refused in staging/production), `TURNSTILE_SECRET`, `TRUSTED_PROXIES`, `TRUST_CLOUDFLARE`, `REDIS_URL` (optional, `rediss://`), `REDIS_TIMEOUT`, `MNOTIFY_API_KEY`, `MNOTIFY_SENDER` (Phase 16), `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `DATA_ENCRYPTION_KEY`, `ESCROW_AUTO_COMPLETE_DAYS`, `SELLER_ACCEPT_TIMEOUT_HOURS`, `PAYOUT_MIN_PESEWAS`.
 
 ## 8. Decisions log
 | Date | Decision | ADR |
@@ -437,6 +439,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-26 | Local/test Postgres bumped 16 → 18 to match Neon (18.6); new `pgdata18` volume | ADR-0009 |
 | 2026-09-26 | Phase 5: River schema generated into golang-migrate (000003) with a version guard test; 10 attempts / 1m timeout defaults; `RUN_MODE` all/api/worker (worker = probes only); `SHUTDOWN_TIMEOUT` is the total budget (9s) with concurrent HTTP drain + job stop; River UI deferred | ADR-0010 |
 | 2026-09-26 | Phase 6: in-process token buckets (ip 300/min, user 120/min, `sensitive` 10/min) with bounded memory, fail-open; spec extensions `x-farmish-rate-limit` / `x-farmish-turnstile`; client IP from `TRUSTED_PROXIES` + Cloudflare ranges only; Turnstile fails closed (503) when Cloudflare is unreachable | ADR-0011 |
+| 2026-09-26 | Upstash Redis for shared limits, hybrid (per-IP stays in-process); go-redis over TLS, atomic Lua bucket, in-process fallback on timeout/outage | ADR-0012 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
@@ -455,7 +458,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 - Account linking across Firebase methods
 - Hyperdrive pooling after Neon connection pressure is observed
 - Temporal behind the `Workflow` interface
-- Redis/Upstash rate-limit backend under abuse
+- Redis-backed caching (via `internal/redisx`) when a phase needs it
 - River UI for admins (needs a browser session/cookie auth flow; `RequireAuth` + `RequireAdmin` already exist)
 - Seller reserve/holdback against chargebacks
 
@@ -467,6 +470,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
   - confirm MoMo recipient support for all networks
 - **Fees:** decide who bears Paystack charge and transfer fees (buyer, seller, or platform) and whether they're shown at checkout. Decide before Phase 15.
 - **Client IP behind Railway + Cloudflare (Phase 22):** find the Railway edge's source addresses for `TRUSTED_PROXIES`, set `TRUST_CLOUDFLARE=true`, verify the logged `client_ip`, and consider restricting the origin to Cloudflare (ADR-0011).
+- **Upstash:** free tier is 500K commands/month; watch usage in the console. Keep the Upstash DB in the Railway region (a ~200ms round trip would hit the fallback timeout). Rotate the credential that was pasted into a chat before any deployment (ADR-0012).
 - **Chargebacks after release:** the platform bears the loss. See the reserve backlog item.
 - **mNotify (transactional SMS):** sender ID `FARMISH` approval (ship with the default sender) and low-balance alerting.
 - **Firebase phone auth:**
