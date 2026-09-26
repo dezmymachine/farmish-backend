@@ -28,8 +28,8 @@ All of this is for a Ghanaian market, where mobile money and phone-number login 
 | Hosting | Backend on Railway (Docker) behind Cloudflare (DNS/CDN/WAF/Turnstile) |
 | Database | Neon Postgres (direct connection; Hyperdrive pooling later), `pgx` + sqlc, golang-migrate |
 | Jobs | River (Postgres-native, same DB, so jobs are enqueued in the same transaction). Temporal is deferred behind a `Workflow` interface |
-| Auth | Firebase for social + email/password via the client SDK. Phone login: Gin + mNotify OTP → Firebase custom token. No account linking in v1 |
-| SMS | mNotify/BMS (`sms_type: "otp"`). We generate and hash codes; mNotify only delivers |
+| Auth | Firebase for social + email/password; phone via our own mNotify OTP → Firebase custom token. **Superseded by ADR-0007:** phone sign-in is a Firebase provider too |
+| SMS | mNotify for OTP delivery. **Superseded by ADR-0007:** mNotify for transactional alerts only |
 | Media | Cloudflare R2 presigned uploads + CDN |
 | Payments | Paystack (card + MoMo). Farmish is merchant of record: funds are held in escrow on the Paystack balance and released to sellers via Paystack Transfers minus commission |
 | Delivery | v1 stub: delivery method/address/fee/statuses on orders, plus a `DeliveryProvider` interface with a `manual` impl. Courier integration later |

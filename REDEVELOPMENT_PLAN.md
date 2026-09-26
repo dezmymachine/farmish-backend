@@ -29,8 +29,8 @@ Core flows: browse/search → sell (listings) → buyer↔seller messaging → c
 | Hosting | Backend on **Railway** (Docker) behind **Cloudflare** (DNS/CDN/WAF/Turnstile) |
 | Database | **Neon Postgres** (direct connection; Hyperdrive pooling only later), `pgx` + **sqlc**, **golang-migrate** |
 | Jobs | **River** (Postgres-native, same DB → transactional enqueue). Temporal deferred behind a `Workflow` interface |
-| Auth | **Firebase**: social + email/password via client SDK. **Phone**: Gin + **mNotify** OTP → Firebase custom token. No account linking in v1 |
-| SMS | mNotify/BMS (`sms_type: "otp"`). We generate and hash codes; mNotify only delivers |
+| Auth | **Firebase** for social, email/password **and phone** (Firebase sends and verifies the SMS code via the client SDK + reCAPTCHA/App Check). The backend only verifies Firebase ID tokens; no custom OTP backend (ADR-0007). No account linking in v1 |
+| SMS | mNotify/BMS for **transactional notifications only** (order/payout alerts), behind a `notify.Notifier` interface, introduced in Phase 16. Sign-in codes are Firebase's job |
 | Media | **Cloudflare R2** presigned uploads + CDN |
 | Payments | **Paystack** (card + MoMo). **Farmish is merchant of record**: funds are held in escrow on the Paystack balance and released to sellers via **Paystack Transfers** minus commission |
 | Delivery | v1 stub: delivery method/address/fee/statuses on orders, `DeliveryProvider` interface with a `manual` impl. Courier integration later |
@@ -44,12 +44,12 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
                                                   │
                                                   ▼
                                    farmish-backend (Gin on Railway)
-                                    ├── Firebase Admin (verify ID tokens, custom tokens, claims)
+                                    ├── Firebase Admin (verify ID tokens, custom claims)
                                     ├── Neon Postgres (pgx + sqlc, golang-migrate)
                                     ├── River (jobs + periodic jobs, same process in v1)
                                     ├── R2 (presigned PUT, public CDN GET)
                                     ├── Paystack (charges, refunds, transfers, webhooks)
-                                    └── mNotify (OTP + transactional SMS)
+                                    └── mNotify (transactional SMS alerts)
 ```
 
 ## 4. Repository layout (target)
@@ -144,14 +144,15 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 ### Phase 4: Auth core (Firebase) + users
 - **Depends on:** 2, 3
 - **Tasks:**
-  - Migration: `users` (`id uuid`, `firebase_uid unique`, `signup_method social|email|phone`, `email citext`, `phone_e164`, `display_name`, `role user|admin`, `seller_verified`, timestamps).
-  - Firebase Admin init from config.
-  - Auth middleware: Bearer ID token → verify → find-or-create `users` row → context.
+  - Migration: `users` (`id uuid`, `firebase_uid unique`, `signup_method social|email|phone`, `email citext`, `email_verified`, `phone_e164`, `display_name`, `role user|admin`, `seller_verified`, timestamps).
+  - Firebase Admin init from config (`FIREBASE_CREDENTIALS_JSON` inline JSON or a file path). `FIREBASE_AUTH_EMULATOR_HOST` refused in staging/production.
+  - Auth middleware driven by the spec: operations with `bearerAuth` require a Bearer ID token → verify → find-or-create `users` row (race-safe) → context. `x-farmish-role: admin` operations also require `users.role = admin`.
+  - `signup_method` from the token's `sign_in_provider` (`phone` → phone, `password` → email, other IdPs → social).
   - `RequireAuth` / `RequireAdmin` guards.
   - `GET /v1/me`, `PATCH /v1/me`.
-  - Role sync: custom claims ↔ `users.role`, plus an admin CLI `make grant-admin`.
-  - Tests use the Firebase Auth emulator.
-- **Done when:** a valid emulator token returns `/v1/me`, missing/expired/forged tokens return 401 (generic), and non-admins get 403 on an admin test route.
+  - Role sync: `users.role` is authoritative; the `role` custom claim mirrors it for the UI. Admin CLI `make grant-admin` / `revoke-admin`.
+  - Tests use the Firebase Auth emulator (docker-compose).
+- **Done when:** a valid emulator token returns `/v1/me`, phone and email sign-ins map to the right `signup_method`, missing/expired/forged tokens return 401 (generic), and non-admins get 403 on an admin test route.
 - [ ] Phase 4
 
 ### Phase 5: Jobs infrastructure (River)
@@ -171,24 +172,22 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
   - `ratelimit` package with token buckets keyed per-IP and per-user. Start in-process with an interface for a Postgres/Redis backend later.
   - Gin middleware that emits `Retry-After` + `X-RateLimit-*`.
   - Client IP from `CF-Connecting-IP` (trusted only behind Cloudflare).
-  - Cloudflare Turnstile verification helper for sensitive public endpoints.
+  - Cloudflare Turnstile verification helper for sensitive public endpoints (our anonymous write endpoints such as supply requests and reports; Firebase's phone sign-in uses its own reCAPTCHA/App Check).
 - **Done when:** exceeding the limit returns 429 with headers, and a Turnstile failure returns a 400 envelope. Tests cover both.
 - [ ] Phase 6
 
-### Phase 7: Phone OTP login (mNotify)
-- **Depends on:** 4, 5, 6
+### Phase 7: Phone sign-in hardening & step-up re-auth
+- **Depends on:** 4
 - **Tasks:**
-  - Migration: `phone_verifications` (phone_e164, code_hash, purpose `login|step_up`, expires_at, attempts, consumed_at, ip).
-  - `POST /v1/auth/phone/request`:
-    - normalise to +233
-    - Turnstile check, plus per-IP and per-phone limits with a 60s resend cooldown
-    - crypto-random 6-digit code, store the hash
-    - enqueue `SendPhoneOTP`
-    - always return a generic 202
-  - `POST /v1/auth/phone/verify`: expiry, attempts ≤ 5, constant-time compare, consume → find-or-create Firebase user by phone → custom token.
-  - `notify` package with an mNotify client (sandbox/fake in tests).
-  - The `step_up` purpose is reused later by payouts.
-- **Done when:** the end-to-end test (with a fake mNotify) mints a custom token that the emulator accepts, and expired, reused, and brute-forced codes are all rejected.
+  - Firebase console checklist, recorded in `docs/`:
+    - phone provider enabled
+    - SMS region policy limited to Ghana (+233)
+    - authorized domains
+    - App Check (reCAPTCHA Enterprise) for web
+    - GCP budget alert on SMS spend
+  - `auth.RequireRecentAuth(maxAge)` guard: rejects tokens whose `auth_time` is older than `maxAge` with a distinct `reauth_required` 401, so the client re-authenticates (`reauthenticateWithPhoneNumber`). Uses the revocation-checking verify for these operations.
+  - Reused by payouts (Phase 18) and other sensitive operations.
+- **Done when:** an emulator phone sign-in reaches `/v1/me` with `signupMethod: phone`, a fresh token passes `RequireRecentAuth`, and a stale or revoked one is rejected.
 - [ ] Phase 7
 
 ### Phase 8: Profiles & seller onboarding
@@ -328,6 +327,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
   - Jobs:
     - `AutoCancelUnaccepted`: seller silent for X h → cancel → enqueue refund
     - `AutoCompleteOrders`: N days after `delivered` with no dispute → `completed`
+  - `notify` package: `Notifier` interface, mNotify client (sandbox/fake in tests), messages enqueued as River jobs.
   - Every transition writes `order_events` and notifies (SMS via `notify`).
 - **Done when:** illegal transitions return 409, each actor can do only their own transitions, and the timers are tested with a fake clock.
 - [ ] Phase 16
@@ -351,7 +351,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
   - `seller_payout_accounts`: type `mobile_money|ghipss`, bank/network code, number (encrypted), masked, account_name, `recipient_code`, verified_at, cooldown_until.
   - `GET|PUT /v1/seller/payout-account`:
     - resolve the account via Paystack and match the name
-    - **step-up OTP** (Phase 7 `step_up`)
+    - **step-up re-auth**: `RequireRecentAuth(5m)` (Phase 7)
     - create the transfer recipient
     - 24–48h cooldown on change
   - `payouts` table (seller, amount, reference unique, transfer_code, status `queued|pending|success|failed|reversed`, order ids).
@@ -389,7 +389,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
   - PII redaction in logs. Audit coverage for payments, payouts, refunds, disputes, and verification.
   - Security headers.
   - k6 smoke tests for browse, checkout (fake Paystack), and webhook.
-  - Alerts list (mNotify balance low, payout failures, reconciliation mismatches).
+  - Alerts list (mNotify balance low, Firebase SMS spend / budget, payout failures, reconciliation mismatches).
 - **Done when:** k6 thresholds pass locally and there are no secrets/OTPs/phones in a log sample.
 - [ ] Phase 21
 
@@ -409,17 +409,17 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 ### Frontend phases (start after Phase 22 freezes the contract; F0–F2 may start after Phase 12)
 - [ ] **F0 Scaffold:** TanStack Start app in `farmish-frontend/`, TS strict, Tailwind v4 + shadcn, lint/format, CI, deploy target decided (ADR).
 - [ ] **F1 API client:** typed client generated from `api/openapi.yaml`, auth header injection, error envelope handling, money formatting (pesewas → GHS).
-- [ ] **F2 Auth:** Firebase social/email, phone OTP UI (request/verify → `signInWithCustomToken`), session persistence, route guards.
+- [ ] **F2 Auth:** Firebase social/email/phone (`signInWithPhoneNumber` + `RecaptchaVerifier`), session persistence, route guards.
 - [ ] **F3 Browse:** home, categories, search with filters, listing detail.
 - [ ] **F4 Sell:** seller onboarding, listing create/edit with R2 uploads, my listings.
 - [ ] **F5 Checkout:** cart, delivery details, Paystack inline/redirect, payment status page.
 - [ ] **F6 Orders:** buyer and seller order dashboards, fulfilment actions, confirm receipt, disputes.
-- [ ] **F7 Payouts:** payout account setup (step-up OTP), balance, payout history.
+- [ ] **F7 Payouts:** payout account setup (step-up phone re-auth), balance, payout history.
 - [ ] **F8 Engagement:** messaging, reviews, favorites, reports, supply requests, promotions purchase/apply.
 - [ ] **F9 Launch:** SEO/meta, performance pass, accessibility pass, production deploy, legacy app retirement plan.
 
 ## 7. Environment variables (backend)
-`APP_ENV`, `PORT`, `LOG_LEVEL`, `SHUTDOWN_TIMEOUT`, `DATABASE_URL`, `DB_MAX_CONNS`, `DB_STATEMENT_TIMEOUT`, `CORS_ORIGINS`, `FIREBASE_PROJECT_ID`, `FIREBASE_CREDENTIALS_JSON`, `MNOTIFY_API_KEY`, `MNOTIFY_SENDER`, `OTP_TTL_MINUTES`, `OTP_MAX_ATTEMPTS`, `TURNSTILE_SECRET`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `DATA_ENCRYPTION_KEY`, `ESCROW_AUTO_COMPLETE_DAYS`, `SELLER_ACCEPT_TIMEOUT_HOURS`, `PAYOUT_MIN_PESEWAS`.
+`APP_ENV`, `PORT`, `LOG_LEVEL`, `SHUTDOWN_TIMEOUT`, `DATABASE_URL`, `DB_MAX_CONNS`, `DB_STATEMENT_TIMEOUT`, `CORS_ORIGINS`, `FIREBASE_PROJECT_ID`, `FIREBASE_CREDENTIALS_JSON`, `FIREBASE_AUTH_EMULATOR_HOST` (dev/test only, refused in staging/production), `TURNSTILE_SECRET`, `MNOTIFY_API_KEY`, `MNOTIFY_SENDER` (Phase 16), `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `DATA_ENCRYPTION_KEY`, `ESCROW_AUTO_COMPLETE_DAYS`, `SELLER_ACCEPT_TIMEOUT_HOURS`, `PAYOUT_MIN_PESEWAS`.
 
 ## 8. Decisions log
 | Date | Decision | ADR |
@@ -430,6 +430,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-25 | GitHub Actions removed (account billing lock); local `make ci` is the gate | ADR-0004 |
 | 2026-09-25 | Phase 2: own `cmd/migrate` (embedded golang-migrate) instead of the CLI; sqlc via Docker; per-test databases; compose on port 54320; bounded pool close; `DB_MAX_CONNS`/`DB_STATEMENT_TIMEOUT` | ADR-0005 |
 | 2026-09-26 | Phase 3: OpenAPI 3.1 + oapi-codegen v2.8.0; generated code in `internal/http/api/`; camelCase JSON/query, snake_case error codes; validator passes unknown routes through and skips auth; Redocly via Docker; drift check in `make ci` | ADR-0006 |
+| 2026-09-26 | Firebase phone sign-in replaces the custom mNotify OTP flow; Phase 7 becomes phone hardening + step-up re-auth; mNotify kept for transactional SMS only (Phase 16); Turnstile stays in Phase 6 | ADR-0007 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
@@ -456,4 +457,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
   - confirm MoMo recipient support for all networks
 - **Fees:** decide who bears Paystack charge and transfer fees (buyer, seller, or platform) and whether they're shown at checkout. Decide before Phase 15.
 - **Chargebacks after release:** the platform bears the loss. See the reserve backlog item.
-- **mNotify:** sender ID `FARMISH` approval (ship with the default sender) and low-balance alerting.
+- **mNotify (transactional SMS):** sender ID `FARMISH` approval (ship with the default sender) and low-balance alerting.
+- **Firebase phone auth:**
+  - requires the **Blaze (billing) plan**; each SMS is charged
+  - SMS-pumping abuse: restrict the SMS region policy to Ghana, enable App Check, set a GCP budget alert (Phase 7)
