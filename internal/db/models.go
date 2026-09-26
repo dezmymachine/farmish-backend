@@ -124,6 +124,7 @@ type Listing struct {
 	ContactCount             int32
 	CreatedAt                time.Time
 	UpdatedAt                time.Time
+	SearchVector             interface{}
 }
 
 type ListingAttributeValue struct {
@@ -136,6 +137,17 @@ type ListingImage struct {
 	ListingID uuid.UUID
 	MediaID   uuid.UUID
 	SortOrder int32
+}
+
+type ListingPromotion struct {
+	ID        uuid.UUID
+	ListingID uuid.UUID
+	SellerID  uuid.UUID
+	Tier      string
+	TierRank  int32
+	StartsAt  time.Time
+	EndsAt    time.Time
+	CreatedAt time.Time
 }
 
 type MediaObject struct {

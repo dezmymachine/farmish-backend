@@ -18,6 +18,7 @@ type Querier interface {
 	// A listing's category must be a leaf (or a parent with no children).
 	CountCategoryChildren(ctx context.Context, parentID pgtype.UUID) (int64, error)
 	CountListingImages(ctx context.Context, listingID uuid.UUID) (int64, error)
+	CountSearchListings(ctx context.Context, arg CountSearchListingsParams) (int64, error)
 	CountSellerListings(ctx context.Context, arg CountSellerListingsParams) (int64, error)
 	CountSellerProfilesByStatus(ctx context.Context, verificationStatus string) (int64, error)
 	DeleteAttribute(ctx context.Context, arg DeleteAttributeParams) (uuid.UUID, error)
@@ -33,13 +34,24 @@ type Querier interface {
 	GetListingByID(ctx context.Context, id uuid.UUID) (Listing, error)
 	GetListingByIDForUpdate(ctx context.Context, id uuid.UUID) (Listing, error)
 	GetListingBySlug(ctx context.Context, slug string) (Listing, error)
+	// The contact reveal. Carries the listing's seller and state as well as the
+	// two opt-in flags, so the handler can tell "your own listing" (403) from
+	// "not browsable" (404) and answer in one round trip. phone_e164 and
+	// whatsapp_e164 are the seller's own values: they leave the building only
+	// when the matching show_* flag is true.
+	GetListingContactDetails(ctx context.Context, id uuid.UUID) (GetListingContactDetailsRow, error)
 	GetMediaObject(ctx context.Context, id uuid.UUID) (MediaObject, error)
+	// One active, unexpired listing with its category and the seller's safe
+	// profile fields. Never selects contact or identity data.
+	GetPublicListingBySlug(ctx context.Context, slug string) (GetPublicListingBySlugRow, error)
 	// Narrow projection for the public endpoint: never selects id_number_enc.
 	GetPublicSeller(ctx context.Context, userID uuid.UUID) (GetPublicSellerRow, error)
 	GetSellerProfile(ctx context.Context, userID uuid.UUID) (SellerProfile, error)
 	GetSellerProfileForUpdate(ctx context.Context, userID uuid.UUID) (SellerProfile, error)
 	GetUserByFirebaseUID(ctx context.Context, firebaseUid string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	IncrementListingContactCount(ctx context.Context, id uuid.UUID) error
+	IncrementListingViewCount(ctx context.Context, id uuid.UUID) error
 	// Returns no row when the key is taken on this category (409).
 	InsertAttribute(ctx context.Context, arg InsertAttributeParams) (CategoryAttribute, error)
 	InsertAuditEvent(ctx context.Context, arg InsertAuditEventParams) (AuditEvent, error)
@@ -53,6 +65,9 @@ type Querier interface {
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
 	ListActiveCategories(ctx context.Context) ([]Category, error)
 	ListAttributesByCategory(ctx context.Context, categoryID uuid.UUID) ([]CategoryAttribute, error)
+	// A category filter on a parent slug must include its children (DOMAIN §9);
+	// on a child slug it returns just that child.
+	ListCategoryAndChildIDs(ctx context.Context, slug string) ([]uuid.UUID, error)
 	// Installed Postgres extensions; used by tests to assert migration 000001.
 	ListExtensions(ctx context.Context) ([]string, error)
 	ListListingAttributes(ctx context.Context, listingID uuid.UUID) ([]ListListingAttributesRow, error)
@@ -66,6 +81,20 @@ type Querier interface {
 	ListSellerProfilesByStatus(ctx context.Context, arg ListSellerProfilesByStatusParams) ([]ListSellerProfilesByStatusRow, error)
 	// Several accounts may share an email (no account linking in v1).
 	ListUsersByEmail(ctx context.Context, email *string) ([]User, error)
+	// Public search (Phase 12). `now` is always passed from the service clock,
+	// never SQL now(), so tests are deterministic.
+	//
+	// Notes:
+	//   - websearch_to_tsquery never errors on user input (to_tsquery does), so
+	//     it is safe with raw search text.
+	//   - The free-text filter coalesces: with no q the condition is TRUE, and
+	//     Postgres does not guarantee OR short-circuits, so a NULL tsquery must
+	//     not turn the predicate into NULL.
+	//   - Promoted listings rank first (highest active tier rank), then the
+	//     requested sort. An expired promotion is not active, so it ranks as
+	//     unpromoted (DOMAIN §6).
+	//
+	SearchListings(ctx context.Context, arg SearchListingsParams) ([]SearchListingsRow, error)
 	// Only published_at / expires_at are set when they are given (publish sets
 	// both; mark-sold and archive leave them alone).
 	SetListingStatus(ctx context.Context, arg SetListingStatusParams) (Listing, error)

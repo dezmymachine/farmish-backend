@@ -267,6 +267,34 @@ func (q *Queries) ListAttributesByCategory(ctx context.Context, categoryID uuid.
 	return items, nil
 }
 
+const listCategoryAndChildIDs = `-- name: ListCategoryAndChildIDs :many
+SELECT c.id FROM categories c
+WHERE c.slug = $1
+   OR c.parent_id = (SELECT p.id FROM categories p WHERE p.slug = $1)
+`
+
+// A category filter on a parent slug must include its children (DOMAIN §9);
+// on a child slug it returns just that child.
+func (q *Queries) ListCategoryAndChildIDs(ctx context.Context, slug string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listCategoryAndChildIDs, slug)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateAttribute = `-- name: UpdateAttribute :one
 UPDATE category_attributes SET
   label = COALESCE($1, label),

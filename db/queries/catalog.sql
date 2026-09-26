@@ -81,3 +81,10 @@ RETURNING *;
 -- name: CountCategoryChildren :one
 -- A listing's category must be a leaf (or a parent with no children).
 SELECT count(*) FROM categories WHERE parent_id = $1;
+
+-- name: ListCategoryAndChildIDs :many
+-- A category filter on a parent slug must include its children (DOMAIN §9);
+-- on a child slug it returns just that child.
+SELECT c.id FROM categories c
+WHERE c.slug = $1
+   OR c.parent_id = (SELECT p.id FROM categories p WHERE p.slug = $1);

@@ -98,7 +98,7 @@ func (q *Queries) ExpireDueListings(ctx context.Context, expiresAt *time.Time) (
 }
 
 const getListingByID = `-- name: GetListingByID :one
-SELECT id, seller_id, category_id, title, slug, description, price_pesewas, unit, quantity_available, min_order_qty, is_negotiable, item_state, status, region, district, area, offers_pickup, offers_seller_delivery, seller_delivery_fee_pesewas, published_at, expires_at, view_count, favorite_count, contact_count, created_at, updated_at FROM listings WHERE id = $1
+SELECT id, seller_id, category_id, title, slug, description, price_pesewas, unit, quantity_available, min_order_qty, is_negotiable, item_state, status, region, district, area, offers_pickup, offers_seller_delivery, seller_delivery_fee_pesewas, published_at, expires_at, view_count, favorite_count, contact_count, created_at, updated_at, search_vector FROM listings WHERE id = $1
 `
 
 func (q *Queries) GetListingByID(ctx context.Context, id uuid.UUID) (Listing, error) {
@@ -131,12 +131,13 @@ func (q *Queries) GetListingByID(ctx context.Context, id uuid.UUID) (Listing, er
 		&i.ContactCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SearchVector,
 	)
 	return i, err
 }
 
 const getListingByIDForUpdate = `-- name: GetListingByIDForUpdate :one
-SELECT id, seller_id, category_id, title, slug, description, price_pesewas, unit, quantity_available, min_order_qty, is_negotiable, item_state, status, region, district, area, offers_pickup, offers_seller_delivery, seller_delivery_fee_pesewas, published_at, expires_at, view_count, favorite_count, contact_count, created_at, updated_at FROM listings WHERE id = $1 FOR UPDATE
+SELECT id, seller_id, category_id, title, slug, description, price_pesewas, unit, quantity_available, min_order_qty, is_negotiable, item_state, status, region, district, area, offers_pickup, offers_seller_delivery, seller_delivery_fee_pesewas, published_at, expires_at, view_count, favorite_count, contact_count, created_at, updated_at, search_vector FROM listings WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetListingByIDForUpdate(ctx context.Context, id uuid.UUID) (Listing, error) {
@@ -169,12 +170,13 @@ func (q *Queries) GetListingByIDForUpdate(ctx context.Context, id uuid.UUID) (Li
 		&i.ContactCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SearchVector,
 	)
 	return i, err
 }
 
 const getListingBySlug = `-- name: GetListingBySlug :one
-SELECT id, seller_id, category_id, title, slug, description, price_pesewas, unit, quantity_available, min_order_qty, is_negotiable, item_state, status, region, district, area, offers_pickup, offers_seller_delivery, seller_delivery_fee_pesewas, published_at, expires_at, view_count, favorite_count, contact_count, created_at, updated_at FROM listings WHERE slug = $1
+SELECT id, seller_id, category_id, title, slug, description, price_pesewas, unit, quantity_available, min_order_qty, is_negotiable, item_state, status, region, district, area, offers_pickup, offers_seller_delivery, seller_delivery_fee_pesewas, published_at, expires_at, view_count, favorite_count, contact_count, created_at, updated_at, search_vector FROM listings WHERE slug = $1
 `
 
 func (q *Queries) GetListingBySlug(ctx context.Context, slug string) (Listing, error) {
@@ -207,6 +209,7 @@ func (q *Queries) GetListingBySlug(ctx context.Context, slug string) (Listing, e
 		&i.ContactCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SearchVector,
 	)
 	return i, err
 }
@@ -219,7 +222,7 @@ INSERT INTO listings (
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
 )
-RETURNING id, seller_id, category_id, title, slug, description, price_pesewas, unit, quantity_available, min_order_qty, is_negotiable, item_state, status, region, district, area, offers_pickup, offers_seller_delivery, seller_delivery_fee_pesewas, published_at, expires_at, view_count, favorite_count, contact_count, created_at, updated_at
+RETURNING id, seller_id, category_id, title, slug, description, price_pesewas, unit, quantity_available, min_order_qty, is_negotiable, item_state, status, region, district, area, offers_pickup, offers_seller_delivery, seller_delivery_fee_pesewas, published_at, expires_at, view_count, favorite_count, contact_count, created_at, updated_at, search_vector
 `
 
 type InsertListingParams struct {
@@ -290,6 +293,7 @@ func (q *Queries) InsertListing(ctx context.Context, arg InsertListingParams) (L
 		&i.ContactCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SearchVector,
 	)
 	return i, err
 }
@@ -415,7 +419,7 @@ func (q *Queries) ListListingImages(ctx context.Context, listingID uuid.UUID) ([
 }
 
 const listSellerListings = `-- name: ListSellerListings :many
-SELECT id, seller_id, category_id, title, slug, description, price_pesewas, unit, quantity_available, min_order_qty, is_negotiable, item_state, status, region, district, area, offers_pickup, offers_seller_delivery, seller_delivery_fee_pesewas, published_at, expires_at, view_count, favorite_count, contact_count, created_at, updated_at FROM listings
+SELECT id, seller_id, category_id, title, slug, description, price_pesewas, unit, quantity_available, min_order_qty, is_negotiable, item_state, status, region, district, area, offers_pickup, offers_seller_delivery, seller_delivery_fee_pesewas, published_at, expires_at, view_count, favorite_count, contact_count, created_at, updated_at, search_vector FROM listings
 WHERE seller_id = $1 AND ($2::text IS NULL OR status = $2)
 ORDER BY created_at DESC
 LIMIT $4 OFFSET $3
@@ -469,6 +473,7 @@ func (q *Queries) ListSellerListings(ctx context.Context, arg ListSellerListings
 			&i.ContactCount,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SearchVector,
 		); err != nil {
 			return nil, err
 		}
@@ -486,7 +491,7 @@ UPDATE listings SET
   published_at = COALESCE($2, published_at),
   expires_at = COALESCE($3, expires_at)
 WHERE id = $4
-RETURNING id, seller_id, category_id, title, slug, description, price_pesewas, unit, quantity_available, min_order_qty, is_negotiable, item_state, status, region, district, area, offers_pickup, offers_seller_delivery, seller_delivery_fee_pesewas, published_at, expires_at, view_count, favorite_count, contact_count, created_at, updated_at
+RETURNING id, seller_id, category_id, title, slug, description, price_pesewas, unit, quantity_available, min_order_qty, is_negotiable, item_state, status, region, district, area, offers_pickup, offers_seller_delivery, seller_delivery_fee_pesewas, published_at, expires_at, view_count, favorite_count, contact_count, created_at, updated_at, search_vector
 `
 
 type SetListingStatusParams struct {
@@ -533,6 +538,7 @@ func (q *Queries) SetListingStatus(ctx context.Context, arg SetListingStatusPara
 		&i.ContactCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SearchVector,
 	)
 	return i, err
 }
@@ -566,7 +572,7 @@ UPDATE listings SET
   offers_seller_delivery = COALESCE($14, offers_seller_delivery),
   seller_delivery_fee_pesewas = COALESCE($15, seller_delivery_fee_pesewas)
 WHERE id = $16
-RETURNING id, seller_id, category_id, title, slug, description, price_pesewas, unit, quantity_available, min_order_qty, is_negotiable, item_state, status, region, district, area, offers_pickup, offers_seller_delivery, seller_delivery_fee_pesewas, published_at, expires_at, view_count, favorite_count, contact_count, created_at, updated_at
+RETURNING id, seller_id, category_id, title, slug, description, price_pesewas, unit, quantity_available, min_order_qty, is_negotiable, item_state, status, region, district, area, offers_pickup, offers_seller_delivery, seller_delivery_fee_pesewas, published_at, expires_at, view_count, favorite_count, contact_count, created_at, updated_at, search_vector
 `
 
 type UpdateListingParams struct {
@@ -636,6 +642,7 @@ func (q *Queries) UpdateListing(ctx context.Context, arg UpdateListingParams) (L
 		&i.ContactCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SearchVector,
 	)
 	return i, err
 }
