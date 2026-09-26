@@ -6,19 +6,32 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
 	// Marks the object attached, but only while it is still pending.
 	AttachMediaObject(ctx context.Context, id uuid.UUID) (MediaObject, error)
+	// A listing's category must be a leaf (or a parent with no children).
+	CountCategoryChildren(ctx context.Context, parentID pgtype.UUID) (int64, error)
+	CountSellerListings(ctx context.Context, arg CountSellerListingsParams) (int64, error)
 	CountSellerProfilesByStatus(ctx context.Context, verificationStatus string) (int64, error)
 	DeleteAttribute(ctx context.Context, arg DeleteAttributeParams) (uuid.UUID, error)
+	DeleteListing(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	DeleteListingAttributes(ctx context.Context, listingID uuid.UUID) error
+	DeleteListingImages(ctx context.Context, listingID uuid.UUID) error
 	DeleteMediaObject(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	// The expiry sweep: active listings past their expiry become expired.
+	ExpireDueListings(ctx context.Context, expiresAt *time.Time) ([]uuid.UUID, error)
 	GetCategoryAttribute(ctx context.Context, arg GetCategoryAttributeParams) (CategoryAttribute, error)
 	GetCategoryByID(ctx context.Context, id uuid.UUID) (Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (Category, error)
+	GetListingByID(ctx context.Context, id uuid.UUID) (Listing, error)
+	GetListingByIDForUpdate(ctx context.Context, id uuid.UUID) (Listing, error)
+	GetListingBySlug(ctx context.Context, slug string) (Listing, error)
 	GetMediaObject(ctx context.Context, id uuid.UUID) (MediaObject, error)
 	// Narrow projection for the public endpoint: never selects id_number_enc.
 	GetPublicSeller(ctx context.Context, userID uuid.UUID) (GetPublicSellerRow, error)
@@ -31,6 +44,9 @@ type Querier interface {
 	InsertAuditEvent(ctx context.Context, arg InsertAuditEventParams) (AuditEvent, error)
 	// Returns no row when the slug is taken (callers map that to 409).
 	InsertCategory(ctx context.Context, arg InsertCategoryParams) (Category, error)
+	InsertListing(ctx context.Context, arg InsertListingParams) (Listing, error)
+	InsertListingAttribute(ctx context.Context, arg InsertListingAttributeParams) error
+	InsertListingImage(ctx context.Context, arg InsertListingImageParams) error
 	InsertMediaObject(ctx context.Context, arg InsertMediaObjectParams) (MediaObject, error)
 	// Returns no row if a concurrent request created the user first.
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
@@ -38,23 +54,34 @@ type Querier interface {
 	ListAttributesByCategory(ctx context.Context, categoryID uuid.UUID) ([]CategoryAttribute, error)
 	// Installed Postgres extensions; used by tests to assert migration 000001.
 	ListExtensions(ctx context.Context) ([]string, error)
+	ListListingAttributes(ctx context.Context, listingID uuid.UUID) ([]ListListingAttributesRow, error)
+	// Read-only join so the owner's view can carry each object's key (and hence
+	// its public URL).
+	ListListingImages(ctx context.Context, listingID uuid.UUID) ([]ListListingImagesRow, error)
 	// Cleanup sweep: pending rows older than the cutoff, oldest first.
 	ListPendingMediaBefore(ctx context.Context, arg ListPendingMediaBeforeParams) ([]MediaObject, error)
+	ListSellerListings(ctx context.Context, arg ListSellerListingsParams) ([]Listing, error)
 	// Admin review queue: oldest submission first.
 	ListSellerProfilesByStatus(ctx context.Context, arg ListSellerProfilesByStatusParams) ([]ListSellerProfilesByStatusRow, error)
 	// Several accounts may share an email (no account linking in v1).
 	ListUsersByEmail(ctx context.Context, email *string) ([]User, error)
+	// Only published_at / expires_at are set when they are given (publish sets
+	// both; mark-sold and archive leave them alone).
+	SetListingStatus(ctx context.Context, arg SetListingStatusParams) (Listing, error)
 	// Stores a (new) encrypted ID and (re)submits the profile for verification.
 	SetSellerIdentity(ctx context.Context, arg SetSellerIdentityParams) (SellerProfile, error)
 	// Records an admin verification decision (reviewed_at = now()).
 	SetSellerVerification(ctx context.Context, arg SetSellerVerificationParams) (SellerProfile, error)
 	SetUserRole(ctx context.Context, arg SetUserRoleParams) (User, error)
 	SetUserSellerVerified(ctx context.Context, arg SetUserSellerVerifiedParams) (User, error)
+	SlugExists(ctx context.Context, slug string) (bool, error)
 	// Mirror Firebase-owned identity fields; only writes when something changed.
 	SyncUserIdentity(ctx context.Context, arg SyncUserIdentityParams) (User, error)
 	// Scoped to the category: an attribute of another category reads as missing.
 	UpdateAttribute(ctx context.Context, arg UpdateAttributeParams) (CategoryAttribute, error)
 	UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (Category, error)
+	// Every editable field, COALESCE-style: a nil parameter keeps the column.
+	UpdateListing(ctx context.Context, arg UpdateListingParams) (Listing, error)
 	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) (User, error)
 	// Seed upsert with the same no-change guard as categories.
 	UpsertCategoryAttribute(ctx context.Context, arg UpsertCategoryAttributeParams) (CategoryAttribute, error)

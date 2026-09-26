@@ -12,6 +12,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countCategoryChildren = `-- name: CountCategoryChildren :one
+SELECT count(*) FROM categories WHERE parent_id = $1
+`
+
+// A listing's category must be a leaf (or a parent with no children).
+func (q *Queries) CountCategoryChildren(ctx context.Context, parentID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countCategoryChildren, parentID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteAttribute = `-- name: DeleteAttribute :one
 DELETE FROM category_attributes WHERE id = $1 AND category_id = $2 RETURNING id
 `

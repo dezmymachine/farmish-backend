@@ -97,6 +97,47 @@ type CategoryAttribute struct {
 	UpdatedAt  time.Time
 }
 
+type Listing struct {
+	ID                       uuid.UUID
+	SellerID                 uuid.UUID
+	CategoryID               uuid.UUID
+	Title                    string
+	Slug                     string
+	Description              string
+	PricePesewas             int64
+	Unit                     string
+	QuantityAvailable        int32
+	MinOrderQty              int32
+	IsNegotiable             bool
+	ItemState                string
+	Status                   string
+	Region                   string
+	District                 string
+	Area                     *string
+	OffersPickup             bool
+	OffersSellerDelivery     bool
+	SellerDeliveryFeePesewas *int64
+	PublishedAt              *time.Time
+	ExpiresAt                *time.Time
+	ViewCount                int32
+	FavoriteCount            int32
+	ContactCount             int32
+	CreatedAt                time.Time
+	UpdatedAt                time.Time
+}
+
+type ListingAttributeValue struct {
+	ListingID   uuid.UUID
+	AttributeID uuid.UUID
+	Value       string
+}
+
+type ListingImage struct {
+	ListingID uuid.UUID
+	MediaID   uuid.UUID
+	SortOrder int32
+}
+
 type MediaObject struct {
 	ID          uuid.UUID
 	OwnerID     uuid.UUID

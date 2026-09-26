@@ -77,3 +77,7 @@ WHERE category_attributes.label IS DISTINCT FROM EXCLUDED.label
    OR category_attributes.required IS DISTINCT FROM EXCLUDED.required
    OR category_attributes.sort_order IS DISTINCT FROM EXCLUDED.sort_order
 RETURNING *;
+
+-- name: CountCategoryChildren :one
+-- A listing's category must be a leaf (or a parent with no children).
+SELECT count(*) FROM categories WHERE parent_id = $1;
