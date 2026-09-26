@@ -12,15 +12,25 @@ import (
 
 type Querier interface {
 	CountSellerProfilesByStatus(ctx context.Context, verificationStatus string) (int64, error)
+	DeleteAttribute(ctx context.Context, arg DeleteAttributeParams) (uuid.UUID, error)
+	GetCategoryAttribute(ctx context.Context, arg GetCategoryAttributeParams) (CategoryAttribute, error)
+	GetCategoryByID(ctx context.Context, id uuid.UUID) (Category, error)
+	GetCategoryBySlug(ctx context.Context, slug string) (Category, error)
 	// Narrow projection for the public endpoint: never selects id_number_enc.
 	GetPublicSeller(ctx context.Context, userID uuid.UUID) (GetPublicSellerRow, error)
 	GetSellerProfile(ctx context.Context, userID uuid.UUID) (SellerProfile, error)
 	GetSellerProfileForUpdate(ctx context.Context, userID uuid.UUID) (SellerProfile, error)
 	GetUserByFirebaseUID(ctx context.Context, firebaseUid string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	// Returns no row when the key is taken on this category (409).
+	InsertAttribute(ctx context.Context, arg InsertAttributeParams) (CategoryAttribute, error)
 	InsertAuditEvent(ctx context.Context, arg InsertAuditEventParams) (AuditEvent, error)
+	// Returns no row when the slug is taken (callers map that to 409).
+	InsertCategory(ctx context.Context, arg InsertCategoryParams) (Category, error)
 	// Returns no row if a concurrent request created the user first.
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
+	ListActiveCategories(ctx context.Context) ([]Category, error)
+	ListAttributesByCategory(ctx context.Context, categoryID uuid.UUID) ([]CategoryAttribute, error)
 	// Installed Postgres extensions; used by tests to assert migration 000001.
 	ListExtensions(ctx context.Context) ([]string, error)
 	// Admin review queue: oldest submission first.
@@ -35,7 +45,15 @@ type Querier interface {
 	SetUserSellerVerified(ctx context.Context, arg SetUserSellerVerifiedParams) (User, error)
 	// Mirror Firebase-owned identity fields; only writes when something changed.
 	SyncUserIdentity(ctx context.Context, arg SyncUserIdentityParams) (User, error)
+	// Scoped to the category: an attribute of another category reads as missing.
+	UpdateAttribute(ctx context.Context, arg UpdateAttributeParams) (CategoryAttribute, error)
+	UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (Category, error)
 	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) (User, error)
+	// Seed upsert with the same no-change guard as categories.
+	UpsertCategoryAttribute(ctx context.Context, arg UpsertCategoryAttributeParams) (CategoryAttribute, error)
+	// Seed upsert: updates only when something changed (the WHERE guard keeps a
+	// repeat run from touching updated_at). Returns no row when unchanged.
+	UpsertCategoryBySlug(ctx context.Context, arg UpsertCategoryBySlugParams) (Category, error)
 	// Creates the profile or edits its non-identity fields. Identity
 	// (id_type/id_number) and verification status are managed separately, so an
 	// edit never changes them.

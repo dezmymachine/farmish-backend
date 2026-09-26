@@ -71,6 +71,32 @@ type AuditEvent struct {
 	CreatedAt  time.Time
 }
 
+type Category struct {
+	ID           uuid.UUID
+	ParentID     pgtype.UUID
+	Name         string
+	Slug         string
+	Icon         *string
+	ListingGroup *string
+	SortOrder    int32
+	IsActive     bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+type CategoryAttribute struct {
+	ID         uuid.UUID
+	CategoryID uuid.UUID
+	Key        string
+	Label      string
+	Type       string
+	Options    []string
+	Required   bool
+	SortOrder  int32
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
 type RiverJob struct {
 	ID           int64
 	State        RiverJobState
