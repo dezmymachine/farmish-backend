@@ -11,6 +11,7 @@
   - record any deviation from this plan in §8 Decisions log
 - If a phase turns out too big, split it into `Nx.1`, `Nx.2`, … here *before* coding.
 - Out-of-scope items discovered mid-phase go to §10 Backlog, not into the current phase.
+- **Implementer handbook:** `AGENTS.md` (rules), `docs/ENGINEERING_GUIDE.md` (patterns), `docs/DOMAIN.md` (money, fees, ledger, states, reference data: **the business source of truth**), `docs/phases/` (per-phase specs), `docs/REVIEW_PROTOCOL.md` (review packet `docs/reviews/phase-NN.md`).
 - The legacy Next.js app lives at `~/work/farmgate` (separate repo) and is **frozen reference only**. Read it for business rules, never import from it or edit it. No data or user migration.
 
 ## 1. Project
@@ -36,6 +37,10 @@ Core flows: browse/search → sell (listings) → buyer↔seller messaging → c
 | Payments | **Paystack** (card + MoMo). **Farmish is merchant of record**: funds are held in escrow on the Paystack balance and released to sellers via **Paystack Transfers** minus commission |
 | Delivery | v1 stub: delivery method/address/fee/statuses on orders, `DeliveryProvider` interface with a `manual` impl. Courier integration later |
 | Money | **Integer pesewas (`bigint`)** everywhere in DB and API (`amount` + `currency: "GHS"`). Frontend formats for display |
+| Commission | **5% (500 bps)** of the item subtotal (delivery excluded), snapshotted per order; per-category overrides (DOMAIN §2.1) |
+| Processing fee | **Buyer pays** Paystack's fee as a visible, non-refundable line, grossed up with `PAYSTACK_FEE_BPS` (default 195 = 1.95%) (DOMAIN §2.2) |
+| Order timers | Seller accepts within **48h** or auto-cancel + refund; escrow auto-releases **3 days** after delivery (DOMAIN §3) |
+| Payouts | Daily at 10:00 Africa/Accra, minimum **GHS 20**, 48h cooldown after a payout-account change, step-up re-auth to change it (DOMAIN §3) |
 | Scope | Full rewrite, no data/user migration |
 
 ## 3. Target architecture
@@ -180,250 +185,166 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 - **Done when:** exceeding the limit returns 429 with headers, and a Turnstile failure returns a 400 envelope. Tests cover both.
 - [x] Phase 6
 
-### Phase 7: Phone sign-in hardening & step-up re-auth
+> **Phases 7–22 and F0–F9 have detailed specs in [`docs/phases/`](docs/phases/README.md)** (schema, queries, API, rules, jobs, tests and QA). Implementers must read `AGENTS.md`, `docs/ENGINEERING_GUIDE.md`, `docs/DOMAIN.md` and the phase spec first. The large phases are pre-split into sub-phases (13a/13b, 15a/15b, 17a/17b, 18a/18b, 20a/20b). Each sub-phase is one task with its own checkbox.
+
+### Phase 7: Phone sign-in hardening & step-up re-auth · [spec](docs/phases/phase-07.md)
 - **Depends on:** 4
-- **Tasks:**
-  - Firebase console checklist, recorded in `docs/`:
-    - phone provider enabled
-    - SMS region policy limited to Ghana (+233)
-    - authorized domains
-    - App Check (reCAPTCHA Enterprise) for web
-    - GCP budget alert on SMS spend
-  - `auth.RequireRecentAuth(maxAge)` guard: rejects tokens whose `auth_time` is older than `maxAge` with a distinct `reauth_required` 401, so the client re-authenticates (`reauthenticateWithPhoneNumber`). Uses the revocation-checking verify for these operations.
-  - Reused by payouts (Phase 18) and other sensitive operations.
-- **Done when:** an emulator phone sign-in reaches `/v1/me` with `signupMethod: phone`, a fresh token passes `RequireRecentAuth`, and a stale or revoked one is rejected.
+- **Done when:**
+  - an emulator phone sign-in reaches `/v1/me` as `phone`
+  - a fresh token passes a `x-farmish-step-up` operation, and a stale or revoked one gets 401 `reauth_required`
+  - the Firebase phone runbook is done
 - [ ] Phase 7
 
-### Phase 8: Profiles & seller onboarding
+### Phase 8: Profiles & seller onboarding · [spec](docs/phases/phase-08.md)
 - **Depends on:** 4
-- **Tasks:**
-  - Migration: `seller_profiles` (user_id, business_name, region, district, bio, contact-visibility flags, verification_status, id_type/id_number encrypted-at-rest or omitted until needed).
-  - Endpoints:
-    - `GET/PUT /v1/me/seller-profile`
-    - `GET /v1/sellers/{id}` (safe projection)
-    - admin `POST /v1/admin/sellers/{id}/verify`, which sets the `seller_verified` claim
-  - Audit log table `audit_events` (actor, action, target, metadata), used from here on.
-- **Done when:** the public seller response contains only safe fields (asserted by a test), and verification writes an audit event and updates the claim.
+- **Done when:**
+  - the public seller response contains only safe fields (asserted by a test)
+  - verification writes an audit event and updates the DB flag plus the Firebase claim
+  - ID numbers are encrypted at rest
+  - `InTx`, `validation`, `crypto` and `audit` exist and are tested
 - [ ] Phase 8
 
-### Phase 9: Catalog (categories + attributes)
+### Phase 9: Catalog (categories, attributes, locations) · [spec](docs/phases/phase-09.md)
 - **Depends on:** 2, 3
-- **Tasks:**
-  - Migrations: `categories` (self-referencing tree, slug, sort_order, is_active) and `category_attributes` (key, label, type, options, required).
-  - Seed command ported from legacy `~/work/farmgate/prisma/seed.ts` categories.
-  - `GET /v1/categories` (tree) and `GET /v1/categories/{slug}` with attributes. Admin CRUD.
-  - `Cache-Control` on public GETs.
-- **Done when:** the seed is idempotent and the tree endpoint matches the seed data.
+- **Done when:** the seed (DOMAIN §9) is idempotent, the tree endpoint matches the seed data, a child inherits its group and attributes, and `/v1/locations` serves the 16 regions.
 - [ ] Phase 9
 
-### Phase 10: Media uploads (R2)
+### Phase 10: Media uploads (R2) · [spec](docs/phases/phase-10.md)
 - **Depends on:** 4
-- **Tasks:**
-  - `media` package with an S3-compatible R2 client.
-  - `POST /v1/media/upload-url`: content-type allowlist, max size, key `listings/{user}/{uuid}.{ext}`, short expiry.
-  - `media_objects` table (owner, key, status `pending|attached`).
-  - Periodic cleanup of orphaned pending uploads.
-- **Done when:** a presigned PUT works against R2 (or MinIO in compose), a disallowed type or size is rejected, and orphans are cleaned in the job test.
+- **Done when:** a presigned PUT works against MinIO in compose, a disallowed type or size (including a signed content-length mismatch) is rejected, and orphans are cleaned in the job test.
 - [ ] Phase 10
 
-### Phase 11: Listings CRUD
+### Phase 11: Listings CRUD · [spec](docs/phases/phase-11.md)
 - **Depends on:** 8, 9, 10
-- **Tasks:**
-  - Migrations:
-    - `listings`: seller_id, category_id, title, slug unique, description, `price_pesewas bigint`, unit, quantity_available, min_order_qty, condition, status `draft|active|sold|expired|archived`, region, district, `expires_at default now()+30d`
-    - `listing_images` (media key, sort)
-    - `listing_attribute_values`
-  - Slug generation with a uniqueness loop.
-  - Validate attributes against the category schema.
-  - Owner-only update/delete.
-  - Periodic job `ExpireListings`.
 - **Done when:**
-  - create → get → update → archive works
+  - create → get → update → publish → archive works
   - a non-owner gets 403
   - invalid attributes return 400
   - the expiry job flips past-due listings
 - [ ] Phase 11
 
-### Phase 12: Search & browse
+### Phase 12: Search & browse · [spec](docs/phases/phase-12.md)
 - **Depends on:** 11
-- **Tasks:**
-  - `GET /v1/listings` with `q` (Postgres FTS / `pg_trgm`), `category`, `region`, `district`, `minPrice`, `maxPrice`, `condition`, `sort`, `page`, `limit ≤ 50`.
-  - Promoted listings ranked first (the column is ready for Phase 14).
-  - Indexes on seller_id, category_id, status, region, district, expires_at, slug.
-  - `ETag`/`Cache-Control`.
-  - `GET /v1/listings/{slug}` returns a safe seller projection.
-- **Done when:** filter combinations are tested, `EXPLAIN` shows index use for the main filters, and responses contain no private seller fields.
+- **Done when:**
+  - filter combinations are tested and active promotions rank first (expired ones don't)
+  - `EXPLAIN` shows index use
+  - responses contain no private seller fields
+  - ETag/304 works
 - [ ] Phase 12
 
-### Phase 13: Payments core (Paystack) + ledger foundation
-- **Depends on:** 5, 4
-- **Tasks:**
-  - `payments` package with a Paystack client (initialize, verify, refund, transfer recipient, transfer, resolve account) and a fake for tests.
-  - Migrations:
-    - `payments`: reference unique, purpose `promotion|checkout`, `amount_pesewas`, currency, status `pending|success|failed|abandoned`, channel, raw payload, paid_at
-    - `webhook_events`: provider, event_id/reference unique, type, payload, processed_at
-  - `POST /v1/webhooks/paystack`: raw body, HMAC-SHA512 check against `x-paystack-signature`, insert `webhook_events` (a duplicate returns 200 no-op), dispatch by `event` type to registered handlers.
-  - `GET /v1/payments/verify/{reference}` as a fallback poll.
-  - `ledger` package:
-    - `ledger_accounts`, `ledger_transactions`, `ledger_entries` (double-entry, append-only, sum per tx = 0)
-    - `Post(tx, entries…)` API
-    - balance queries
+### Phase 13a: Payments core (Paystack, webhooks) · [spec](docs/phases/phase-13a.md)
+- **Depends on:** 4, 5, 8 (audit events, `forbid_mutation()`, `InTx`)
 - **Done when:**
   - a bad signature returns 401
   - a replayed event is processed once
-  - an amount/currency mismatch is rejected and logged
-  - a ledger post with non-zero sum errors
-  - a property test holds ledger balances consistent
-- [ ] Phase 13
+  - an amount or currency mismatch is rejected and logged
+  - the verify fallback and the webhook don't double-process
+  - money helpers match the DOMAIN §2 examples
+- [ ] Phase 13a
 
-### Phase 14: Promotions (first real payment flow)
-- **Depends on:** 12, 13
-- **Tasks:**
-  - Migrations: `promotion_configs` (tier, price_pesewas, credits, duration_days, active) and `listing_promotions` (listing, tier, starts/ends).
-  - Credits are held as ledger account `promo_credits:{user}`.
-  - `GET /v1/promotions/configs` and `POST /v1/promotions/purchase` (Paystack init, `purpose=promotion`).
-  - Webhook handler `charge.success(promotion)` → `GrantPromotionCredits` (idempotent on reference).
-  - `POST /v1/promotions/apply` spends credits and promotes the listing.
-  - Seed tiers from `~/work/farmgate/prisma/seed.ts`.
-- **Done when:** the end-to-end run (with a fake Paystack) goes purchase → webhook → credits → apply → listing ranked as promoted, and a webhook replay doesn't double-credit.
+### Phase 13b: Ledger foundation · [spec](docs/phases/phase-13b.md)
+- **Depends on:** 13a
+- **Done when:** a ledger post with a non-zero sum errors (per currency), posts are idempotent on (kind, reference), the tables are append-only, and a property test holds balances consistent.
+- [ ] Phase 13b
+
+### Phase 14: Promotions · [spec](docs/phases/phase-14.md)
+- **Depends on:** 12, 13b
+- **Done when:**
+  - the end-to-end run goes purchase → webhook → credits → apply → listing ranked as promoted
+  - a webhook replay doesn't double-credit
+  - concurrent applies never make credits negative
 - [ ] Phase 14
 
-### Phase 15: Checkout & orders (escrow hold)
-- **Depends on:** 13, 12
-- **Tasks:**
-  - Migrations:
-    - `checkouts`: buyer, total_pesewas, payment_reference, status, idempotency_key unique
-    - `orders`: checkout_id, buyer_id, **single seller_id**, subtotal/delivery_fee/commission/total pesewas, `commission_rate_bps` snapshot, status, `escrow_state none|held|released|refunded`, timestamps, `auto_complete_at`
-    - `order_items`: listing snapshot of title/unit/price/qty
-    - `order_events`: actor, from→to, note
-    - `commission_configs`: category or default, rate_bps
-  - Delivery stub fields on `orders`: `delivery_method pickup|seller_delivery|courier`, address, region, district, recipient_name, recipient_phone, delivery_fee_pesewas, tracking_ref, delivered_at.
-  - `delivery` package with a `DeliveryProvider` interface (`Quote`, `CreateShipment`, `Track`) and a `manual` impl (seller-set/flat fee).
-  - `POST /v1/checkout`:
-    - `Idempotency-Key`, cart items
-    - server-side price lookup, stock check and **reservation**
-    - one order per seller
-    - Paystack init for the total
-  - Webhook `charge.success(checkout)` → `ConfirmCheckout` job:
-    - verify amount/currency
-    - mark payment success
-    - orders `pending_payment→paid`
-    - ledger: `buyer_clearing → escrow`
-    - `escrow_state=held`
-    - notify sellers
-  - Periodic `ExpireUnpaidCheckouts` releases reservations.
-  - `GET /v1/orders`, `GET /v1/orders/{id}` (buyer or seller of that order only).
+### Phase 15a: Checkout foundations (pricing, delivery, orders schema) · [spec](docs/phases/phase-15a.md)
+- **Depends on:** 12, 13b
+- **Done when:** `PriceCart` is fully table-tested (two sellers → two orders, gross-up, commission resolution, validation), and the quote endpoint is contract-valid.
+- [ ] Phase 15a
+
+### Phase 15b: Checkout payment & escrow hold · [spec](docs/phases/phase-15b.md)
+- **Depends on:** 15a
 - **Done when:**
   - a two-seller cart produces two orders and one charge
   - a tampered client price is ignored
-  - an amount mismatch leaves the order unpaid and raises an alert log
-  - webhook replay makes no double escrow
+  - an amount mismatch leaves orders unpaid
+  - a webhook replay makes no double escrow
   - unpaid checkouts expire and restore stock
-- [ ] Phase 15
+  - the last unit can't be oversold
+- [ ] Phase 15b
 
-### Phase 16: Fulfilment state machine
-- **Depends on:** 15
-- **Tasks:**
-  - Status machine enforced in one place (`orders.Transition`) with a unit test covering the full table:
-    `pending_payment → paid → accepted → fulfilling → shipped → delivered → completed`, plus side exits `cancelled`, `disputed`, `refunded`, `expired`.
-  - Seller endpoints: `POST /v1/seller/orders/{id}/{accept,reject,ship,mark-delivered}`.
-  - Buyer endpoints: `POST /v1/orders/{id}/{cancel,confirm-receipt,dispute}`.
-  - Jobs:
-    - `AutoCancelUnaccepted`: seller silent for X h → cancel → enqueue refund
-    - `AutoCompleteOrders`: N days after `delivered` with no dispute → `completed`
-  - `notify` package: `Notifier` interface, mNotify client (sandbox/fake in tests), messages enqueued as River jobs.
-  - Every transition writes `order_events` and notifies (SMS via `notify`).
-- **Done when:** illegal transitions return 409, each actor can do only their own transitions, and the timers are tested with a fake clock.
+### Phase 16: Fulfilment state machine & notifications · [spec](docs/phases/phase-16.md)
+- **Depends on:** 15b
+- **Done when:**
+  - illegal transitions return 409
+  - each actor can do only their own transitions (the full-table test)
+  - the timers are tested with a fake clock
+  - every transition enqueues an SMS
 - [ ] Phase 16
 
-### Phase 17: Escrow release, refunds & disputes
+### Phase 17a: Escrow release & refunds · [spec](docs/phases/phase-17a.md)
 - **Depends on:** 16
-- **Tasks:**
-  - On `completed` → `ReleaseEscrow` (unique per order). Ledger: `escrow → seller_payable:{seller}` (net) and `escrow → platform_commission`. `escrow_state=released`.
-  - `refunds` table (order, amount, reason, paystack refund id, status).
-  - `RefundOrder` job, allowed only while `escrow_state=held`. Paystack Refund API. Webhook `refund.*` handlers. Ledger `escrow → refunds`.
-  - Disputes table and admin `POST /v1/admin/disputes/{id}/resolve` (`refund_buyer | release_seller | partial`), audit-logged.
-- **Done when:**
-  - release and refund are each idempotent
-  - no refund after release (it goes to the manual path)
-  - ledger totals reconcile: escrow balance = sum of held orders
-- [ ] Phase 17
+- **Done when:** release and refund are each idempotent, there's no refund after release (it goes to the manual path), and partial-refund commission follows DOMAIN §4.1.
+- [ ] Phase 17a
 
-### Phase 18: Seller payouts (Paystack Transfers)
-- **Depends on:** 17, 7
-- **Tasks:**
-  - `seller_payout_accounts`: type `mobile_money|ghipss`, bank/network code, number (encrypted), masked, account_name, `recipient_code`, verified_at, cooldown_until.
-  - `GET|PUT /v1/seller/payout-account`:
-    - resolve the account via Paystack and match the name
-    - **step-up re-auth**: `RequireRecentAuth(5m)` (Phase 7)
-    - create the transfer recipient
-    - 24–48h cooldown on change
-  - `payouts` table (seller, amount, reference unique, transfer_code, status `queued|pending|success|failed|reversed`, order ids).
-  - `ExecutePayout` job (batched per seller, min payout threshold) debits `seller_payable` into `payout_clearing`.
-  - Webhooks `transfer.success|failed|reversed`. Failed/reversed payouts re-credit `seller_payable`.
-  - `ReconcileTransfers` daily job.
-  - `GET /v1/seller/balance`, `GET /v1/seller/payouts`. Admin `POST /v1/admin/payouts/{id}/retry`.
+### Phase 17b: Disputes & ledger reconciliation · [spec](docs/phases/phase-17b.md)
+- **Depends on:** 17a
+- **Done when:** the three dispute outcomes work with audit, the reconcile job detects violations, and ledger totals reconcile (the escrow balance equals the sum of held orders).
+- [ ] Phase 17b
+
+### Phase 18a: Seller payout accounts · [spec](docs/phases/phase-18a.md)
+- **Depends on:** 7, 8, 17b
 - **Done when:**
-  - the end-to-end run (with a fake Paystack) goes completed order → payable → payout → transfer.success
+  - setting an account requires step-up
+  - the account is resolved, name-checked, encrypted and never returned unmasked
+  - a change starts a 48h cooldown
+- [ ] Phase 18a
+
+### Phase 18b: Payout execution · [spec](docs/phases/phase-18b.md)
+- **Depends on:** 18a
+- **Done when:**
+  - the end-to-end run goes completed order → payable → payout → transfer.success
   - a failed transfer restores the balance
-  - no payout during cooldown
-  - the payout account is never returned unmasked
-- [ ] Phase 18
+  - no payout happens during cooldown or below the minimum
+- [ ] Phase 18b
 
-### Phase 19: Messaging
-- **Depends on:** 11
-- **Tasks:** `conversations` (unique listing_id + buyer_id) and `messages`. Endpoints to list/create conversations, list/send messages, and mark read. Participant-only access. Rate limits. Optional order link on a conversation.
-- **Done when:** a non-participant gets 403, pagination works, and a duplicate conversation returns the existing one.
+### Phase 19: Messaging · [spec](docs/phases/phase-19.md)
+- **Depends on:** 11, 16
+- **Done when:** a non-participant gets 403, cursor pagination works, a duplicate conversation returns the existing one, and the messaging rate limit and SMS throttling work.
 - [ ] Phase 19
 
-### Phase 20: Reviews, favorites, reports, supply requests
-- **Depends on:** 16 (reviews require a completed order), 11
-- **Tasks:**
-  - `reviews` (unique order/listing + reviewer, only after `completed`)
-  - `favorites` (unique user + listing)
-  - `reports` with an admin moderation queue
-  - `supply_requests` with a status flow ported from `~/work/farmgate` (`app/api/supply-requests`)
-- **Done when:** a review without a completed order is rejected, and the uniqueness constraints are tested.
-- [ ] Phase 20
+### Phase 20a: Reviews & favorites · [spec](docs/phases/phase-20a.md)
+- **Depends on:** 16
+- **Done when:** a review without a completed order is rejected, uniqueness is tested, and favourites are idempotent with an exact counter.
+- [ ] Phase 20a
 
-### Phase 21: Observability & hardening
-- **Depends on:** 18
-- **Tasks:**
-  - `/metrics` (Prometheus: HTTP, DB pool, River queue depth, payment/payout counters).
-  - PII redaction in logs. Audit coverage for payments, payouts, refunds, disputes, and verification.
-  - Security headers.
-  - k6 smoke tests for browse, checkout (fake Paystack), and webhook.
-  - Alerts list (mNotify balance low, Firebase SMS spend / budget, payout failures, reconciliation mismatches).
-- **Done when:** k6 thresholds pass locally and there are no secrets/OTPs/phones in a log sample.
+### Phase 20b: Reports & supply requests · [spec](docs/phases/phase-20b.md)
+- **Depends on:** 16, 9
+- **Done when:** one open report per target, resolving can suspend a listing, and the supply-request status machine is tested with notifications.
+- [ ] Phase 20b
+
+### Phase 21: Observability & hardening · [spec](docs/phases/phase-21.md)
+- **Depends on:** 18b, 19, 20a, 20b
+- **Done when:** k6 thresholds pass locally, there are no secrets, OTPs or phones in a log sample, metrics are exposed, and audit coverage is tested.
 - [ ] Phase 21
 
-### Phase 22: Deploy (Railway + Neon + Cloudflare) & contract freeze
-- **Depends on:** 21
-- **Tasks:**
-  - Neon project with branches (dev/prod). Railway service with env from §7. Migrations run as a release step.
-  - Cloudflare DNS, WAF rules, Turnstile keys, R2 bucket + CDN domain.
-  - Paystack live webhook URL. Transfers enabled with OTP disabled (see §11).
-  - Tag the OpenAPI spec `v1.0.0` (**contract freeze**).
-- **Done when:**
-  - staging passes smoke tests end-to-end with Paystack test mode
-  - `/readyz` is green
-  - the spec is tagged
+### Phase 22: Deploy (Railway + Neon + Upstash + Cloudflare) & contract freeze · [spec](docs/phases/phase-22.md)
+- **Depends on:** 21 (needs the owner for accounts, DNS and live keys)
+- **Done when:** staging passes the end-to-end smoke test with Paystack test mode, `/readyz` is green, the spec is tagged `v1.0.0`, and the regulatory item has an owner decision.
 - [ ] Phase 22
 
-### Frontend phases (start after Phase 22 freezes the contract; F0–F2 may start after Phase 12)
-- [ ] **F0 Scaffold:** TanStack Start app in `farmish-frontend/`, TS strict, Tailwind v4 + shadcn, lint/format, CI, deploy target decided (ADR).
-- [ ] **F1 API client:** typed client generated from `api/openapi.yaml`, auth header injection, error envelope handling, money formatting (pesewas → GHS).
-- [ ] **F2 Auth:** Firebase social/email/phone (`signInWithPhoneNumber` + `RecaptchaVerifier`), session persistence, route guards.
+### Frontend phases · [spec](docs/phases/frontend.md) (start after Phase 22 freezes the contract; F0–F2 may start after Phase 12)
+- [ ] **F0 Scaffold:** TanStack Start, TS strict, Tailwind v4 + shadcn, lint/test/e2e, `pnpm ci`, and a deploy-target ADR.
+- [ ] **F1 API client:** types generated from `api/openapi.yaml` (openapi-typescript + openapi-fetch), auth header, error envelope, `formatMoney`.
+- [ ] **F2 Auth:** Firebase social/email/phone (`signInWithPhoneNumber` + `RecaptchaVerifier`), a re-auth dialog, route guards.
 - [ ] **F3 Browse:** home, categories, search with filters, listing detail.
-- [ ] **F4 Sell:** seller onboarding, listing create/edit with R2 uploads, my listings.
-- [ ] **F5 Checkout:** cart, delivery details, Paystack inline/redirect, payment status page.
-- [ ] **F6 Orders:** buyer and seller order dashboards, fulfilment actions, confirm receipt, disputes.
-- [ ] **F7 Payouts:** payout account setup (step-up phone re-auth), balance, payout history.
-- [ ] **F8 Engagement:** messaging, reviews, favorites, reports, supply requests, promotions purchase/apply.
-- [ ] **F9 Launch:** SEO/meta, performance pass, accessibility pass, production deploy, legacy app retirement plan.
+- [ ] **F4 Sell:** seller onboarding, category-driven listing form, R2 uploads, my listings.
+- [ ] **F5 Checkout:** cart, quote with the processing-fee line, an idempotent checkout, the Paystack redirect, a payment status page.
+- [ ] **F6 Orders:** buyer and seller dashboards, state-aware actions, disputes.
+- [ ] **F7 Payouts:** payout account (step-up), balances, history.
+- [ ] **F8 Engagement:** messaging, reviews, favorites, reports, supply requests, promotions.
+- [ ] **F9 Launch:** SEO, performance, accessibility, monitoring, production deploy, legacy redirects.
 
 ## 7. Environment variables (backend)
-`APP_ENV`, `PORT`, `LOG_LEVEL`, `SHUTDOWN_TIMEOUT` (total SIGTERM-to-exit budget), `RUN_MODE` (`all|api|worker`), `JOBS_MAX_WORKERS`, `DATABASE_URL`, `DB_MAX_CONNS`, `DB_STATEMENT_TIMEOUT`, `CORS_ORIGINS`, `FIREBASE_PROJECT_ID`, `FIREBASE_CREDENTIALS_JSON`, `FIREBASE_AUTH_EMULATOR_HOST` (dev/test only, refused in staging/production), `TURNSTILE_SECRET`, `TRUSTED_PROXIES`, `TRUST_CLOUDFLARE`, `REDIS_URL` (optional, `rediss://`), `REDIS_TIMEOUT`, `MNOTIFY_API_KEY`, `MNOTIFY_SENDER` (Phase 16), `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `DATA_ENCRYPTION_KEY`, `ESCROW_AUTO_COMPLETE_DAYS`, `SELLER_ACCEPT_TIMEOUT_HOURS`, `PAYOUT_MIN_PESEWAS`.
+`APP_ENV`, `PORT`, `LOG_LEVEL`, `SHUTDOWN_TIMEOUT` (total SIGTERM-to-exit budget), `RUN_MODE` (`all|api|worker`), `JOBS_MAX_WORKERS`, `DATABASE_URL`, `DB_MAX_CONNS`, `DB_STATEMENT_TIMEOUT`, `CORS_ORIGINS`, `FIREBASE_PROJECT_ID`, `FIREBASE_CREDENTIALS_JSON`, `FIREBASE_AUTH_EMULATOR_HOST` (dev/test only, refused in staging/production), `TURNSTILE_SECRET`, `TRUSTED_PROXIES`, `TRUST_CLOUDFLARE`, `REDIS_URL` (optional, `rediss://`), `REDIS_TIMEOUT`, `MNOTIFY_API_KEY`, `MNOTIFY_SENDER` (Phase 16), `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `DATA_ENCRYPTION_KEY`, `R2_ENDPOINT` (MinIO override), `PAYSTACK_BASE_URL`, `PAYSTACK_CALLBACK_URL`, `PAYSTACK_FEE_BPS` (195), `PAYSTACK_TRANSFER_FEE_PESEWAS` (0 until confirmed), `CHECKOUT_EXPIRY_MINUTES` (30), `ESCROW_AUTO_COMPLETE_DAYS` (3), `SELLER_ACCEPT_TIMEOUT_HOURS` (48), `PAYOUT_MIN_PESEWAS` (2000), `NOTIFY_SMS_ENABLED`, `METRICS_ADDR` (Phase 21). Each phase spec lists its variables; add them to `internal/config`, `.env.example` and this list when implementing.
 
 ## 8. Decisions log
 | Date | Decision | ADR |
@@ -440,6 +361,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-26 | Phase 5: River schema generated into golang-migrate (000003) with a version guard test; 10 attempts / 1m timeout defaults; `RUN_MODE` all/api/worker (worker = probes only); `SHUTDOWN_TIMEOUT` is the total budget (9s) with concurrent HTTP drain + job stop; River UI deferred | ADR-0010 |
 | 2026-09-26 | Phase 6: in-process token buckets (ip 300/min, user 120/min, `sensitive` 10/min) with bounded memory, fail-open; spec extensions `x-farmish-rate-limit` / `x-farmish-turnstile`; client IP from `TRUSTED_PROXIES` + Cloudflare ranges only; Turnstile fails closed (503) when Cloudflare is unreachable | ADR-0011 |
 | 2026-09-26 | Upstash Redis for shared limits, hybrid (per-IP stays in-process); go-redis over TLS, atomic Lua bucket, in-process fallback on timeout/outage | ADR-0012 |
+| 2026-09-26 | Owner business decisions (5% commission; buyer pays the processing fee via gross-up; 48h accept / 3-day auto-release; GHS 20 daily payouts). Implementer handbook (`AGENTS.md`, guide, DOMAIN, phase specs, review protocol). Phases 13/15/17/18/20 pre-split. `fulfilling` state dropped. Legacy bugs not ported (DOMAIN §12) | ADR-0013 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
@@ -468,7 +390,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
   - confirm GH Transfers are enabled and transfer OTP can be disabled for automation
   - keep settlement on the Paystack balance
   - confirm MoMo recipient support for all networks
-- **Fees:** decide who bears Paystack charge and transfer fees (buyer, seller, or platform) and whether they're shown at checkout. Decide before Phase 15.
+- **Fees:** decided on 2026-09-26. The buyer pays the charge fee (a visible, non-refundable line) and the platform absorbs transfer fees (DOMAIN §2). **Still to confirm:** the live Paystack fee rate and the GH transfer fee (`PAYSTACK_FEE_BPS`, `PAYSTACK_TRANSFER_FEE_PESEWAS`), and whether the processing fee should be refunded on seller-caused cancellations (default: no, DOMAIN §2.2).
 - **Client IP behind Railway + Cloudflare (Phase 22):** find the Railway edge's source addresses for `TRUSTED_PROXIES`, set `TRUST_CLOUDFLARE=true`, verify the logged `client_ip`, and consider restricting the origin to Cloudflare (ADR-0011).
 - **Upstash:** free tier is 500K commands/month; watch usage in the console. Keep the Upstash DB in the Railway region (a ~200ms round trip would hit the fallback timeout). Rotate the credential that was pasted into a chat before any deployment (ADR-0012).
 - **Chargebacks after release:** the platform bears the loss. See the reserve backlog item.

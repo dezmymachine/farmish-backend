@@ -4,6 +4,8 @@ Go + Gin API for Farmish Ghana. The web app lives in [farmish-frontend](https://
 
 `REDEVELOPMENT_PLAN.md` (architecture, conventions, phased roadmap for both apps) and `docs/adr/` live in this repo.
 
+**Contributors and coding agents:** start with [`AGENTS.md`](AGENTS.md), then read [`docs/ENGINEERING_GUIDE.md`](docs/ENGINEERING_GUIDE.md), [`docs/DOMAIN.md`](docs/DOMAIN.md) (money and business rules), [`docs/phases/`](docs/phases/README.md) (per-phase specs) and [`docs/REVIEW_PROTOCOL.md`](docs/REVIEW_PROTOCOL.md).
+
 ## Quick start
 
 Requires Go 1.27+ and Docker.
