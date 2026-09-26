@@ -21,8 +21,9 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/validation"
 )
 
-// put uploads body to url with the headers a presign returned.
-func put(t *testing.T, url string, headers map[string]string, body string) *http.Response {
+// put uploads body to url with the headers a presign returned and returns the
+// response status.
+func put(t *testing.T, url string, headers map[string]string, body string) int {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodPut, url, strings.NewReader(body))
 	if err != nil {
@@ -36,9 +37,9 @@ func put(t *testing.T, url string, headers map[string]string, body string) *http
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
-	_ = resp.Body.Close()
-	return resp
+	return resp.StatusCode
 }
 
 func TestUploadURL_PresignedPutWorks(t *testing.T) {
@@ -64,9 +65,8 @@ func TestUploadURL_PresignedPutWorks(t *testing.T) {
 		t.Errorf("status = %q", up.Status)
 	}
 
-	resp := put(t, up.URL, up.Headers, strings.Repeat("a", 1000))
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT status %d", resp.StatusCode)
+	if code := put(t, up.URL, up.Headers, strings.Repeat("a", 1000)); code != http.StatusOK {
+		t.Fatalf("PUT status %d", code)
 	}
 	info, err := store.Head(ctx, up.Key)
 	if err != nil || info.Size != 1000 || info.ContentType != "image/jpeg" {
@@ -116,9 +116,8 @@ func TestUploadURL_WrongSizeUploadRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp := put(t, up.URL, up.Headers, strings.Repeat("a", 2000))
-	if resp.StatusCode == http.StatusOK {
-		t.Fatalf("storage accepted a 2000-byte body signed for 1000: %d", resp.StatusCode)
+	if code := put(t, up.URL, up.Headers, strings.Repeat("a", 2000)); code == http.StatusOK {
+		t.Fatalf("storage accepted a 2000-byte body signed for 1000: %d", code)
 	}
 	// Nothing was stored.
 	if _, err := store.Head(context.Background(), up.Key); !errors.Is(err, media.ErrObjectNotFound) {
@@ -169,8 +168,8 @@ func TestAttach_OwnershipAndState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp := put(t, bad.URL, bad.Headers, strings.Repeat("a", 100)); resp.StatusCode != http.StatusOK {
-		t.Fatalf("upload: %d", resp.StatusCode)
+	if code := put(t, bad.URL, bad.Headers, strings.Repeat("a", 100)); code != http.StatusOK {
+		t.Fatalf("upload: %d", code)
 	}
 	if _, err := pool.Exec(ctx, `UPDATE media_objects SET size_bytes = 999 WHERE id = $1`, bad.ID); err != nil {
 		t.Fatal(err)
@@ -184,8 +183,8 @@ func TestAttach_OwnershipAndState(t *testing.T) {
 	}
 
 	// The happy path, then idempotency.
-	if resp := put(t, up.URL, up.Headers, strings.Repeat("a", 512)); resp.StatusCode != http.StatusOK {
-		t.Fatalf("upload: %d", resp.StatusCode)
+	if code := put(t, up.URL, up.Headers, strings.Repeat("a", 512)); code != http.StatusOK {
+		t.Fatalf("upload: %d", code)
 	}
 	err = inTx(func(tx pgx.Tx) error {
 		var aerr error
@@ -230,16 +229,16 @@ func TestCleanupOrphans(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp := put(t, old.URL, old.Headers, strings.Repeat("a", 64)); resp.StatusCode != http.StatusOK {
-		t.Fatal("upload failed")
+	if code := put(t, old.URL, old.Headers, strings.Repeat("a", 64)); code != http.StatusOK {
+		t.Fatalf("upload: %d", code)
 	}
 	// Old but attached: untouched.
 	attached, err := svc.CreateUpload(ctx, uid, media.PurposeListingImage, "image/png", 64)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp := put(t, attached.URL, attached.Headers, strings.Repeat("a", 64)); resp.StatusCode != http.StatusOK {
-		t.Fatal("upload failed")
+	if code := put(t, attached.URL, attached.Headers, strings.Repeat("a", 64)); code != http.StatusOK {
+		t.Fatalf("upload: %d", code)
 	}
 	if err := database.InTx(ctx, pool, func(tx pgx.Tx) error {
 		_, aerr := svc.Attach(ctx, tx, uid, attached.ID)
@@ -257,8 +256,8 @@ func TestCleanupOrphans(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp := put(t, fresh.URL, fresh.Headers, strings.Repeat("a", 64)); resp.StatusCode != http.StatusOK {
-		t.Fatal("upload failed")
+	if code := put(t, fresh.URL, fresh.Headers, strings.Repeat("a", 64)); code != http.StatusOK {
+		t.Fatalf("upload: %d", code)
 	}
 
 	ageRows(t, pool, now.Add(-25*time.Hour), old.ID, attached.ID, missing.ID)
@@ -301,7 +300,8 @@ func TestMediaKey_Format(t *testing.T) {
 		}
 	}
 	// Keys are unique per call.
-	if media.MediaKey(uid, "image/png") == media.MediaKey(uid, "image/png") {
+	first, second := media.MediaKey(uid, "image/png"), media.MediaKey(uid, "image/png")
+	if first == second {
 		t.Error("MediaKey is not unique")
 	}
 }

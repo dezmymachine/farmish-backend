@@ -53,7 +53,11 @@ func R2(t testing.TB) *media.R2 {
 	if err := s.CreateBucket(ctx); err != nil {
 		t.Fatalf("mediatest: %v", err)
 	}
-	t.Cleanup(func() { s.DeleteBucket(context.Background()) })
+	t.Cleanup(func() {
+		if err := s.DeleteBucket(context.Background()); err != nil {
+			t.Logf("mediatest: delete bucket: %v", err)
+		}
+	})
 	return s
 }
 
