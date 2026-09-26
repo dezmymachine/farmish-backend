@@ -25,7 +25,7 @@ func TestFromLookup_Defaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Port != 8080 || cfg.LogLevel != "info" || cfg.ShutdownTimeout != 15*time.Second {
+	if cfg.Port != 8080 || cfg.LogLevel != "info" || cfg.ShutdownTimeout != 9*time.Second {
 		t.Errorf("unexpected defaults: %+v", cfg)
 	}
 	want := []string{"http://localhost:3000", "https://farmish.gh"}
@@ -78,6 +78,7 @@ func TestFromLookup_Invalid(t *testing.T) {
 		{"bad port", map[string]string{"APP_ENV": "test", "PORT": "99999", "CORS_ORIGINS": "https://a.gh"}, []string{"PORT must be"}},
 		{"bad log level", map[string]string{"APP_ENV": "test", "LOG_LEVEL": "loud", "CORS_ORIGINS": "https://a.gh"}, []string{"LOG_LEVEL must be"}},
 		{"bad timeout", map[string]string{"APP_ENV": "test", "SHUTDOWN_TIMEOUT": "-1s", "CORS_ORIGINS": "https://a.gh"}, []string{"SHUTDOWN_TIMEOUT must be"}},
+		{"timeout too short", map[string]string{"APP_ENV": "test", "SHUTDOWN_TIMEOUT": "2s", "CORS_ORIGINS": "https://a.gh"}, []string{"at least 3s"}},
 		{"wildcard cors", map[string]string{"APP_ENV": "test", "CORS_ORIGINS": "*"}, []string{"not *"}},
 		{"cors no scheme", map[string]string{"APP_ENV": "test", "CORS_ORIGINS": "farmish.gh"}, []string{"must start with http"}},
 	}
@@ -162,5 +163,26 @@ func TestFirebase_Invalid(t *testing.T) {
 				t.Error("error leaks credential content")
 			}
 		})
+	}
+}
+
+func TestRunMode(t *testing.T) {
+	cfg, err := FromLookup(lookup(base(nil)))
+	if err != nil || cfg.RunMode != RunAll || cfg.JobsMaxWorkers != 10 {
+		t.Fatalf("defaults: %v %d %v", cfg.RunMode, cfg.JobsMaxWorkers, err)
+	}
+	for mode, want := range map[string][2]bool{"all": {true, true}, "API": {true, false}, "worker": {false, true}} {
+		cfg, err := FromLookup(lookup(base(map[string]string{"RUN_MODE": mode, "JOBS_MAX_WORKERS": "4"})))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.RunMode.ServesAPI() != want[0] || cfg.RunMode.WorksJobs() != want[1] || cfg.JobsMaxWorkers != 4 {
+			t.Errorf("%s: serves=%t works=%t workers=%d", mode, cfg.RunMode.ServesAPI(), cfg.RunMode.WorksJobs(), cfg.JobsMaxWorkers)
+		}
+	}
+	for env, want := range map[string]string{"RUN_MODE": "RUN_MODE must be", "JOBS_MAX_WORKERS": "JOBS_MAX_WORKERS must be"} {
+		if _, err := FromLookup(lookup(base(map[string]string{env: "0"}))); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s=0: err %v", env, err)
+		}
 	}
 }

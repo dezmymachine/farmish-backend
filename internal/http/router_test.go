@@ -206,3 +206,26 @@ func TestRequestErrorHandler(t *testing.T) {
 	}
 	assertErrorEnvelope(t, w.Body.Bytes(), apierror.CodeBadRequest)
 }
+
+// RUN_MODE=worker serves health probes only; API routes don't exist there.
+func TestProbeRouter(t *testing.T) {
+	r := NewProbeRouter(logger.New(io.Discard, "error"), fakePinger{})
+	for _, path := range []string{"/healthz", "/readyz"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := serve(t, r, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("%s: status %d", path, w.Code)
+		}
+		assertContract(t, req, w)
+	}
+	w := serve(t, r, httptest.NewRequest(http.MethodGet, "/v1/me", nil))
+	if w.Code != http.StatusNotFound {
+		t.Errorf("/v1/me on probe router: status %d", w.Code)
+	}
+	assertErrorEnvelope(t, w.Body.Bytes(), apierror.CodeNotFound)
+
+	down := NewProbeRouter(logger.New(io.Discard, "error"), fakePinger{err: errors.New("db down")})
+	if w := serve(t, down, httptest.NewRequest(http.MethodGet, "/readyz", nil)); w.Code != http.StatusServiceUnavailable {
+		t.Errorf("readyz with db down: %d", w.Code)
+	}
+}

@@ -4,7 +4,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -15,13 +17,31 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/config"
 	"github.com/dezmymachine/farmish-backend/internal/database"
 	httpapi "github.com/dezmymachine/farmish-backend/internal/http"
+	"github.com/dezmymachine/farmish-backend/internal/jobs"
 	"github.com/dezmymachine/farmish-backend/internal/users"
 	"github.com/dezmymachine/farmish-backend/pkg/logger"
 )
 
-// dbCloseTimeout bounds pool shutdown so SIGTERM exits within the platform's
-// grace period even when the database is unreachable.
-const dbCloseTimeout = 5 * time.Second
+// shutdownBudget splits SHUTDOWN_TIMEOUT (the whole SIGTERM-to-exit budget,
+// which must stay below the platform's kill grace period) into:
+//   - drain: HTTP drain and job stop, which run concurrently
+//   - jobsSoft/jobsHard: within drain, let running jobs finish, then cancel them
+//   - dbClose: the final slice for closing the pool
+func shutdownBudget(total time.Duration) (drain, jobsSoft, jobsHard, dbClose time.Duration) {
+	dbClose = min(2*time.Second, total/4)
+	drain = total - dbClose
+	jobsSoft = drain * 2 / 3
+	jobsHard = drain - jobsSoft
+	return drain, jobsSoft, jobsHard, dbClose
+}
+
+// registry lists every job this service knows. Each phase registers its
+// workers and periodic jobs here.
+func registry(log *slog.Logger) *jobs.Registry {
+	r := jobs.NewRegistry()
+	jobs.Register(r, &jobs.NoopWorker{Log: log})
+	return r
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -40,6 +60,7 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	drain, jobsSoft, jobsHard, dbCloseTimeout := shutdownBudget(cfg.ShutdownTimeout)
 
 	pool, err := database.Open(ctx, cfg.DB)
 	if err != nil {
@@ -52,23 +73,54 @@ func run() error {
 	}()
 	log.Info("database connected", "max_conns", cfg.DB.MaxConns)
 
-	firebase, err := auth.NewFirebase(ctx, cfg.Firebase)
+	jobClient, err := jobs.NewClient(pool, registry(log), log, jobs.Options{
+		Work:       cfg.RunMode.WorksJobs(),
+		MaxWorkers: cfg.JobsMaxWorkers,
+	})
 	if err != nil {
 		return err
 	}
-	if cfg.Firebase.EmulatorHost != "" {
-		log.Warn("FIREBASE AUTH EMULATOR IN USE: token signatures are NOT verified", "host", cfg.Firebase.EmulatorHost)
+	if cfg.RunMode.WorksJobs() {
+		// Not the signal context: cancelling Start's context would abort running
+		// jobs immediately. Shutdown goes through jobs.Stop (soft, then hard).
+		if err := jobClient.Start(context.WithoutCancel(ctx)); err != nil {
+			return fmt.Errorf("start job workers: %w", err)
+		}
+		// Stop jobs as soon as SIGTERM arrives, concurrently with the HTTP drain.
+		jobsStopped := make(chan struct{})
+		go func() {
+			defer close(jobsStopped)
+			<-ctx.Done()
+			if err := jobs.Stop(jobClient, jobsSoft, jobsHard, log); err != nil {
+				log.Error("job workers did not stop cleanly", "error", err.Error())
+			}
+		}()
+		defer func() { <-jobsStopped }()
+		log.Info("job workers started", "max_workers", cfg.JobsMaxWorkers)
 	}
 
-	router, err := httpapi.NewRouter(cfg, log, httpapi.Deps{DB: pool, Verifier: firebase, Users: users.New(pool)})
-	if err != nil {
-		return err
+	var router http.Handler
+	if cfg.RunMode.ServesAPI() {
+		firebase, err := auth.NewFirebase(ctx, cfg.Firebase)
+		if err != nil {
+			return err
+		}
+		if cfg.Firebase.EmulatorHost != "" {
+			log.Warn("FIREBASE AUTH EMULATOR IN USE: token signatures are NOT verified", "host", cfg.Firebase.EmulatorHost)
+		}
+		router, err = httpapi.NewRouter(cfg, log, httpapi.Deps{DB: pool, Verifier: firebase, Users: users.New(pool)})
+		if err != nil {
+			return err
+		}
+	} else {
+		router = httpapi.NewProbeRouter(log, pool)
 	}
+	log.Info("starting", "run_mode", string(cfg.RunMode))
 	addr := net.JoinHostPort("", strconv.Itoa(cfg.Port))
 	var lc net.ListenConfig
 	ln, err := lc.Listen(ctx, "tcp", addr)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", addr, err)
 	}
-	return httpapi.Serve(ctx, httpapi.NewServer(addr, router), ln, cfg.ShutdownTimeout, log)
+	return httpapi.Serve(ctx, httpapi.NewServer(addr, router), ln, drain, log)
 }

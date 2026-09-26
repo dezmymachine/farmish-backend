@@ -52,6 +52,30 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 		return nil, err
 	}
 
+	r := newEngine(log)
+	// CORS answers preflights before auth sees them; auth runs before
+	// validation so anonymous callers learn nothing about request shapes.
+	r.Use(middleware.CORS(cfg.CORSOrigins), authenticate, validate)
+
+	api.RegisterHandlersWithOptions(r, strictServer(handlers.Server{DB: deps.DB, Users: deps.Users}), api.GinServerOptions{
+		ErrorHandler: func(c *gin.Context, err error, _ int) { requestError(c, err) },
+	})
+	return r, nil
+}
+
+// NewProbeRouter serves only /healthz and /readyz, for RUN_MODE=worker
+// processes that need platform health checks but must not expose the API.
+func NewProbeRouter(log *slog.Logger, db handlers.Pinger) *gin.Engine {
+	r := newEngine(log)
+	s := strictServer(handlers.Server{DB: db})
+	r.GET("/healthz", s.GetHealthz)
+	r.GET("/readyz", s.GetReadyz)
+	return r
+}
+
+// newEngine returns a Gin engine with the middleware and fallbacks every
+// router shares.
+func newEngine(log *slog.Logger) *gin.Engine {
 	// Release mode everywhere: debug mode prints non-JSON banners to stdout.
 	gin.SetMode(gin.ReleaseMode)
 
@@ -64,16 +88,7 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 	r.ContextWithFallback = true
 
 	// AccessLog sits outside Recovery so recovered panics are logged as 500s.
-	// CORS answers preflights before auth sees them; auth runs before
-	// validation so anonymous callers learn nothing about request shapes.
-	r.Use(
-		middleware.RequestID(log),
-		middleware.AccessLog(),
-		middleware.Recovery(),
-		middleware.CORS(cfg.CORSOrigins),
-		authenticate,
-		validate,
-	)
+	r.Use(middleware.RequestID(log), middleware.AccessLog(), middleware.Recovery())
 
 	r.NoRoute(func(c *gin.Context) {
 		apierror.Abort(c, http.StatusNotFound, apierror.CodeNotFound, "Resource not found")
@@ -81,17 +96,15 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 	r.NoMethod(func(c *gin.Context) {
 		apierror.Abort(c, http.StatusMethodNotAllowed, apierror.CodeMethodNotAllowed, "Method not allowed")
 	})
+	return r
+}
 
-	strict := api.NewStrictHandlerWithOptions(handlers.Server{DB: deps.DB, Users: deps.Users}, nil, api.StrictGinServerOptions{
+func strictServer(s handlers.Server) api.ServerInterface {
+	return api.NewStrictHandlerWithOptions(s, nil, api.StrictGinServerOptions{
 		RequestErrorHandlerFunc:  requestError,
 		HandlerErrorFunc:         internalError("handler error"),
 		ResponseErrorHandlerFunc: internalError("response error"),
 	})
-	api.RegisterHandlersWithOptions(r, strict, api.GinServerOptions{
-		ErrorHandler: func(c *gin.Context, err error, _ int) { requestError(c, err) },
-	})
-
-	return r, nil
 }
 
 // requestError answers requests the generated code couldn't bind (bad JSON,

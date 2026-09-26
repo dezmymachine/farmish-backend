@@ -70,6 +70,13 @@ In handlers, get the caller with `users.FromContext(ctx)`. Never take a user ID 
 
 Auth tests use `authtest.EmailUser(t)` / `authtest.PhoneUser(t)` (real emulator accounts + tokens) and `authtest.UnsignedToken(claims)` for crafted bad tokens.
 
+**Background jobs (River, `internal/jobs`):**
+- Define `XArgs` (with `Kind()`) plus a worker (embed `river.WorkerDefaults[XArgs]`).
+- Register it in `registry()` in `cmd/api/main.go`, and schedule periodic ones with `reg.Every`.
+- Enqueue with `jobClient.InsertTx(ctx, tx, args, opts)` **inside the same transaction** as the state change.
+- `jobs.Unique()` guards against double enqueues, but money-moving work must still be idempotent in its own tables.
+- `RUN_MODE` is `all|api|worker`.
+
 DB tests use `dbtest.Pool(t)` (fresh migrated database per test) or `dbtest.EmptyURL(t)` (unmigrated). Both are in `internal/database/dbtest`.
 
 Update this section as each phase lands.

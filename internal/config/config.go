@@ -22,6 +22,21 @@ const (
 	EnvProduction  Env = "production"
 )
 
+// RunMode selects what a process runs (RUN_MODE).
+type RunMode string
+
+const (
+	RunAll    RunMode = "all"    // HTTP API + job workers (default, single process in v1)
+	RunAPI    RunMode = "api"    // HTTP API only; jobs are enqueued, never worked
+	RunWorker RunMode = "worker" // job workers only; HTTP serves just /healthz and /readyz
+)
+
+// ServesAPI reports whether the process serves the full HTTP API.
+func (m RunMode) ServesAPI() bool { return m == RunAll || m == RunAPI }
+
+// WorksJobs reports whether the process runs job workers.
+func (m RunMode) WorksJobs() bool { return m == RunAll || m == RunWorker }
+
 // Config is the fully validated service configuration.
 type Config struct {
 	Env             Env
@@ -31,6 +46,8 @@ type Config struct {
 	ShutdownTimeout time.Duration
 	DB              DB
 	Firebase        Firebase
+	RunMode         RunMode
+	JobsMaxWorkers  int
 }
 
 // Firebase configures token verification and the Admin SDK.
@@ -77,10 +94,14 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 	}
 
 	cfg := Config{
-		Env:             Env(required("APP_ENV")),
-		Port:            8080,
-		LogLevel:        "info",
-		ShutdownTimeout: 15 * time.Second,
+		Env:      Env(required("APP_ENV")),
+		Port:     8080,
+		LogLevel: "info",
+		// Total SIGTERM-to-exit budget; keep it below the platform's kill
+		// grace period (Docker's default is 10s).
+		ShutdownTimeout: 9 * time.Second,
+		RunMode:         RunAll,
+		JobsMaxWorkers:  10,
 		DB: DB{
 			URL:              required("DATABASE_URL"),
 			MaxConns:         10,
@@ -114,8 +135,8 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 
 	if v := get("SHUTDOWN_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
-		if err != nil || d <= 0 {
-			errs = append(errs, fmt.Errorf("SHUTDOWN_TIMEOUT must be a positive duration, got %q", v))
+		if err != nil || d < 3*time.Second {
+			errs = append(errs, fmt.Errorf("SHUTDOWN_TIMEOUT must be a duration of at least 3s, got %q", v))
 		} else {
 			cfg.ShutdownTimeout = d
 		}
@@ -157,6 +178,24 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 			continue
 		}
 		cfg.CORSOrigins = append(cfg.CORSOrigins, strings.TrimRight(o, "/"))
+	}
+
+	if v := get("RUN_MODE"); v != "" {
+		switch m := RunMode(strings.ToLower(v)); m {
+		case RunAll, RunAPI, RunWorker:
+			cfg.RunMode = m
+		default:
+			errs = append(errs, fmt.Errorf("RUN_MODE must be one of all|api|worker, got %q", v))
+		}
+	}
+
+	if v := get("JOBS_MAX_WORKERS"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 200 {
+			errs = append(errs, fmt.Errorf("JOBS_MAX_WORKERS must be an integer in 1..200, got %q", v))
+		} else {
+			cfg.JobsMaxWorkers = n
+		}
 	}
 
 	cfg.Firebase = Firebase{

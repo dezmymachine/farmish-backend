@@ -65,6 +65,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
     api/openapi.yaml             # source of truth for the HTTP contract (+ oapi-codegen.yaml; redocly.yaml at root)
     cmd/migrate/main.go          # embedded golang-migrate runner (ADR-0005)
     cmd/admin/main.go            # operator CLI: grant-admin / revoke-admin
+    (jobs: internal/jobs, River schema in migrations/000003_river_queue)
     migrations/                  # NNNNNN_name.{up,down}.sql, embedded via embed.FS
     db/queries/*.sql  sqlc.yaml  # sqlc input → internal/db (generated)
     internal/
@@ -165,7 +166,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
   - A demo `NoopJob` enqueued inside a DB tx.
   - Optional River UI behind an admin guard.
 - **Done when:** a job enqueued in a rolled-back tx never runs and one in a committed tx runs exactly once, and a periodic job fires in tests.
-- [ ] Phase 5
+- [x] Phase 5
 
 ### Phase 6: Rate limiting & abuse controls
 - **Depends on:** 2, 4
@@ -420,7 +421,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 - [ ] **F9 Launch:** SEO/meta, performance pass, accessibility pass, production deploy, legacy app retirement plan.
 
 ## 7. Environment variables (backend)
-`APP_ENV`, `PORT`, `LOG_LEVEL`, `SHUTDOWN_TIMEOUT`, `DATABASE_URL`, `DB_MAX_CONNS`, `DB_STATEMENT_TIMEOUT`, `CORS_ORIGINS`, `FIREBASE_PROJECT_ID`, `FIREBASE_CREDENTIALS_JSON`, `FIREBASE_AUTH_EMULATOR_HOST` (dev/test only, refused in staging/production), `TURNSTILE_SECRET`, `MNOTIFY_API_KEY`, `MNOTIFY_SENDER` (Phase 16), `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `DATA_ENCRYPTION_KEY`, `ESCROW_AUTO_COMPLETE_DAYS`, `SELLER_ACCEPT_TIMEOUT_HOURS`, `PAYOUT_MIN_PESEWAS`.
+`APP_ENV`, `PORT`, `LOG_LEVEL`, `SHUTDOWN_TIMEOUT` (total SIGTERM-to-exit budget), `RUN_MODE` (`all|api|worker`), `JOBS_MAX_WORKERS`, `DATABASE_URL`, `DB_MAX_CONNS`, `DB_STATEMENT_TIMEOUT`, `CORS_ORIGINS`, `FIREBASE_PROJECT_ID`, `FIREBASE_CREDENTIALS_JSON`, `FIREBASE_AUTH_EMULATOR_HOST` (dev/test only, refused in staging/production), `TURNSTILE_SECRET`, `MNOTIFY_API_KEY`, `MNOTIFY_SENDER` (Phase 16), `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `DATA_ENCRYPTION_KEY`, `ESCROW_AUTO_COMPLETE_DAYS`, `SELLER_ACCEPT_TIMEOUT_HOURS`, `PAYOUT_MIN_PESEWAS`.
 
 ## 8. Decisions log
 | Date | Decision | ADR |
@@ -434,6 +435,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-26 | Firebase phone sign-in replaces the custom mNotify OTP flow; Phase 7 becomes phone hardening + step-up re-auth; mNotify kept for transactional SMS only (Phase 16); Turnstile stays in Phase 6 | ADR-0007 |
 | 2026-09-26 | Phase 4: spec-driven auth (`bearerAuth` / `x-farmish-role`) in `internal/http/middleware`; `users.role` authoritative, claim mirrors it; no per-request revocation check; `custom`/`anonymous` providers rejected; `email_verified` column; credentials inline or path; emulator refused when deployed | ADR-0008 |
 | 2026-09-26 | Local/test Postgres bumped 16 → 18 to match Neon (18.6); new `pgdata18` volume | ADR-0009 |
+| 2026-09-26 | Phase 5: River schema generated into golang-migrate (000003) with a version guard test; 10 attempts / 1m timeout defaults; `RUN_MODE` all/api/worker (worker = probes only); `SHUTDOWN_TIMEOUT` is the total budget (9s) with concurrent HTTP drain + job stop; River UI deferred | ADR-0010 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
@@ -443,6 +445,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-25 | 2 | Phase 2 commit | `make ci` green. Migrations up→down→up clean (test + Makefile); `/readyz` 200 → 503 (DB stopped) → 200 on the running API; sqlc `ListExtensions` compiled and tested; per-test DB helper. Smoke test caught a pool-close hang on SIGTERM with the DB unreachable, now fixed. See ADR-0005 |
 | 2026-09-26 | 3 | Phase 3 commit | `make ci` green. `/healthz` + `/readyz` served via the generated strict interface; responses validated against the spec in tests; Redocly lint passes; the validator returns 400 `validation_failed` with per-field details (fixture spec); drift check fails on spec edits and on hand-edits of generated code. See ADR-0006 |
 | 2026-09-26 | 4 | Phase 4 commit | `make ci` green (Postgres + Auth emulator). `/v1/me` with emulator email and phone tokens → 200 with `signupMethod` email/phone; missing/garbage/expired/other-project/tampered/forged (real RS256 signature check) tokens → identical 401; non-admin 403 → admin 200 after `grant-admin` (DB + claim); concurrent first sign-ins create one row; PATCH validation. See ADR-0008 |
+| 2026-09-26 | 5 | Phase 5 commit | `make ci` green. Rolled-back tx: job (and business row) never exists or runs; committed tx: runs exactly once; periodic job fires on start and on interval; retry, unique, insert-only (api mode) and soft/hard stop tested; all three `RUN_MODE`s run and exit cleanly. Smoke test caught a SIGKILL on shutdown with the DB unreachable, fixed with one concurrent shutdown budget. See ADR-0010 |
 
 ## 10. Backlog (not scheduled)
 - Restore GitHub Actions (a workflow that runs `make ci`) once account billing is fixed; retire ADR-0004
@@ -451,6 +454,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 - Hyperdrive pooling after Neon connection pressure is observed
 - Temporal behind the `Workflow` interface
 - Redis/Upstash rate-limit backend under abuse
+- River UI for admins (needs a browser session/cookie auth flow; `RequireAuth` + `RequireAdmin` already exist)
 - Seller reserve/holdback against chargebacks
 
 ## 11. Open items / risks
