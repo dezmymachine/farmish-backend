@@ -221,6 +221,7 @@ func run() error {
 			// process (api-only run mode) the views simply queue up.
 			Views:         listings.NewViewCounter(jobClient),
 			ViewerHash:    handlers.NewViewerHasher(cfg.DataEncryptionKey),
+			Payments:      paymentsSvc,
 			Turnstile:     turnstile.New(cfg.TurnstileSecret),
 			IPLimiter:     ipLimiter,
 			SharedLimiter: shared,
