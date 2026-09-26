@@ -26,6 +26,9 @@ const (
 	CodeTurnstileFailed       = "turnstile_failed"
 	CodeInternal              = "internal_error"
 	CodeUnavailable           = "unavailable"
+	// CodePaymentProvider is a 502: the payment provider could not be reached
+	// or refused. No money moved, and the buyer can retry.
+	CodePaymentProvider = "payment_provider_error"
 )
 
 // New returns an envelope with code and message. Strict handlers use it to

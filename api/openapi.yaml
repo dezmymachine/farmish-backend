@@ -525,6 +525,84 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /v1/webhooks/paystack:
+    post:
+      tags: [payments]
+      operationId: paystackWebhook
+      summary: Paystack webhook
+      description: |
+        Where Paystack posts payment events. The `x-paystack-signature`
+        header must be a valid HMAC-SHA512 of the raw body under the secret
+        key; a missing or wrong signature is a 401 and the body is never
+        parsed or stored.
+
+        Delivery is at-least-once, so every event is keyed
+        `<event>:<data.id>` and a repeat is answered 200 without a second
+        effect. An event Farmish does not handle is recorded and ignored. A
+        rejected event (the amount or currency is not what we expected) is
+        recorded and answered 200 too, because retrying it will not change
+        the answer. Only an internal failure answers 5xx, so Paystack retries.
+      security: []
+      requestBody:
+        required: true
+        description: |
+          Paystack's event envelope. Deliberately loose: the fields that
+          matter are verified in the service, and modelling the whole payload
+          here would tie the contract to a provider's internals.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: |
+            Accepted. The event was processed, was a duplicate, or was ignored.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /v1/payments/{reference}:
+    get:
+      tags: [payments]
+      operationId: getPaymentStatus
+      summary: Get a payment's status
+      description: |
+        The caller's own payment. A reference that does not exist and one that
+        belongs to somebody else both answer 404, so this cannot be used to
+        discover that a reference is real.
+
+        If the payment is still pending and old enough that the buyer should
+        have finished, this asks Paystack whether the money arrived and
+        settles it if so, so a lost webhook does not leave a buyer stuck.
+      parameters:
+        - name: reference
+          in: path
+          required: true
+          description: The payment reference, e.g. `FMS-abc...`.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+      responses:
+        "200":
+          description: The payment.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "502":
+          $ref: "#/components/responses/PaymentProviderError"
   /v1/media/upload-url:
     post:
       tags: [media]
@@ -1051,6 +1129,14 @@ components:
           $ref: "#/components/headers/X-RateLimit-Remaining"
         X-RateLimit-Reset:
           $ref: "#/components/headers/X-RateLimit-Reset"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    PaymentProviderError:
+      description: |
+        The payment provider could not be reached or refused the request. No
+        money moved: the buyer can retry.
       content:
         application/json:
           schema:
@@ -2060,6 +2146,36 @@ components:
             $ref: "#/components/schemas/SellerListingSummary"
         meta:
           $ref: "#/components/schemas/PageMeta"
+    PaymentStatus:
+      type: object
+      description: |
+        A payment as the buyer sees it. Every amount is a `Money`, so the
+        client formats for display and never does arithmetic.
+      required: [reference, status, charge, processingFee, base]
+      properties:
+        reference:
+          type: string
+          description: Farmish's reference for this payment.
+        status:
+          type: string
+          enum: [pending, success, failed, abandoned]
+        base:
+          $ref: "#/components/schemas/Money"
+          description: What Farmish nets, before the processing fee.
+        processingFee:
+          $ref: "#/components/schemas/Money"
+          description: |
+            The fee grossed onto the buyer (DOMAIN §2.2). Non-refundable.
+        charge:
+          $ref: "#/components/schemas/Money"
+          description: What the buyer was charged, which is the base plus the fee.
+        paidAt:
+          type: string
+          format: date-time
+          description: When the money arrived. Absent until it has.
+        failureReason:
+          type: string
+          description: Why the payment did not succeed, when it did not.
     Money:
       type: object
       description: An amount of money in the smallest currency unit (pesewas).

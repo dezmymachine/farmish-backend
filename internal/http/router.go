@@ -39,6 +39,9 @@ type Deps struct {
 	// ViewerHash turns a caller's address into a one-way id for view
 	// counting; nil turns counting off.
 	ViewerHash func(ctx context.Context, ip string) uuid.UUID
+	// Payments settles provider webhooks and serves payment status. Nil means
+	// Paystack is not configured and the webhook fails closed.
+	Payments handlers.PaymentStore
 	// IPLimiter backs the per-IP flood limit. It stays in-process on purpose:
 	// free, instant, and a flood can't burn the metered Redis quota.
 	// Defaults to ratelimit.Memory.
@@ -116,6 +119,8 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 	//   - The per-IP limit runs before any expensive work (probes exempt).
 	//   - Auth resolves the user for per-user limits.
 	//   - Turnstile runs after limits, so floods don't reach Cloudflare.
+	//   - The Paystack signature check runs before validation, because it is
+	//     only meaningful over the raw bytes the validator would re-read.
 	//   - Validation runs last, so anonymous callers learn nothing about request shapes.
 	r.Use(
 		middleware.CORS(cfg.CORSOrigins),
@@ -123,13 +128,14 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 		authenticate,
 		limitOperations,
 		requireTurnstile,
+		middleware.PaystackSignature(cfg.Paystack.SecretKey),
 		validate,
 	)
 
 	server := handlers.Server{
 		DB: deps.DB, Users: deps.Users, Sellers: deps.Sellers, Catalog: deps.Catalog,
 		Media: deps.Media, Listings: deps.Listings, PublicListings: deps.PublicListings,
-		Views: deps.Views, ViewerHash: deps.ViewerHash, Log: log,
+		Views: deps.Views, ViewerHash: deps.ViewerHash, Payments: deps.Payments, Log: log,
 	}
 	api.RegisterHandlersWithOptions(r, strictServer(server), api.GinServerOptions{
 		ErrorHandler: func(c *gin.Context, err error, _ int) { requestError(c, err) },

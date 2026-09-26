@@ -62,7 +62,18 @@ func testRouterWith(t *testing.T, db handlers.Pinger) *gin.Engine {
 
 func newTestRouter(t *testing.T, deps Deps) *gin.Engine {
 	t.Helper()
-	cfg := config.Config{Env: config.EnvTest, CORSOrigins: []string{"https://farmish.gh"}}
+	return newTestRouterWithConfig(t, deps,
+		config.Config{Env: config.EnvTest, CORSOrigins: []string{"https://farmish.gh"}})
+}
+
+// newTestRouterWithConfig is newTestRouter with a custom config, for the tests
+// that need a setting the default test config leaves empty (a Paystack secret,
+// for the webhook signature).
+func newTestRouterWithConfig(t *testing.T, deps Deps, cfg config.Config) *gin.Engine {
+	t.Helper()
+	if cfg.CORSOrigins == nil {
+		cfg.CORSOrigins = []string{"https://farmish.gh"}
+	}
 	if deps.Turnstile == nil {
 		deps.Turnstile = noTurnstile{}
 	}

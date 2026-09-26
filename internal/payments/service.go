@@ -236,19 +236,19 @@ type WebhookEvent struct {
 func (s *Service) HandleWebhook(ctx context.Context, raw []byte) error {
 	var event WebhookEvent
 	if err := json.Unmarshal(raw, &event); err != nil {
-		return fmt.Errorf("parse webhook body: %w", err)
+		return fmt.Errorf("%w: parse body: %w", ErrMalformedEvent, err)
 	}
 	if event.Event == "" {
-		return errors.New("webhook body has no event")
+		return fmt.Errorf("%w: no event field", ErrMalformedEvent)
 	}
 	var identity struct {
 		ID json.RawMessage `json:"id"`
 	}
 	if err := json.Unmarshal(event.Data, &identity); err != nil {
-		return fmt.Errorf("parse webhook data: %w", err)
+		return fmt.Errorf("%w: parse data: %w", ErrMalformedEvent, err)
 	}
 	if len(identity.ID) == 0 || string(identity.ID) == "null" {
-		return errors.New("webhook data has no id")
+		return fmt.Errorf("%w: data has no id", ErrMalformedEvent)
 	}
 	// The key is the provider's own id, so the same event delivered twice (or
 	// replayed by Paystack, or synthesised by the verify fallback) collides.
@@ -580,3 +580,8 @@ func (s *Service) runPurposeHandler(ctx context.Context, tx pgx.Tx, payment Paym
 	}
 	return nil
 }
+
+// AttachJobClient gives the service the River client it needs to enqueue
+// payments.succeeded. cmd/api calls it once, while building the job registry,
+// because the client does not exist until the registry does.
+func (s *Service) AttachJobClient(client *jobs.Client) { s.jobs = client }

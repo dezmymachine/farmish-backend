@@ -41,6 +41,9 @@ type Server struct {
 	// separate field so the seller write surface and the public browse
 	// surface stay separate contracts.
 	PublicListings PublicListingStore
+	// Payments settles provider webhooks and serves payment status. It is nil
+	// when Paystack is not configured, and the two operations then answer 503.
+	Payments PaymentStore
 	// Views enqueues the listing view count. Nil disables counting, which
 	// keeps the read path working without a job queue.
 	Views listings.ViewCounter

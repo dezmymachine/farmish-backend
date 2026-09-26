@@ -54,6 +54,11 @@ var ErrNotFound = errors.New("payment not found")
 // ErrInvalidInput is a validation failure the caller can fix.
 var ErrInvalidInput = errors.New("invalid payment input")
 
+// ErrMalformedEvent is a provider event body the service cannot read. Retrying
+// it will not help, so the endpoint answers 400 rather than asking for a
+// retry.
+var ErrMalformedEvent = errors.New("malformed provider event")
+
 // ErrAmountOutOfRange is a gross-up that could not be represented.
 var ErrAmountOutOfRange = errors.New("payment amount out of range")
 

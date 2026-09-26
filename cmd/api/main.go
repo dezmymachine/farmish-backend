@@ -25,6 +25,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
 	"github.com/dezmymachine/farmish-backend/internal/listings"
 	"github.com/dezmymachine/farmish-backend/internal/media"
+	"github.com/dezmymachine/farmish-backend/internal/payments"
 	"github.com/dezmymachine/farmish-backend/internal/ratelimit"
 	"github.com/dezmymachine/farmish-backend/internal/redisx"
 	"github.com/dezmymachine/farmish-backend/internal/sellers"
@@ -81,7 +82,9 @@ func sharedLimiter(ctx context.Context, cfg config.Config, log *slog.Logger) (ra
 // registry lists every job this service knows. Each phase registers its
 // workers and periodic jobs here. The orphan sweep is registered only when
 // media storage is configured (it is required when deployed).
-func registry(log *slog.Logger, mediaSvc *media.Service, listingsSvc *listings.Service) *jobs.Registry {
+func registry(log *slog.Logger, mediaSvc *media.Service, listingsSvc *listings.Service,
+	paymentsSvc *payments.Service,
+) *jobs.Registry {
 	r := jobs.NewRegistry()
 	jobs.Register(r, &jobs.NoopWorker{Log: log})
 	if mediaSvc != nil {
@@ -89,6 +92,7 @@ func registry(log *slog.Logger, mediaSvc *media.Service, listingsSvc *listings.S
 	}
 	listings.RegisterExpireDue(r, listingsSvc, log)
 	listings.RegisterCountView(r, listingsSvc)
+	payments.RegisterSucceeded(r, paymentsSvc, log)
 	return r
 }
 
@@ -158,14 +162,24 @@ func run() error {
 	usersSvc := users.New(pool)
 	sellersSvc := sellers.New(pool, crypter, firebase)
 	listingsSvc := listings.New(pool, catalog.New(pool), mediaSvc, sellersSvc)
+	// Phase 13a registers no purpose handler: 'promotion' arrives in Phase 14
+	// and 'checkout' in Phase 15b. Until then a settled payment has no
+	// follow-up work, and payments.succeeded logs that rather than failing.
+	paymentsSvc := payments.New(pool, payments.NewPaystackClient(cfg.Paystack.SecretKey, cfg.Paystack.BaseURL),
+		log, cfg.Paystack.FeeBps, cfg.Paystack.CallbackURL)
 
-	jobClient, err := jobs.NewClient(pool, registry(log, mediaSvc, listingsSvc), log, jobs.Options{
+	jobClient, err := jobs.NewClient(pool, registry(log, mediaSvc, listingsSvc, paymentsSvc), log, jobs.Options{
 		Work:       cfg.RunMode.WorksJobs(),
 		MaxWorkers: cfg.JobsMaxWorkers,
 	})
 	if err != nil {
 		return err
 	}
+	// The payments service enqueues payments.succeeded inside the transaction
+	// that settles a payment, which needs the client that now exists. Done
+	// before the server starts, so no request can arrive in between.
+	paymentsSvc.AttachJobClient(jobClient)
+
 	if cfg.RunMode.WorksJobs() {
 		// Not the signal context: cancelling Start's context would abort running
 		// jobs immediately. Shutdown goes through jobs.Stop (soft, then hard).
