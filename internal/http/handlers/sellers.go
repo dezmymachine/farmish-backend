@@ -33,7 +33,7 @@ type SellerStore interface {
 	GetMine(ctx context.Context, userID uuid.UUID) (sellers.Profile, error)
 	UpsertMine(ctx context.Context, userID uuid.UUID, in sellers.ProfileInput) (sellers.Profile, error)
 	GetPublic(ctx context.Context, userID uuid.UUID) (sellers.PublicProfile, error)
-	ListByStatus(ctx context.Context, status string, limit, offset int) ([]sellers.AdminProfile, int64, error)
+	ListByStatus(ctx context.Context, status string, limit, offset int32) ([]sellers.AdminProfile, int64, error)
 	Verify(ctx context.Context, adminID, targetID uuid.UUID, decision, reason string) (sellers.AdminProfile, error)
 }
 
@@ -87,7 +87,7 @@ func (s Server) UpdateMySellerProfile(ctx context.Context, req api.UpdateMySelle
 // GetPublicSeller returns the safe projection of a seller. It is public and
 // never contains contact, identity or account fields.
 func (s Server) GetPublicSeller(ctx context.Context, req api.GetPublicSellerRequestObject) (api.GetPublicSellerResponseObject, error) {
-	p, err := s.Sellers.GetPublic(ctx, uuid.UUID(req.UserId))
+	p, err := s.Sellers.GetPublic(ctx, req.UserId)
 	switch {
 	case errors.Is(err, sellers.ErrNotFound):
 		return api.GetPublicSeller404JSONResponse{
@@ -108,7 +108,7 @@ func (s Server) ListAdminSellers(ctx context.Context, req api.ListAdminSellersRe
 	if req.Params.Limit != nil {
 		limit = *req.Params.Limit
 	}
-	items, total, err := s.Sellers.ListByStatus(ctx, string(req.Params.Status), int(limit), int(page-1)*int(limit))
+	items, total, err := s.Sellers.ListByStatus(ctx, string(req.Params.Status), limit, (page-1)*limit)
 	var verr *validation.Error
 	switch {
 	case errors.As(err, &verr):
@@ -144,7 +144,7 @@ func (s Server) VerifySeller(ctx context.Context, req api.VerifySellerRequestObj
 		reason = *req.Body.Reason
 	}
 	// Unwrap: deciding mirrors the Firebase claim over HTTP.
-	p, err := s.Sellers.Verify(requestContext(ctx), u.ID, uuid.UUID(req.UserId), string(req.Body.Decision), reason)
+	p, err := s.Sellers.Verify(requestContext(ctx), u.ID, req.UserId, string(req.Body.Decision), reason)
 	var verr *validation.Error
 	switch {
 	case errors.As(err, &verr):

@@ -52,7 +52,7 @@ func (f *ginLeakStore) GetPublic(ctx context.Context, id uuid.UUID) (sellers.Pub
 	return sellers.PublicProfile{UserID: id}, nil
 }
 
-func (f *ginLeakStore) ListByStatus(ctx context.Context, _ string, _, _ int) ([]sellers.AdminProfile, int64, error) {
+func (f *ginLeakStore) ListByStatus(ctx context.Context, _ string, _, _ int32) ([]sellers.AdminProfile, int64, error) {
 	f.check(ctx)
 	return nil, 0, nil
 }

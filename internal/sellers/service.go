@@ -154,9 +154,9 @@ func (s *Service) GetPublic(ctx context.Context, userID uuid.UUID) (PublicProfil
 	}, nil
 }
 
-// ListByStatus returns the admin review queue for one status, newest
-// submissions last (oldest first), with the total for pagination.
-func (s *Service) ListByStatus(ctx context.Context, status string, limit, offset int) ([]AdminProfile, int64, error) {
+// ListByStatus returns the admin review queue for one status, oldest
+// submission first, with the total for pagination.
+func (s *Service) ListByStatus(ctx context.Context, status string, limit, offset int32) ([]AdminProfile, int64, error) {
 	var verr validation.Error
 	switch status {
 	case StatusUnverified, StatusPending, StatusVerified, StatusRejected:
@@ -178,7 +178,7 @@ func (s *Service) ListByStatus(ctx context.Context, status string, limit, offset
 		return nil, 0, fmt.Errorf("count seller profiles: %w", err)
 	}
 	rows, err := q.ListSellerProfilesByStatus(ctx, db.ListSellerProfilesByStatusParams{
-		VerificationStatus: status, Limit: int32(limit), Offset: int32(offset),
+		VerificationStatus: status, Limit: limit, Offset: offset,
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("list seller profiles: %w", err)
