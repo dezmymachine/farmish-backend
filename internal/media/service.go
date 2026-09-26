@@ -87,6 +87,15 @@ func (s *Service) CreateUpload(ctx context.Context, ownerID uuid.UUID, purpose, 
 	return up, nil
 }
 
+// PublicURL is where an attached object is served from. It is the way the
+// listing view turns a media key into an image URL.
+func (s *Service) PublicURL(key string) string {
+	if p, ok := s.storage.(publicURLer); ok {
+		return p.PublicURL(key)
+	}
+	return ""
+}
+
 // Attach marks a pending object as attached, after checking ownership and
 // that the bytes really are in storage with the declared size and type.
 // Phase 11 calls it inside its own transaction; Head is a fast read against

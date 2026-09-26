@@ -81,13 +81,43 @@ func (s *Service) Detail(ctx context.Context, slug string) (Detail, error) {
 	if err != nil {
 		return Detail{}, fmt.Errorf("get category: %w", err)
 	}
-	c := fromRow(row)
+	return s.detailFor(ctx, q, fromRow(row))
+}
+
+// Resolved returns one category by id, with its group (inherited for a
+// child) and the effective attributes (parent's, overridden by the
+// category's own). Phase 11 validates listings against this.
+func (s *Service) Resolved(ctx context.Context, id uuid.UUID) (Detail, error) {
+	q := db.New(s.pool)
+	row, err := q.GetCategoryByID(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Detail{}, fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
+	if err != nil {
+		return Detail{}, fmt.Errorf("get category: %w", err)
+	}
+	return s.detailFor(ctx, q, fromRow(row))
+}
+
+// IsLeaf reports whether a listing may use this category: a child, or a
+// parent with no children (e.g. irrigation).
+func (s *Service) IsLeaf(ctx context.Context, id uuid.UUID) (bool, error) {
+	n, err := db.New(s.pool).CountCategoryChildren(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		return false, fmt.Errorf("count category children: %w", err)
+	}
+	return n == 0, nil
+}
+
+// detailFor assembles the view: holder carries the group (the category
+// itself for parents, its parent for children).
+func (s *Service) detailFor(ctx context.Context, q *db.Queries, c Category) (Detail, error) {
 	holder := c
 	var ref *ParentRef
 	if c.ParentID != nil {
 		prow, err := q.GetCategoryByID(ctx, *c.ParentID)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return Detail{}, fmt.Errorf("parent of %s: %w", slug, ErrNotFound)
+			return Detail{}, fmt.Errorf("parent of %s: %w", c.Slug, ErrNotFound)
 		}
 		if err != nil {
 			return Detail{}, fmt.Errorf("get parent category: %w", err)
@@ -102,7 +132,7 @@ func (s *Service) Detail(ctx context.Context, slug string) (Detail, error) {
 	}
 	info, ok := Groups[group]
 	if !ok {
-		return Detail{}, fmt.Errorf("category %s has unknown group %q", slug, group)
+		return Detail{}, fmt.Errorf("category %s has unknown group %q", c.Slug, group)
 	}
 	// Expose the resolved group on the view: children inherit the parent's.
 	c.Group = &group
