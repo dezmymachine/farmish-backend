@@ -239,7 +239,7 @@ func (s *Service) Search(ctx context.Context, in SearchInput) (SearchResult, err
 func (s *Service) PublicDetail(ctx context.Context, slug string) (PublicDetail, error) {
 	q := db.New(s.pool)
 	now := s.Now()
-	row, err := q.GetPublicListingBySlug(ctx, slug)
+	row, err := q.GetPublicListingBySlug(ctx, db.GetPublicListingBySlugParams{Slug: slug, StartsAt: now})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return PublicDetail{}, fmt.Errorf("%w: %s", ErrNotFound, slug)
 	}
@@ -261,6 +261,9 @@ func (s *Service) PublicDetail(ctx context.Context, slug string) (PublicDetail, 
 			Category:    CategoryRef{Slug: row.CategorySlug, Name: row.CategoryName},
 			Seller:      SellerRef{Name: row.BusinessName, Verified: row.SellerVerified},
 			PublishedAt: derefTime(row.PublishedAt),
+			// A running promotion shows here too, so the page and the search
+			// row never disagree.
+			Promo: promoRef(row.PromoTier),
 		},
 		Description:          row.Description,
 		QuantityAvailable:    row.QuantityAvailable,
@@ -388,6 +391,15 @@ func (s *Service) attributeLabels(ctx context.Context, categoryID uuid.UUID, val
 		}
 	}
 	return labels, nil
+}
+
+// promoRef turns the query's tier into an optional promotion, so a listing
+// with no running promotion reports none.
+func promoRef(tier string) *PromoRef {
+	if tier == "" {
+		return nil
+	}
+	return &PromoRef{Tier: tier}
 }
 
 // optURL keeps a cover image only when storage can actually serve it.

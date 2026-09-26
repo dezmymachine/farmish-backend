@@ -70,17 +70,28 @@ WHERE l.status = 'active' AND l.expires_at > sqlc.arg('now')
   AND (sqlc.narg('item_state')::text IS NULL OR l.item_state = sqlc.narg('item_state'));
 
 -- name: GetPublicListingBySlug :one
--- One active, unexpired listing with its category and the seller's safe
--- profile fields. Never selects contact or identity data.
+-- One listing with its category, its active promotion and the seller's safe
+-- profile fields. Never selects contact or identity data. The caller decides
+-- whether the listing is browsable.
+WITH active_promo AS (
+  SELECT DISTINCT ON (listing_id) listing_id, tier
+  FROM listing_promotions
+  WHERE starts_at <= $2 AND ends_at > $2
+  ORDER BY listing_id, tier_rank DESC
+)
 SELECT l.*, c.slug AS category_slug, c.name AS category_name,
        c.listing_group AS category_group,
        sp.business_name, sp.region AS seller_region, sp.district AS seller_district,
        sp.bio AS seller_bio, (sp.verification_status = 'verified') AS seller_verified,
-       u.created_at AS seller_created_at
+       u.created_at AS seller_created_at,
+       -- A left join yields NULL when nothing is running, so the tier is
+       -- coalesced to an empty string: the page reports "not promoted".
+       coalesce(p.tier, '') AS promo_tier
 FROM listings l
 JOIN categories c ON c.id = l.category_id
 JOIN seller_profiles sp ON sp.user_id = l.seller_id
 JOIN users u ON u.id = l.seller_id
+LEFT JOIN active_promo p ON p.listing_id = l.id
 WHERE l.slug = $1;
 
 -- name: IncrementListingViewCount :exec

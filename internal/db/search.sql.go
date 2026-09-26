@@ -103,17 +103,32 @@ func (q *Queries) GetListingContactDetails(ctx context.Context, id uuid.UUID) (G
 }
 
 const getPublicListingBySlug = `-- name: GetPublicListingBySlug :one
+WITH active_promo AS (
+  SELECT DISTINCT ON (listing_id) listing_id, tier
+  FROM listing_promotions
+  WHERE starts_at <= $2 AND ends_at > $2
+  ORDER BY listing_id, tier_rank DESC
+)
 SELECT l.id, l.seller_id, l.category_id, l.title, l.slug, l.description, l.price_pesewas, l.unit, l.quantity_available, l.min_order_qty, l.is_negotiable, l.item_state, l.status, l.region, l.district, l.area, l.offers_pickup, l.offers_seller_delivery, l.seller_delivery_fee_pesewas, l.published_at, l.expires_at, l.view_count, l.favorite_count, l.contact_count, l.created_at, l.updated_at, l.search_vector, c.slug AS category_slug, c.name AS category_name,
        c.listing_group AS category_group,
        sp.business_name, sp.region AS seller_region, sp.district AS seller_district,
        sp.bio AS seller_bio, (sp.verification_status = 'verified') AS seller_verified,
-       u.created_at AS seller_created_at
+       u.created_at AS seller_created_at,
+       -- A left join yields NULL when nothing is running, so the tier is
+       -- coalesced to an empty string: the page reports "not promoted".
+       coalesce(p.tier, '') AS promo_tier
 FROM listings l
 JOIN categories c ON c.id = l.category_id
 JOIN seller_profiles sp ON sp.user_id = l.seller_id
 JOIN users u ON u.id = l.seller_id
+LEFT JOIN active_promo p ON p.listing_id = l.id
 WHERE l.slug = $1
 `
+
+type GetPublicListingBySlugParams struct {
+	Slug     string
+	StartsAt time.Time
+}
 
 type GetPublicListingBySlugRow struct {
 	ID                       uuid.UUID
@@ -152,12 +167,14 @@ type GetPublicListingBySlugRow struct {
 	SellerBio                *string
 	SellerVerified           bool
 	SellerCreatedAt          time.Time
+	PromoTier                string
 }
 
-// One active, unexpired listing with its category and the seller's safe
-// profile fields. Never selects contact or identity data.
-func (q *Queries) GetPublicListingBySlug(ctx context.Context, slug string) (GetPublicListingBySlugRow, error) {
-	row := q.db.QueryRow(ctx, getPublicListingBySlug, slug)
+// One listing with its category, its active promotion and the seller's safe
+// profile fields. Never selects contact or identity data. The caller decides
+// whether the listing is browsable.
+func (q *Queries) GetPublicListingBySlug(ctx context.Context, arg GetPublicListingBySlugParams) (GetPublicListingBySlugRow, error) {
+	row := q.db.QueryRow(ctx, getPublicListingBySlug, arg.Slug, arg.StartsAt)
 	var i GetPublicListingBySlugRow
 	err := row.Scan(
 		&i.ID,
@@ -196,6 +213,7 @@ func (q *Queries) GetPublicListingBySlug(ctx context.Context, slug string) (GetP
 		&i.SellerBio,
 		&i.SellerVerified,
 		&i.SellerCreatedAt,
+		&i.PromoTier,
 	)
 	return i, err
 }

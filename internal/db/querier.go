@@ -41,9 +41,10 @@ type Querier interface {
 	// when the matching show_* flag is true.
 	GetListingContactDetails(ctx context.Context, id uuid.UUID) (GetListingContactDetailsRow, error)
 	GetMediaObject(ctx context.Context, id uuid.UUID) (MediaObject, error)
-	// One active, unexpired listing with its category and the seller's safe
-	// profile fields. Never selects contact or identity data.
-	GetPublicListingBySlug(ctx context.Context, slug string) (GetPublicListingBySlugRow, error)
+	// One listing with its category, its active promotion and the seller's safe
+	// profile fields. Never selects contact or identity data. The caller decides
+	// whether the listing is browsable.
+	GetPublicListingBySlug(ctx context.Context, arg GetPublicListingBySlugParams) (GetPublicListingBySlugRow, error)
 	// Narrow projection for the public endpoint: never selects id_number_enc.
 	GetPublicSeller(ctx context.Context, userID uuid.UUID) (GetPublicSellerRow, error)
 	GetSellerProfile(ctx context.Context, userID uuid.UUID) (SellerProfile, error)

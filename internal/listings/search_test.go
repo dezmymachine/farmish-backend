@@ -604,6 +604,58 @@ func TestPublicDetail(t *testing.T) {
 	}
 }
 
+// TestPublicDetail_PromotionMatchesSearch guards the detail page against
+// disagreeing with the search row: both read the same running promotion.
+func TestPublicDetail_PromotionMatchesSearch(t *testing.T) {
+	f := newSearchFixture(t)
+	ctx := context.Background()
+	view := f.active(t, f.seller, func(i *listings.Input) { i.Title = "Promoted Maize" })
+	now := time.Now()
+
+	promo := func(t *testing.T, tier string, rank int, from, to time.Time) {
+		t.Helper()
+		if _, err := f.pool.Exec(ctx, `INSERT INTO listing_promotions
+			(listing_id, seller_id, tier, tier_rank, starts_at, ends_at)
+			VALUES ($1, $2, $3, $4, $5, $6)`, view.ID, view.SellerID, tier, rank, from, to); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Unpromoted: the page reports no promotion, like the search row.
+	d, err := f.svc.PublicDetail(ctx, view.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Promo != nil {
+		t.Fatalf("unpromoted page = %+v, want none", d.Promo)
+	}
+
+	promo(t, "vip", 2, now.Add(-time.Hour), now.Add(time.Hour))
+	promo(t, "enterprise", 4, now.Add(-48*time.Hour), now.Add(-24*time.Hour))
+	d, err = f.svc.PublicDetail(ctx, view.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Promo == nil || d.Promo.Tier != "vip" {
+		t.Errorf("promoted page = %+v, want the running vip tier", d.Promo)
+	}
+
+	res, err := f.svc.Search(ctx, listings.SearchInput{Limit: 50, Page: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range res.Items {
+		if item.ID != view.ID {
+			continue
+		}
+		if item.Promo == nil || item.Promo.Tier != d.Promo.Tier {
+			t.Errorf("search row promo = %+v, page promo = %+v, want the same", item.Promo, d.Promo)
+		}
+		return
+	}
+	t.Error("the listing vanished from search")
+}
+
 func TestContact(t *testing.T) {
 	f := newSearchFixture(t)
 	ctx := context.Background()
