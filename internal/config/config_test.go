@@ -259,6 +259,55 @@ func TestConfig_DataEncryptionKey(t *testing.T) {
 	}
 }
 
+func TestConfig_R2(t *testing.T) {
+	// Unset locally: media is optional, so the API still boots.
+	if cfg, err := FromLookup(lookup(base(nil))); err != nil || cfg.R2.Configured() {
+		t.Fatalf("default: %+v, %v", cfg.R2, err)
+	}
+	// Local S3 stand-in.
+	cfg, err := FromLookup(lookup(base(map[string]string{
+		"R2_ENDPOINT": "http://127.0.0.1:9000/", "R2_BUCKET": "farmish-dev",
+		"R2_ACCESS_KEY_ID": "farmish", "R2_SECRET_ACCESS_KEY": "farmish-secret",
+		"R2_PUBLIC_BASE_URL": "http://127.0.0.1:9000/farmish-dev/",
+	})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.R2.Endpoint != "http://127.0.0.1:9000" || cfg.R2.PublicBaseURL != "http://127.0.0.1:9000/farmish-dev" ||
+		!cfg.R2.Configured() {
+		t.Errorf("local S3: %+v", cfg.R2)
+	}
+	// Required when deployed.
+	prod := map[string]string{"APP_ENV": "production", "FIREBASE_CREDENTIALS_JSON": saJSON, "TURNSTILE_SECRET": "0x4real",
+		"DATA_ENCRYPTION_KEY": "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="}
+	_, err = FromLookup(lookup(base(prod)))
+	if err == nil || !strings.Contains(err.Error(), "R2_BUCKET is required") {
+		t.Errorf("missing R2 in production: err = %v", err)
+	}
+	if err != nil && strings.Contains(err.Error(), "farmish-secret") {
+		t.Error("error leaks the R2 secret")
+	}
+	// R2_ENDPOINT is for local S3 only.
+	cfg, err = FromLookup(lookup(base(map[string]string{
+		"APP_ENV": "production", "FIREBASE_CREDENTIALS_JSON": saJSON, "TURNSTILE_SECRET": "0x4real",
+		"DATA_ENCRYPTION_KEY": "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
+		"R2_ENDPOINT":         "http://127.0.0.1:9000",
+	})))
+	if err == nil || !strings.Contains(err.Error(), "R2_ENDPOINT must not be set") {
+		t.Errorf("R2_ENDPOINT in production: err = %v", err)
+	}
+	full := prod
+	full["R2_ACCOUNT_ID"] = "acct"
+	full["R2_ACCESS_KEY_ID"] = "ak"
+	full["R2_SECRET_ACCESS_KEY"] = "sk"
+	full["R2_BUCKET"] = "farmish"
+	full["R2_PUBLIC_BASE_URL"] = "https://media.farmish.gh"
+	cfg, err = FromLookup(lookup(base(full)))
+	if err != nil || !cfg.R2.Configured() || cfg.R2.AccountID != "acct" {
+		t.Errorf("full production R2: %+v, %v", cfg.R2, err)
+	}
+}
+
 func TestRedisURL(t *testing.T) {
 	cfg, err := FromLookup(lookup(base(nil)))
 	if err != nil || cfg.RedisURL != "" || cfg.RedisTimeout != 200*time.Millisecond {

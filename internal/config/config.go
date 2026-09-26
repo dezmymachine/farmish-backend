@@ -64,7 +64,24 @@ type Config struct {
 	// DataEncryptionKey is the decoded DATA_ENCRYPTION_KEY (32 bytes) for
 	// AES-256-GCM encryption at rest (ID and account numbers).
 	DataEncryptionKey []byte
+	// R2 configures media storage. Endpoint is empty for real R2 (built
+	// from AccountID) and points at the local S3 stand-in in dev/test.
+	R2 R2
 }
+
+// R2 configures Cloudflare R2 (or any S3-compatible endpoint).
+type R2 struct {
+	AccountID     string
+	AccessKeyID   string
+	SecretKey     string
+	Bucket        string
+	PublicBaseURL string
+	// Endpoint overrides the derived R2 endpoint (local S3 stand-in).
+	Endpoint string
+}
+
+// Configured reports whether media storage is configured.
+func (r R2) Configured() bool { return r.Bucket != "" && r.AccessKeyID != "" }
 
 // DevDataEncryptionKey is the clearly labelled dev-only DATA_ENCRYPTION_KEY
 // shipped in .env.example. Config refuses it in staging and production, the
@@ -298,6 +315,31 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 	deployed := cfg.Env == EnvStaging || cfg.Env == EnvProduction
 	if deployed && keyB64 == DevDataEncryptionKey {
 		errs = append(errs, fmt.Errorf("DATA_ENCRYPTION_KEY is the dev key; not allowed when APP_ENV=%s", cfg.Env))
+	}
+
+	// Media storage: required when deployed (Phase 10), optional locally so
+	// the API still boots without a local S3. Never echo the secret.
+	cfg.R2 = R2{
+		AccountID:     get("R2_ACCOUNT_ID"),
+		AccessKeyID:   get("R2_ACCESS_KEY_ID"),
+		SecretKey:     get("R2_SECRET_ACCESS_KEY"),
+		Bucket:        get("R2_BUCKET"),
+		PublicBaseURL: strings.TrimRight(get("R2_PUBLIC_BASE_URL"), "/"),
+		Endpoint:      strings.TrimRight(get("R2_ENDPOINT"), "/"),
+	}
+	if deployed {
+		for name, value := range map[string]string{
+			"R2_ACCOUNT_ID": cfg.R2.AccountID, "R2_ACCESS_KEY_ID": cfg.R2.AccessKeyID,
+			"R2_SECRET_ACCESS_KEY": cfg.R2.SecretKey, "R2_BUCKET": cfg.R2.Bucket,
+			"R2_PUBLIC_BASE_URL": cfg.R2.PublicBaseURL,
+		} {
+			if value == "" {
+				errs = append(errs, fmt.Errorf("%s is required when APP_ENV=%s", name, cfg.Env))
+			}
+		}
+		if cfg.R2.Endpoint != "" {
+			errs = append(errs, fmt.Errorf("R2_ENDPOINT must not be set when APP_ENV=%s (it is for local S3 only)", cfg.Env))
+		}
 	}
 	if cfg.Firebase.EmulatorHost != "" && deployed {
 		// Emulator mode skips token signature checks: never allow it when deployed.
