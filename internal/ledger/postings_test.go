@@ -12,7 +12,18 @@ import (
 
 func mustPostTemplate(t *testing.T, kind, reference string, entries []ledger.Entry) {
 	t.Helper()
-	postInTx(t, dbtest.Pool(t), kind, reference, entries...)
+	pool := dbtest.Pool(t)
+	buyer := mustUser(t, pool, reference+"-buyer")
+	seller := mustUser(t, pool, reference+"-seller")
+	posted := make([]ledger.Entry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.OrderID != nil {
+			orderID := mustOrder(t, pool, buyer, seller)
+			entry.OrderID = &orderID
+		}
+		posted = append(posted, entry)
+	}
+	postInTx(t, pool, kind, reference, posted...)
 }
 
 func TestPostingTemplates_CheckoutPaidAndEscrowRelease(t *testing.T) {
@@ -38,8 +49,9 @@ func TestPostingTemplates_CheckoutPaidAndEscrowRelease(t *testing.T) {
 
 	// The DOMAIN §2.1 example: a 12,345 subtotal at 500bps earns 617.
 	pool := dbtest.Pool(t)
-	order := uuid.New()
+	buyer := mustUser(t, pool, "template-buyer")
 	seller := mustUser(t, pool, "template-seller")
+	order := mustOrder(t, pool, buyer, seller)
 	got = ledger.EscrowRelease(order, seller, 12345, 617)
 	want = []ledger.Entry{
 		{Account: ledger.Escrow, Amount: 12345, Currency: ledger.CurrencyGHS, OrderID: &order},

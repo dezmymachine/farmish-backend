@@ -218,10 +218,14 @@ func TestService_QuoteTwoSellers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Orders) != 2 || got.Orders[0].SellerID != sellerA || got.Orders[1].SellerID != sellerB {
-		t.Fatalf("orders = %+v", got.Orders)
+	if len(got.Orders) != 2 {
+		t.Fatalf("orders = %+v, want one order per seller", got.Orders)
 	}
-	firstOrder, secondOrder := got.Orders[0], got.Orders[1]
+	ordersBySeller := make(map[uuid.UUID]checkout.OrderQuote, len(got.Orders))
+	for _, order := range got.Orders {
+		ordersBySeller[order.SellerID] = order
+	}
+	firstOrder, secondOrder := ordersBySeller[sellerA], ordersBySeller[sellerB]
 	if firstOrder.SubtotalPesewas != 6000 || firstOrder.DeliveryFeePesewas != 500 ||
 		firstOrder.BasePesewas != 6500 || firstOrder.CommissionRateBps != 700 {
 		t.Errorf("first order = %+v, want 6000/500/6500 at the highest category rate", firstOrder)

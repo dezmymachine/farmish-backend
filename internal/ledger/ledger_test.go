@@ -29,6 +29,31 @@ func mustUser(t *testing.T, pool *pgxpool.Pool, uid string) uuid.UUID {
 	return user.ID
 }
 
+// mustOrder creates the minimum checkout and order rows a ledger entry with an
+// order link needs. Ledger tests own these Phase 15a rows directly because the
+// checkout service that will create them does not exist yet.
+func mustOrder(t *testing.T, pool *pgxpool.Pool, buyer, seller uuid.UUID) uuid.UUID {
+	t.Helper()
+	ctx := context.Background()
+	var checkoutID, orderID uuid.UUID
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO checkouts (buyer_id, idempotency_key, request_hash, base_pesewas,
+		                        processing_fee_pesewas, charge_pesewas, expires_at)
+		 VALUES ($1, $2, 'test', 1, 0, 1, now() + interval '30 minutes')
+		 RETURNING id`, buyer, uuid.New()).Scan(&checkoutID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO orders (checkout_id, buyer_id, seller_id, subtotal_pesewas,
+		                     delivery_fee_pesewas, base_pesewas, commission_rate_bps,
+		                     commission_pesewas, delivery_method)
+		 VALUES ($1, $2, $3, 1, 0, 1, 500, 1, 'pickup')
+		 RETURNING id`, checkoutID, buyer, seller).Scan(&orderID); err != nil {
+		t.Fatal(err)
+	}
+	return orderID
+}
+
 func postInTx(t *testing.T, pool *pgxpool.Pool, kind, reference string, entries ...ledger.Entry) {
 	t.Helper()
 	err := database.InTx(context.Background(), pool, func(tx pgx.Tx) error {
@@ -98,12 +123,13 @@ func TestLedger_SeededFixedAccounts(t *testing.T) {
 func TestPost_Balanced(t *testing.T) {
 	pool := dbtest.Pool(t)
 	ctx := context.Background()
+	buyer := mustUser(t, pool, "balanced-buyer")
 	seller := mustUser(t, pool, "balanced-seller")
 
 	// The DOMAIN §2.2 example: base 10,000 grosses up to a 10,199 charge with a
 	// 199 processing fee.
-	first := uuid.New()
-	second := uuid.New()
+	first := mustOrder(t, pool, buyer, seller)
+	second := mustOrder(t, pool, buyer, seller)
 	postInTx(t, pool, ledger.KindCheckoutPaid, "balanced-checkout",
 		ledger.Entry{Account: ledger.PaystackClearing, Amount: 10000, Currency: ledger.CurrencyGHS},
 		ledger.Entry{Account: ledger.PaystackFees, Amount: 199, Currency: ledger.CurrencyGHS},
