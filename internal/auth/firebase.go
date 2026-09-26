@@ -50,12 +50,37 @@ func NewFirebase(ctx context.Context, cfg config.Firebase) (*Firebase, error) {
 
 // Verify checks the token's signature, issuer, audience and expiry locally
 // (no per-request network call outside emulator mode). Revocation is not
-// checked here; sensitive operations re-check (Phase 7).
+// checked here; sensitive operations use VerifyStrict.
 func (f *Firebase) Verify(ctx context.Context, idToken string) (Identity, error) {
 	tok, err := f.client.VerifyIDToken(ctx, idToken)
 	if err != nil {
 		return Identity{}, fmt.Errorf("%w: %w", ErrInvalidToken, err)
 	}
+	return identityFromToken(tok), nil
+}
+
+// VerifyStrict additionally checks with Firebase that the token hasn't been
+// revoked and the account isn't disabled. It makes a network call, so callers
+// must use it only for step-up operations on sensitive endpoints.
+func (f *Firebase) VerifyStrict(ctx context.Context, idToken string) (Identity, error) {
+	tok, err := f.client.VerifyIDTokenAndCheckRevoked(ctx, idToken)
+	if err != nil {
+		return Identity{}, fmt.Errorf("%w: %w", ErrInvalidToken, err)
+	}
+	return identityFromToken(tok), nil
+}
+
+// RevokeSessions revokes every refresh token for uid, so existing ID tokens
+// fail VerifyStrict (until they expire they still pass Verify). It is used in
+// tests and will back admin tooling that signs a user out everywhere.
+func (f *Firebase) RevokeSessions(ctx context.Context, uid string) error {
+	if err := f.client.RevokeRefreshTokens(ctx, uid); err != nil {
+		return fmt.Errorf("revoke refresh tokens: %w", err)
+	}
+	return nil
+}
+
+func identityFromToken(tok *fbauth.Token) Identity {
 	str := func(k string) string { s, _ := tok.Claims[k].(string); return s }
 	verified, _ := tok.Claims["email_verified"].(bool)
 	return Identity{
@@ -66,7 +91,7 @@ func (f *Firebase) Verify(ctx context.Context, idToken string) (Identity, error)
 		Name:          str("name"),
 		Provider:      tok.Firebase.SignInProvider,
 		AuthTime:      time.Unix(tok.AuthTime, 0),
-	}, nil
+	}
 }
 
 // SetRoleClaim sets the role custom claim ("user" removes it), preserving any

@@ -109,6 +109,15 @@ func PhoneUser(t testing.TB) User {
 	return User{UID: out.LocalID, Phone: phone, Token: out.IDToken}
 }
 
+// Revoke revokes every session for uid, so the user's existing ID tokens
+// fail VerifyStrict (they still pass Verify until they expire).
+func Revoke(t testing.TB, fb *auth.Firebase, uid string) {
+	t.Helper()
+	if err := fb.RevokeSessions(context.Background(), uid); err != nil {
+		t.Fatalf("authtest: revoke: %v", err)
+	}
+}
+
 // SignIn returns a fresh ID token for an existing email user (e.g. to pick up
 // new custom claims).
 func SignIn(t testing.TB, email, password string) string {

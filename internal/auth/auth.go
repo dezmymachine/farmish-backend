@@ -25,8 +25,13 @@ type Identity struct {
 }
 
 // Verifier verifies a raw ID token.
+//
+// Verify checks signature, issuer, audience and expiry locally. VerifyStrict
+// additionally checks revocation with Firebase (a network call): use it only
+// for step-up operations on sensitive endpoints.
 type Verifier interface {
 	Verify(ctx context.Context, idToken string) (Identity, error)
+	VerifyStrict(ctx context.Context, idToken string) (Identity, error)
 }
 
 // ClaimsSetter mirrors a user's role into Firebase custom claims.
