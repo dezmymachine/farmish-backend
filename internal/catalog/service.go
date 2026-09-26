@@ -160,8 +160,8 @@ func (s *Service) CreateCategory(ctx context.Context, in CreateInput) (Detail, e
 	}
 	var parent *Category
 	var group *string
-	switch {
-	case in.ParentID == nil:
+	switch in.ParentID {
+	case nil:
 		if in.ListingGroup == nil || !ValidGroup(*in.ListingGroup) {
 			verr.Add("listingGroup", "is required for a parent category (equipment, quality, livestock, land, service)")
 		} else {
@@ -172,26 +172,28 @@ func (s *Service) CreateCategory(ctx context.Context, in CreateInput) (Detail, e
 			verr.Add("listingGroup", "must not be set on a child category (inherited from the parent)")
 		}
 		prow, err := q.GetCategoryByID(ctx, *in.ParentID)
-		if errors.Is(err, pgx.ErrNoRows) {
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
 			verr.Add("parentId", "parent category not found")
-		} else if err != nil {
+		case err != nil:
 			return Detail{}, fmt.Errorf("get parent category: %w", err)
-		} else if prow.ParentID.Valid {
+		case prow.ParentID.Valid:
 			verr.Add("parentId", "parent must be a top-level category (two levels only)")
-		} else {
+		default:
 			pc := fromRow(prow)
 			parent = &pc
 		}
 	}
 	slug := ""
-	if in.Slug != nil {
+	switch {
+	case in.Slug != nil:
 		slug = *in.Slug
 		if !slugPattern.MatchString(slug) {
 			verr.Add("slug", "must match ^[a-z0-9]+(-[a-z0-9]+)*$")
 		}
-	} else if parent != nil {
+	case parent != nil:
 		slug = parent.Slug + "-" + text.Slugify(in.Name)
-	} else {
+	default:
 		slug = text.Slugify(in.Name)
 	}
 	if slug == "" {

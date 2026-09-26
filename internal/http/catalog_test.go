@@ -108,7 +108,7 @@ func TestCategoryDetail_ChildInheritsGroupAndAttributes(t *testing.T) {
 	}
 	keys := map[string]bool{}
 	for _, a := range d.Attributes {
-		keys[string(a.Key)] = true
+		keys[a.Key] = true
 	}
 	for _, k := range []string{"breed", "vaccinated", "weight_kg"} {
 		if !keys[k] {
@@ -275,7 +275,7 @@ func TestAdminAttributes_CRUD(t *testing.T) {
 	}
 	labels := map[string]string{}
 	for _, a := range merged.Attributes {
-		labels[string(a.Key)] = a.Label
+		labels[a.Key] = a.Label
 	}
 	if labels["horn_status"] != "Horns" || labels["breed"] != "Breed" {
 		t.Errorf("merged = %+v", merged.Attributes)
@@ -305,7 +305,7 @@ func TestAdminAttributes_CRUD(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, a := range after.Attributes {
-		if string(a.Key) == "horn_status" {
+		if a.Key == "horn_status" {
 			t.Errorf("deleted attribute still present: %+v", after.Attributes)
 		}
 	}
