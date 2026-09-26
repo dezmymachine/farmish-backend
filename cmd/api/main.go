@@ -80,12 +80,13 @@ func sharedLimiter(ctx context.Context, cfg config.Config, log *slog.Logger) (ra
 // registry lists every job this service knows. Each phase registers its
 // workers and periodic jobs here. The orphan sweep is registered only when
 // media storage is configured (it is required when deployed).
-func registry(log *slog.Logger, mediaSvc *media.Service) *jobs.Registry {
+func registry(log *slog.Logger, mediaSvc *media.Service, listingsSvc *listings.Service) *jobs.Registry {
 	r := jobs.NewRegistry()
 	jobs.Register(r, &jobs.NoopWorker{Log: log})
 	if mediaSvc != nil {
 		media.RegisterCleanupOrphans(r, mediaSvc, log)
 	}
+	listings.RegisterExpireDue(r, listingsSvc, log)
 	return r
 }
 
@@ -134,14 +135,29 @@ func run() error {
 	}()
 	log.Info("database connected", "max_conns", cfg.DB.MaxConns)
 
-	// Media storage is needed by the job workers (the orphan sweep) as well
-	// as the API, so it is built once, before either.
+	// Firebase, media storage and the domain services are needed by both the
+	// job workers (the orphan sweep, the expiry sweep) and the API, so they
+	// are built once, before either.
+	firebase, err := auth.NewFirebase(ctx, cfg.Firebase)
+	if err != nil {
+		return err
+	}
+	if cfg.Firebase.EmulatorHost != "" {
+		log.Warn("FIREBASE AUTH EMULATOR IN USE: token signatures are NOT verified", "host", cfg.Firebase.EmulatorHost)
+	}
+	crypter, err := crypto.New(cfg.DataEncryptionKey)
+	if err != nil {
+		return err
+	}
 	mediaSvc, err := mediaService(pool, cfg, log)
 	if err != nil {
 		return err
 	}
+	usersSvc := users.New(pool)
+	sellersSvc := sellers.New(pool, crypter, firebase)
+	listingsSvc := listings.New(pool, catalog.New(pool), mediaSvc, sellersSvc)
 
-	jobClient, err := jobs.NewClient(pool, registry(log, mediaSvc), log, jobs.Options{
+	jobClient, err := jobs.NewClient(pool, registry(log, mediaSvc, listingsSvc), log, jobs.Options{
 		Work:       cfg.RunMode.WorksJobs(),
 		MaxWorkers: cfg.JobsMaxWorkers,
 	})
@@ -169,13 +185,6 @@ func run() error {
 
 	var router http.Handler
 	if cfg.RunMode.ServesAPI() {
-		firebase, err := auth.NewFirebase(ctx, cfg.Firebase)
-		if err != nil {
-			return err
-		}
-		if cfg.Firebase.EmulatorHost != "" {
-			log.Warn("FIREBASE AUTH EMULATOR IN USE: token signatures are NOT verified", "host", cfg.Firebase.EmulatorHost)
-		}
 		ipLimiter := ratelimit.NewMemory()
 		go ipLimiter.RunSweeper(ctx, time.Minute)
 		shared, closeShared, err := sharedLimiter(ctx, cfg, log)
@@ -183,18 +192,14 @@ func run() error {
 			return err
 		}
 		defer closeShared()
-		crypter, err := crypto.New(cfg.DataEncryptionKey)
-		if err != nil {
-			return err
-		}
 		router, err = httpapi.NewRouter(cfg, log, httpapi.Deps{
 			DB:            pool,
 			Verifier:      firebase,
-			Users:         users.New(pool),
-			Sellers:       sellers.New(pool, crypter, firebase),
+			Users:         usersSvc,
+			Sellers:       sellersSvc,
 			Catalog:       catalog.New(pool),
 			Media:         mediaSvc,
-			Listings:      listings.New(pool, catalog.New(pool), mediaSvc, sellers.New(pool, crypter, firebase)),
+			Listings:      listingsSvc,
 			Turnstile:     turnstile.New(cfg.TurnstileSecret),
 			IPLimiter:     ipLimiter,
 			SharedLimiter: shared,
