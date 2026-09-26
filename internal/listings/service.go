@@ -397,6 +397,21 @@ func (s *Service) publishTx(ctx context.Context, q *db.Queries, row db.Listing, 
 	return err
 }
 
+// RequireAdvertisable locks the caller's listing inside tx and refuses one
+// that cannot be promoted. Unknown listings and other sellers' listings keep
+// their existing 404/403 errors; anything that is not active and unexpired is
+// a promotion-specific 409 in the calling package.
+func (s *Service) RequireAdvertisable(ctx context.Context, tx pgx.Tx, sellerID, id uuid.UUID, now time.Time) error {
+	row, err := ownedListing(ctx, db.New(tx), sellerID, id)
+	if err != nil {
+		return err
+	}
+	if row.Status != StatusActive || row.ExpiresAt == nil || !row.ExpiresAt.After(now) {
+		return fmt.Errorf("%w: %s", ErrListingNotActive, id)
+	}
+	return nil
+}
+
 // ownedListing loads a listing FOR UPDATE and checks the seller.
 func ownedListing(ctx context.Context, q *db.Queries, sellerID, id uuid.UUID) (db.Listing, error) {
 	row, err := q.GetListingByIDForUpdate(ctx, id)

@@ -349,6 +349,31 @@ func TestInitialize_GrossUpAndProviderFailure(t *testing.T) {
 	})
 }
 
+func TestInitialize_StoresAndForwardsMetadata(t *testing.T) {
+	f := newFixture(t)
+	const credits = 75
+	payment, err := f.svc.Initialize(context.Background(), payments.CreateInput{
+		UserID: f.user, Purpose: payments.PurposePromotion, PurposeRef: "vip",
+		BasePesewas: 7500, Metadata: map[string]any{"promotion_credits": credits},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := payment.Metadata["promotion_credits"]; !ok || got != float64(credits) {
+		t.Errorf("stored metadata = %+v, want promotion_credits %d", payment.Metadata, credits)
+	}
+	if n := len(f.ps.Initialized); n == 0 {
+		t.Fatal("the provider was never called")
+	}
+	providerMetadata := f.ps.Initialized[len(f.ps.Initialized)-1].Metadata
+	if got, ok := providerMetadata["promotion_credits"]; !ok || got != credits {
+		t.Errorf("provider metadata = %+v, want promotion_credits %d", providerMetadata, credits)
+	}
+	if providerMetadata["purpose"] != payments.PurposePromotion || providerMetadata["purpose_ref"] != "vip" {
+		t.Errorf("provider metadata = %+v, want the payment identifiers", providerMetadata)
+	}
+}
+
 func TestWebhook_AmountMismatchRejected(t *testing.T) {
 	f := newFixture(t)
 	logs := f.log

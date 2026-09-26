@@ -108,6 +108,11 @@ type CreateInput struct {
 	Purpose     string
 	PurposeRef  string
 	BasePesewas int64
+	// Metadata is stored with the payment row and forwarded to Paystack with
+	// the payment's own identifiers. It holds purchase-time facts, such as a
+	// promotion tier's credit count, that must not change if reference data is
+	// edited later.
+	Metadata map[string]any
 }
 
 // Initialize creates a pending payment and asks Paystack where to send the
@@ -144,11 +149,15 @@ func (s *Service) Initialize(ctx context.Context, in CreateInput) (Payment, erro
 
 	// Step 1: the pending row, committed on its own.
 	var payment Payment
+	metadata, err := marshalMetadata(in.Metadata)
+	if err != nil {
+		return Payment{}, err
+	}
 	if err := database.InTx(ctx, s.pool, func(tx pgx.Tx) error {
 		row, err := db.New(tx).InsertPayment(ctx, db.InsertPaymentParams{
 			Reference: reference, UserID: in.UserID, Purpose: in.Purpose,
 			PurposeRef: in.PurposeRef, BasePesewas: in.BasePesewas,
-			ProcessingFeePesewas: fee, ChargePesewas: charge,
+			ProcessingFeePesewas: fee, ChargePesewas: charge, Metadata: metadata,
 		})
 		if err != nil {
 			return fmt.Errorf("insert payment: %w", err)
@@ -164,14 +173,17 @@ func (s *Service) Initialize(ctx context.Context, in CreateInput) (Payment, erro
 	if email == "" {
 		email = placeholderEmail(in.UserID)
 	}
+	providerMetadata := make(map[string]any, len(in.Metadata)+3)
+	for key, value := range in.Metadata {
+		providerMetadata[key] = value
+	}
+	providerMetadata["payment_id"] = payment.ID.String()
+	providerMetadata["purpose"] = in.Purpose
+	providerMetadata["purpose_ref"] = in.PurposeRef
 	result, err := s.ps.InitializeTransaction(ctx, InitializeInput{
 		Email: email, AmountPesewas: charge, Reference: reference,
 		CallbackURL: s.callbackURL,
-		Metadata: map[string]any{
-			"payment_id":  payment.ID.String(),
-			"purpose":     in.Purpose,
-			"purpose_ref": in.PurposeRef,
-		},
+		Metadata:    providerMetadata,
 	})
 	if err != nil {
 		// The buyer never got a chance to pay, so the payment is dead rather
@@ -532,6 +544,19 @@ func (s *Service) syntheticChargeSuccess(t Transaction) []byte {
 		panic("payments: marshal synthetic event: " + err.Error())
 	}
 	return raw
+}
+
+// marshalMetadata encodes a payment snapshot as JSON. An empty snapshot is
+// stored as an object, never NULL, so readers always get a map.
+func marshalMetadata(metadata map[string]any) ([]byte, error) {
+	if len(metadata) == 0 {
+		return []byte("{}"), nil
+	}
+	raw, err := json.Marshal(metadata)
+	if err != nil {
+		return nil, fmt.Errorf("encode payment metadata: %w", err)
+	}
+	return raw, nil
 }
 
 // optionalString returns nil for an empty string, so a column Paystack left

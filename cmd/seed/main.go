@@ -1,6 +1,6 @@
-// Command seed loads reference data (catalog categories, attributes and,
-// from Phase 14, promotion tiers) into DATABASE_URL. It is idempotent: a
-// repeat run changes nothing.
+// Command seed loads reference data (catalog categories, attributes and
+// promotion tiers) into DATABASE_URL. It is idempotent: a repeat run changes
+// nothing.
 package main
 
 import (
@@ -13,6 +13,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/catalog"
 	"github.com/dezmymachine/farmish-backend/internal/config"
 	"github.com/dezmymachine/farmish-backend/internal/database"
+	"github.com/dezmymachine/farmish-backend/internal/promotions"
 	"github.com/dezmymachine/farmish-backend/pkg/logger"
 )
 
@@ -44,5 +45,9 @@ func run() error {
 		return err
 	}
 	log.Info("catalog seeded")
+	if err := promotions.Seed(ctx, pool); err != nil {
+		return err
+	}
+	log.Info("promotion tiers seeded")
 	return nil
 }

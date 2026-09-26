@@ -35,8 +35,17 @@ type Querier interface {
 	DeleteListingAttributes(ctx context.Context, listingID uuid.UUID) error
 	DeleteListingImages(ctx context.Context, listingID uuid.UUID) error
 	DeleteMediaObject(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	// Forfeit the remaining time on every currently active promotion when a higher
+	// tier replaces it. The table requires ends_at > starts_at, even for a row
+	// being replaced at the instant it started, so an immediate replacement ends
+	// one microsecond after its start rather than exactly at the replacement time.
+	EndActiveListingPromotions(ctx context.Context, arg EndActiveListingPromotionsParams) error
 	// The expiry sweep: active listings past their expiry become expired.
 	ExpireDueListings(ctx context.Context, expiresAt *time.Time) ([]uuid.UUID, error)
+	// The currently effective promotion, locked so two applications cannot both
+	// conclude that the same row is active. When rankings overlap after a
+	// replacement bug, the highest rank wins and the latest expiry breaks the tie.
+	GetActiveListingPromotionForUpdate(ctx context.Context, arg GetActiveListingPromotionForUpdateParams) (ListingPromotion, error)
 	GetCategoryAttribute(ctx context.Context, arg GetCategoryAttributeParams) (CategoryAttribute, error)
 	GetCategoryByID(ctx context.Context, id uuid.UUID) (Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (Category, error)
@@ -59,6 +68,7 @@ type Querier interface {
 	GetPaymentByReferenceForUpdate(ctx context.Context, reference string) (Payment, error)
 	// A buyer retrying after a failed attempt needs to find the earlier rows.
 	GetPaymentsByPurposeRef(ctx context.Context, arg GetPaymentsByPurposeRefParams) ([]Payment, error)
+	GetPromotionConfig(ctx context.Context, tier string) (PromotionConfig, error)
 	// One listing with its category, its active promotion and the seller's safe
 	// profile fields. Never selects contact or identity data. The caller decides
 	// whether the listing is browsable.
@@ -79,6 +89,10 @@ type Querier interface {
 	InsertListing(ctx context.Context, arg InsertListingParams) (Listing, error)
 	InsertListingAttribute(ctx context.Context, arg InsertListingAttributeParams) error
 	InsertListingImage(ctx context.Context, arg InsertListingImageParams) error
+	// A promotion application always inserts a row. A higher tier replaces an
+	// active promotion by ending that row first; the replacement row is the only
+	// one active from the replacement time onward.
+	InsertListingPromotion(ctx context.Context, arg InsertListingPromotionParams) (ListingPromotion, error)
 	InsertMediaObject(ctx context.Context, arg InsertMediaObjectParams) (MediaObject, error)
 	// A pending payment, before Paystack is called. The gross-up is computed by
 	// the caller from internal/money and the CHECK on charge_pesewas enforces it.
@@ -89,6 +103,8 @@ type Querier interface {
 	// and the caller answers 200 without dispatching anything.
 	InsertWebhookEvent(ctx context.Context, arg InsertWebhookEventParams) (WebhookEvent, error)
 	ListActiveCategories(ctx context.Context) ([]Category, error)
+	// The public package list, in display order.
+	ListActivePromotionConfigs(ctx context.Context) ([]PromotionConfig, error)
 	ListAttributesByCategory(ctx context.Context, categoryID uuid.UUID) ([]CategoryAttribute, error)
 	// A category filter on a parent slug must include its children (DOMAIN §9);
 	// on a child slug it returns just that child.
@@ -99,6 +115,8 @@ type Querier interface {
 	// Read-only join so the owner's view can carry each object's key (and hence
 	// its public URL).
 	ListListingImages(ctx context.Context, listingID uuid.UUID) ([]ListListingImagesRow, error)
+	// One listing's promotion history, newest effective window first.
+	ListListingPromotions(ctx context.Context, listingID uuid.UUID) ([]ListingPromotion, error)
 	// Cleanup sweep: pending rows older than the cutoff, oldest first.
 	ListPendingMediaBefore(ctx context.Context, arg ListPendingMediaBeforeParams) ([]MediaObject, error)
 	ListSellerListings(ctx context.Context, arg ListSellerListingsParams) ([]Listing, error)
@@ -106,6 +124,10 @@ type Querier interface {
 	ListSellerProfilesByStatus(ctx context.Context, arg ListSellerProfilesByStatusParams) ([]ListSellerProfilesByStatusRow, error)
 	// Several accounts may share an email (no account linking in v1).
 	ListUsersByEmail(ctx context.Context, email *string) ([]User, error)
+	// Serializes one buyer's credit balance changes for the transaction. The
+	// ledger keeps no mutable balance row to lock, so the advisory lock is the
+	// concurrency control DOMAIN §5.3.5 requires.
+	LockPromotionCredits(ctx context.Context, dollar_1 string) (interface{}, error)
 	MarkPaymentAbandoned(ctx context.Context, arg MarkPaymentAbandonedParams) (Payment, error)
 	MarkPaymentFailed(ctx context.Context, arg MarkPaymentFailedParams) (Payment, error)
 	// Public search (Phase 12). `now` is always passed from the service clock,
@@ -154,6 +176,9 @@ type Querier interface {
 	// Seed upsert: updates only when something changed (the WHERE guard keeps a
 	// repeat run from touching updated_at). Returns no row when unchanged.
 	UpsertCategoryBySlug(ctx context.Context, arg UpsertCategoryBySlugParams) (Category, error)
+	// Seed upsert: updates only when something changed (the WHERE guard keeps a
+	// repeat run from touching updated_at). Returns no row when unchanged.
+	UpsertPromotionConfig(ctx context.Context, arg UpsertPromotionConfigParams) (PromotionConfig, error)
 	// Creates the profile or edits its non-identity fields. Identity
 	// (id_type/id_number) and verification status are managed separately, so an
 	// edit never changes them.

@@ -2,6 +2,7 @@ package payments
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -86,8 +87,12 @@ type Payment struct {
 	AuthorizationURL *string
 	PaidAt           *time.Time
 	FailureReason    *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	// Metadata is a small JSON snapshot stored with the row. Promotion
+	// purchases use it for the tier's credit count as it was at checkout, so a
+	// later config edit cannot change what a paid buyer receives.
+	Metadata  map[string]any
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // Succeeded reports whether the money arrived.
@@ -107,8 +112,25 @@ func fromRow(r db.Payment) Payment {
 		Currency: r.Currency, Status: r.Status,
 		ProviderFee: r.PaystackFeePesewas, Channel: r.Channel,
 		AuthorizationURL: r.AuthorizationUrl, PaidAt: r.PaidAt,
-		FailureReason: r.FailureReason, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+		FailureReason: r.FailureReason, Metadata: decodeMetadata(r.Metadata), CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	}
+}
+
+// decodeMetadata parses a payments.metadata value. An empty or unreadable
+// value becomes an empty snapshot rather than a nil map, so callers can read
+// keys without checking for nil first.
+func decodeMetadata(raw []byte) map[string]any {
+	metadata := map[string]any{}
+	if len(raw) == 0 {
+		return metadata
+	}
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return map[string]any{}
+	}
+	if metadata == nil {
+		return map[string]any{}
+	}
+	return metadata
 }
 
 // newReference returns the reference for a new payment: 'FMS-' followed by 20

@@ -27,7 +27,7 @@ func (q *Queries) CompleteWebhookEvent(ctx context.Context, arg CompleteWebhookE
 }
 
 const getPaymentByID = `-- name: GetPaymentByID :one
-SELECT id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at FROM payments WHERE id = $1
+SELECT id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at, metadata FROM payments WHERE id = $1
 `
 
 func (q *Queries) GetPaymentByID(ctx context.Context, id uuid.UUID) (Payment, error) {
@@ -51,12 +51,13 @@ func (q *Queries) GetPaymentByID(ctx context.Context, id uuid.UUID) (Payment, er
 		&i.FailureReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }
 
 const getPaymentByReference = `-- name: GetPaymentByReference :one
-SELECT id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at FROM payments WHERE reference = $1
+SELECT id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at, metadata FROM payments WHERE reference = $1
 `
 
 func (q *Queries) GetPaymentByReference(ctx context.Context, reference string) (Payment, error) {
@@ -80,12 +81,13 @@ func (q *Queries) GetPaymentByReference(ctx context.Context, reference string) (
 		&i.FailureReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }
 
 const getPaymentByReferenceForUpdate = `-- name: GetPaymentByReferenceForUpdate :one
-SELECT id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at FROM payments WHERE reference = $1 FOR UPDATE
+SELECT id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at, metadata FROM payments WHERE reference = $1 FOR UPDATE
 `
 
 // Row-locked. Two webhook deliveries for the same reference must not both
@@ -111,12 +113,13 @@ func (q *Queries) GetPaymentByReferenceForUpdate(ctx context.Context, reference 
 		&i.FailureReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }
 
 const getPaymentsByPurposeRef = `-- name: GetPaymentsByPurposeRef :many
-SELECT id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at FROM payments WHERE purpose = $1 AND purpose_ref = $2
+SELECT id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at, metadata FROM payments WHERE purpose = $1 AND purpose_ref = $2
 ORDER BY created_at DESC
 `
 
@@ -153,6 +156,7 @@ func (q *Queries) GetPaymentsByPurposeRef(ctx context.Context, arg GetPaymentsBy
 			&i.FailureReason,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Metadata,
 		); err != nil {
 			return nil, err
 		}
@@ -166,9 +170,9 @@ func (q *Queries) GetPaymentsByPurposeRef(ctx context.Context, arg GetPaymentsBy
 
 const insertPayment = `-- name: InsertPayment :one
 INSERT INTO payments (reference, user_id, purpose, purpose_ref, base_pesewas,
-                      processing_fee_pesewas, charge_pesewas, currency, status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, 'GHS', 'pending')
-RETURNING id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at
+                      processing_fee_pesewas, charge_pesewas, currency, status, metadata)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 'GHS', 'pending', $8)
+RETURNING id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at, metadata
 `
 
 type InsertPaymentParams struct {
@@ -179,6 +183,7 @@ type InsertPaymentParams struct {
 	BasePesewas          int64
 	ProcessingFeePesewas int64
 	ChargePesewas        int64
+	Metadata             []byte
 }
 
 // A pending payment, before Paystack is called. The gross-up is computed by
@@ -192,6 +197,7 @@ func (q *Queries) InsertPayment(ctx context.Context, arg InsertPaymentParams) (P
 		arg.BasePesewas,
 		arg.ProcessingFeePesewas,
 		arg.ChargePesewas,
+		arg.Metadata,
 	)
 	var i Payment
 	err := row.Scan(
@@ -212,6 +218,7 @@ func (q *Queries) InsertPayment(ctx context.Context, arg InsertPaymentParams) (P
 		&i.FailureReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }
@@ -257,7 +264,7 @@ const markPaymentAbandoned = `-- name: MarkPaymentAbandoned :one
 UPDATE payments
 SET status = 'abandoned', failure_reason = $2
 WHERE id = $1 AND status = 'pending'
-RETURNING id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at
+RETURNING id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at, metadata
 `
 
 type MarkPaymentAbandonedParams struct {
@@ -286,6 +293,7 @@ func (q *Queries) MarkPaymentAbandoned(ctx context.Context, arg MarkPaymentAband
 		&i.FailureReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }
@@ -294,7 +302,7 @@ const markPaymentFailed = `-- name: MarkPaymentFailed :one
 UPDATE payments
 SET status = 'failed', failure_reason = $2
 WHERE id = $1 AND status = 'pending'
-RETURNING id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at
+RETURNING id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at, metadata
 `
 
 type MarkPaymentFailedParams struct {
@@ -323,13 +331,14 @@ func (q *Queries) MarkPaymentFailed(ctx context.Context, arg MarkPaymentFailedPa
 		&i.FailureReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }
 
 const setPaymentAuthorizationURL = `-- name: SetPaymentAuthorizationURL :one
 UPDATE payments SET authorization_url = $2 WHERE id = $1
-RETURNING id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at
+RETURNING id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at, metadata
 `
 
 type SetPaymentAuthorizationURLParams struct {
@@ -360,6 +369,7 @@ func (q *Queries) SetPaymentAuthorizationURL(ctx context.Context, arg SetPayment
 		&i.FailureReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }
@@ -372,7 +382,7 @@ SET status = 'success',
     paystack_fee_pesewas = $4,
     failure_reason = NULL
 WHERE id = $1 AND status = 'pending'
-RETURNING id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at
+RETURNING id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at, metadata
 `
 
 type SettlePaymentSuccessParams struct {
@@ -410,6 +420,7 @@ func (q *Queries) SettlePaymentSuccess(ctx context.Context, arg SettlePaymentSuc
 		&i.FailureReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }

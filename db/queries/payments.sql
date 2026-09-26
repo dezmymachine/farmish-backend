@@ -2,8 +2,8 @@
 -- A pending payment, before Paystack is called. The gross-up is computed by
 -- the caller from internal/money and the CHECK on charge_pesewas enforces it.
 INSERT INTO payments (reference, user_id, purpose, purpose_ref, base_pesewas,
-                      processing_fee_pesewas, charge_pesewas, currency, status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, 'GHS', 'pending')
+                      processing_fee_pesewas, charge_pesewas, currency, status, metadata)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 'GHS', 'pending', $8)
 RETURNING *;
 
 -- name: GetPaymentByID :one

@@ -166,14 +166,15 @@ type ListingImage struct {
 }
 
 type ListingPromotion struct {
-	ID        uuid.UUID
-	ListingID uuid.UUID
-	SellerID  uuid.UUID
-	Tier      string
-	TierRank  int32
-	StartsAt  time.Time
-	EndsAt    time.Time
-	CreatedAt time.Time
+	ID           uuid.UUID
+	ListingID    uuid.UUID
+	SellerID     uuid.UUID
+	Tier         string
+	TierRank     int32
+	StartsAt     time.Time
+	EndsAt       time.Time
+	CreatedAt    time.Time
+	CreditsSpent int32
 }
 
 type MediaObject struct {
@@ -206,6 +207,22 @@ type Payment struct {
 	FailureReason        *string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
+	Metadata             []byte
+}
+
+type PromotionConfig struct {
+	Tier         string
+	Name         string
+	PricePesewas int64
+	Credits      int32
+	DurationDays int32
+	TierRank     int32
+	Featured     bool
+	Description  string
+	Features     []string
+	SortOrder    int32
+	IsActive     bool
+	UpdatedAt    time.Time
 }
 
 type RiverJob struct {
