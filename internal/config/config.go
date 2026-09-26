@@ -3,6 +3,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -60,7 +61,15 @@ type Config struct {
 	// in-process limits (REDIS_TIMEOUT). Keep Redis in the API's region so
 	// the default holds.
 	RedisTimeout time.Duration
+	// DataEncryptionKey is the decoded DATA_ENCRYPTION_KEY (32 bytes) for
+	// AES-256-GCM encryption at rest (ID and account numbers).
+	DataEncryptionKey []byte
 }
+
+// DevDataEncryptionKey is the clearly labelled dev-only DATA_ENCRYPTION_KEY
+// shipped in .env.example. Config refuses it in staging and production, the
+// same way it refuses Cloudflare's Turnstile test secrets.
+const DevDataEncryptionKey = "9MkjfhxyTr/ApaqBuztKBSrbWYo6kr/wIcg5/RfbmUs="
 
 // ClientIP configures how the real client address is derived (rate limits,
 // logs, Turnstile). See middleware.ClientIPResolver.
@@ -271,11 +280,25 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 		}
 	}
 
+	keyB64 := required("DATA_ENCRYPTION_KEY")
+	if keyB64 != "" {
+		// Never echo the value: it encrypts ID and account numbers.
+		key, err := base64.StdEncoding.DecodeString(keyB64)
+		if err != nil || len(key) != 32 {
+			errs = append(errs, errors.New("DATA_ENCRYPTION_KEY must be base64 of 32 bytes"))
+		} else {
+			cfg.DataEncryptionKey = key
+		}
+	}
+
 	cfg.Firebase = Firebase{
 		ProjectID:    required("FIREBASE_PROJECT_ID"),
 		EmulatorHost: get("FIREBASE_AUTH_EMULATOR_HOST"),
 	}
 	deployed := cfg.Env == EnvStaging || cfg.Env == EnvProduction
+	if deployed && keyB64 == DevDataEncryptionKey {
+		errs = append(errs, fmt.Errorf("DATA_ENCRYPTION_KEY is the dev key; not allowed when APP_ENV=%s", cfg.Env))
+	}
 	if cfg.Firebase.EmulatorHost != "" && deployed {
 		// Emulator mode skips token signature checks: never allow it when deployed.
 		errs = append(errs, fmt.Errorf("FIREBASE_AUTH_EMULATOR_HOST must not be set when APP_ENV=%s", cfg.Env))

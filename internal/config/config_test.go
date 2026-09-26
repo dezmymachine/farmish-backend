@@ -17,11 +17,12 @@ func lookup(m map[string]string) func(string) (string, bool) {
 
 func TestFromLookup_Defaults(t *testing.T) {
 	cfg, err := FromLookup(lookup(map[string]string{
-		"APP_ENV":             "development",
-		"CORS_ORIGINS":        "http://localhost:3000, https://farmish.gh/",
-		"DATABASE_URL":        "postgres://u:p@localhost:5432/farmish",
-		"FIREBASE_PROJECT_ID": "farmish-dev",
-		"TURNSTILE_SECRET":    "1x0000000000000000000000000000000AA",
+		"APP_ENV":              "development",
+		"CORS_ORIGINS":         "http://localhost:3000, https://farmish.gh/",
+		"DATABASE_URL":         "postgres://u:p@localhost:5432/farmish",
+		"FIREBASE_PROJECT_ID":  "farmish-dev",
+		"TURNSTILE_SECRET":     "1x0000000000000000000000000000000AA",
+		"DATA_ENCRYPTION_KEY":  DevDataEncryptionKey,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -54,6 +55,7 @@ func TestFromLookup_Overrides(t *testing.T) {
 		"FIREBASE_PROJECT_ID":       "farmish-prod",
 		"FIREBASE_CREDENTIALS_JSON": `{"type":"service_account","project_id":"farmish-prod"}`,
 		"TURNSTILE_SECRET":          "0x4AAAAAAA-real-secret",
+		"DATA_ENCRYPTION_KEY":       "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
 		"TRUSTED_PROXIES":           "10.0.0.0/8, 100.64.0.1/10",
 		"TRUST_CLOUDFLARE":          "true",
 	}))
@@ -78,7 +80,7 @@ func TestFromLookup_Invalid(t *testing.T) {
 		env  map[string]string
 		want []string
 	}{
-		{"missing required", map[string]string{}, []string{"APP_ENV is required", "CORS_ORIGINS is required", "DATABASE_URL is required", "FIREBASE_PROJECT_ID is required", "TURNSTILE_SECRET is required"}},
+		{"missing required", map[string]string{}, []string{"APP_ENV is required", "CORS_ORIGINS is required", "DATABASE_URL is required", "FIREBASE_PROJECT_ID is required", "TURNSTILE_SECRET is required", "DATA_ENCRYPTION_KEY is required"}},
 		{"bad db url", map[string]string{"APP_ENV": "test", "CORS_ORIGINS": "https://a.gh", "DATABASE_URL": "mysql://x", "FIREBASE_PROJECT_ID": "p"}, []string{"DATABASE_URL must start with"}},
 		{"bad max conns", map[string]string{"APP_ENV": "test", "CORS_ORIGINS": "https://a.gh", "DATABASE_URL": "postgres://x", "DB_MAX_CONNS": "0"}, []string{"DB_MAX_CONNS must be"}},
 		{"bad statement timeout", map[string]string{"APP_ENV": "test", "CORS_ORIGINS": "https://a.gh", "DATABASE_URL": "postgres://x", "DB_STATEMENT_TIMEOUT": "soon"}, []string{"DB_STATEMENT_TIMEOUT must be"}},
@@ -107,13 +109,18 @@ func TestFromLookup_Invalid(t *testing.T) {
 
 func base(extra map[string]string) map[string]string {
 	m := map[string]string{
-		"APP_ENV":             "development",
-		"CORS_ORIGINS":        "https://farmish.gh",
-		"DATABASE_URL":        "postgres://x",
-		"FIREBASE_PROJECT_ID": "farmish-dev",
+		"APP_ENV":              "development",
+		"CORS_ORIGINS":         "https://farmish.gh",
+		"DATABASE_URL":         "postgres://x",
+		"FIREBASE_PROJECT_ID":  "farmish-dev",
 		"TURNSTILE_SECRET":    "1x0000000000000000000000000000000AA",
+		"DATA_ENCRYPTION_KEY": DevDataEncryptionKey,
 	}
 	for k, v := range extra {
+		if v == "" {
+			delete(m, k)
+			continue
+		}
 		m[k] = v
 	}
 	return m
@@ -216,6 +223,42 @@ func TestClientIPAndTurnstile_Invalid(t *testing.T) {
 	}
 }
 
+func TestConfig_DataEncryptionKey(t *testing.T) {
+	// Missing and malformed keys are refused everywhere.
+	for name, extra := range map[string]map[string]string{
+		"missing": {"DATA_ENCRYPTION_KEY": ""},
+		"short":   {"DATA_ENCRYPTION_KEY": "aGk="},
+		"not64":   {"DATA_ENCRYPTION_KEY": "!!!not-base64!!!"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := FromLookup(lookup(base(extra))); err == nil ||
+				!strings.Contains(err.Error(), "DATA_ENCRYPTION_KEY") {
+				t.Fatalf("err = %v", err)
+			}
+		})
+	}
+	// The dev key works in development but is refused when deployed.
+	if _, err := FromLookup(lookup(base(nil))); err != nil {
+		t.Fatalf("dev key in development: %v", err)
+	}
+	for _, env := range []string{"staging", "production"} {
+		extra := map[string]string{"APP_ENV": env, "FIREBASE_CREDENTIALS_JSON": saJSON, "TURNSTILE_SECRET": "0x4real"}
+		if _, err := FromLookup(lookup(base(extra))); err == nil ||
+			!strings.Contains(err.Error(), "dev key") {
+			t.Fatalf("%s with dev key: err = %v", env, err)
+		}
+		// A real 32-byte key is accepted when deployed.
+		extra["DATA_ENCRYPTION_KEY"] = "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
+		cfg, err := FromLookup(lookup(base(extra)))
+		if err != nil {
+			t.Fatalf("%s with real key: %v", env, err)
+		}
+		if len(cfg.DataEncryptionKey) != 32 {
+			t.Errorf("decoded key len = %d", len(cfg.DataEncryptionKey))
+		}
+	}
+}
+
 func TestRedisURL(t *testing.T) {
 	cfg, err := FromLookup(lookup(base(nil)))
 	if err != nil || cfg.RedisURL != "" || cfg.RedisTimeout != 200*time.Millisecond {
@@ -234,7 +277,7 @@ func TestRedisURL(t *testing.T) {
 		{"REDIS_URL": "rediss://default:tok@x.upstash.io:6379"},
 		{
 			"REDIS_URL": "rediss://default:tok@x.upstash.io:6379", "APP_ENV": "production", "FIREBASE_CREDENTIALS_JSON": saJSON,
-			"TURNSTILE_SECRET": "0x4real",
+			"TURNSTILE_SECRET": "0x4real", "DATA_ENCRYPTION_KEY": "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
 		},
 	} {
 		if _, err := FromLookup(lookup(base(ok))); err != nil {

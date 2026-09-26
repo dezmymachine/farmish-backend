@@ -146,6 +146,12 @@ func (s *Service) UpdateDisplayName(ctx context.Context, id uuid.UUID, name stri
 	return s.one(s.q.UpdateUserDisplayName(ctx, db.UpdateUserDisplayNameParams{ID: id, DisplayName: &name}))
 }
 
+// SetSellerVerified flips the users.seller_verified flag. Sellers call it
+// inside their verification transaction (see internal/sellers).
+func (s *Service) SetSellerVerified(ctx context.Context, id uuid.UUID, verified bool) (User, error) {
+	return s.one(s.q.SetUserSellerVerified(ctx, db.SetUserSellerVerifiedParams{ID: id, SellerVerified: verified}))
+}
+
 // SetRole updates users.role in the database, then mirrors it into the
 // Firebase custom claim. The database write is authoritative; if the claim
 // update fails the error is returned and re-running is safe.

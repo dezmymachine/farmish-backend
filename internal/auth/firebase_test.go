@@ -109,6 +109,29 @@ func TestVerify_RejectsForgedSignature(t *testing.T) {
 	}
 }
 
+func TestSetClaim_SellerVerified(t *testing.T) {
+	fb := authtest.Firebase(t)
+	ctx := context.Background()
+	u := authtest.EmailUser(t)
+	authtest.SetCustomClaims(t, u.UID, map[string]any{"role": "admin"})
+
+	if err := fb.SetClaim(ctx, u.UID, "seller_verified", true); err != nil {
+		t.Fatal(err)
+	}
+	claims, err := fb.CustomClaims(ctx, u.UID)
+	if err != nil || claims["seller_verified"] != true || claims["role"] != "admin" {
+		t.Fatalf("after set: claims = %v, err %v", claims, err)
+	}
+
+	if err := fb.SetClaim(ctx, u.UID, "seller_verified", false); err != nil {
+		t.Fatal(err)
+	}
+	claims, _ = fb.CustomClaims(ctx, u.UID)
+	if claims["seller_verified"] != false || claims["role"] != "admin" {
+		t.Errorf("after revoke: claims = %v (want seller_verified=false, role kept)", claims)
+	}
+}
+
 func TestSetRoleClaim_MergesClaims(t *testing.T) {
 	fb := authtest.Firebase(t)
 	ctx := context.Background()

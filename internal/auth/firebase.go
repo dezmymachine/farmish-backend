@@ -94,9 +94,27 @@ func identityFromToken(tok *fbauth.Token) Identity {
 	}
 }
 
+// SetClaim sets one custom claim (key to value), preserving every other
+// custom claim on the account.
+func (f *Firebase) SetClaim(ctx context.Context, uid, key string, value any) error {
+	return f.updateClaims(ctx, uid, func(claims map[string]any) {
+		claims[key] = value
+	})
+}
+
 // SetRoleClaim sets the role custom claim ("user" removes it), preserving any
 // other custom claims on the account.
 func (f *Firebase) SetRoleClaim(ctx context.Context, uid, role string) error {
+	return f.updateClaims(ctx, uid, func(claims map[string]any) {
+		if role == "" || role == "user" {
+			delete(claims, roleClaim)
+		} else {
+			claims[roleClaim] = role
+		}
+	})
+}
+
+func (f *Firebase) updateClaims(ctx context.Context, uid string, mutate func(map[string]any)) error {
 	u, err := f.client.GetUser(ctx, uid)
 	if err != nil {
 		return fmt.Errorf("get firebase user: %w", err)
@@ -105,11 +123,7 @@ func (f *Firebase) SetRoleClaim(ctx context.Context, uid, role string) error {
 	for k, v := range u.CustomClaims {
 		claims[k] = v
 	}
-	if role == "" || role == "user" {
-		delete(claims, roleClaim)
-	} else {
-		claims[roleClaim] = role
-	}
+	mutate(claims)
 	if err := f.client.SetCustomUserClaims(ctx, uid, claims); err != nil {
 		return fmt.Errorf("set custom claims: %w", err)
 	}
