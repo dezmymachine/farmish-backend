@@ -34,6 +34,7 @@ type Server struct {
 	Users   UserStore
 	Sellers SellerStore
 	Catalog CatalogStore
+	Media   MediaStore
 }
 
 var _ api.StrictServerInterface = Server{}

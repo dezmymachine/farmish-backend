@@ -19,7 +19,9 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/crypto"
 	"github.com/dezmymachine/farmish-backend/internal/database"
 	httpapi "github.com/dezmymachine/farmish-backend/internal/http"
+	"github.com/dezmymachine/farmish-backend/internal/http/handlers"
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
+	"github.com/dezmymachine/farmish-backend/internal/media"
 	"github.com/dezmymachine/farmish-backend/internal/ratelimit"
 	"github.com/dezmymachine/farmish-backend/internal/redisx"
 	"github.com/dezmymachine/farmish-backend/internal/sellers"
@@ -157,12 +159,25 @@ func run() error {
 		if err != nil {
 			return err
 		}
+		// Media storage is required when deployed; locally the API still
+		// serves everything else without it.
+		var mediaStore handlers.MediaStore
+		if cfg.R2.Configured() {
+			storage, err := media.NewR2(cfg.R2)
+			if err != nil {
+				return err
+			}
+			mediaStore = media.New(pool, storage)
+		} else {
+			log.Warn("media storage is not configured: POST /v1/media/upload-url will fail")
+		}
 		router, err = httpapi.NewRouter(cfg, log, httpapi.Deps{
 			DB:            pool,
 			Verifier:      firebase,
 			Users:         users.New(pool),
 			Sellers:       sellers.New(pool, crypter, firebase),
 			Catalog:       catalog.New(pool),
+			Media:         mediaStore,
 			Turnstile:     turnstile.New(cfg.TurnstileSecret),
 			IPLimiter:     ipLimiter,
 			SharedLimiter: shared,

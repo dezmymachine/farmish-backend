@@ -54,6 +54,8 @@ tags:
     description: Seller profiles and verification.
   - name: catalog
     description: Categories, attributes and Ghana locations.
+  - name: media
+    description: Presigned uploads to object storage.
 paths:
   /healthz:
     get:
@@ -519,6 +521,37 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/media/upload-url:
+    post:
+      tags: [media]
+      operationId: createMediaUploadUrl
+      summary: Get a presigned upload URL
+      description: |
+        Returns a short-lived presigned PUT for one image. The client PUTs
+        the bytes straight to object storage, sending exactly the returned
+        headers: `Content-Type` and `Content-Length` are signed, so a
+        different body is rejected by storage. The returned URL is a secret
+        (valid 10 minutes) and must not be logged or shared.
+      x-farmish-rate-limit: sensitive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUploadUrlRequest"
+      responses:
+        "200":
+          description: The presigned upload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaUpload"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/TooManyRequests"
 components:
@@ -1068,6 +1101,52 @@ components:
           type: array
           items:
             type: string
+    CreateUploadUrlRequest:
+      type: object
+      additionalProperties: false
+      required: [purpose, contentType, sizeBytes]
+      properties:
+        purpose:
+          type: string
+          enum: [listing_image]
+        contentType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 5242880
+          description: Exact byte length of the upload (max 5 MB).
+    MediaUpload:
+      type: object
+      description: A presigned upload plus the tracked object id.
+      required: [mediaId, uploadUrl, method, headers, expiresAt, publicUrl]
+      properties:
+        mediaId:
+          type: string
+          format: uuid
+          description: Pass this to the listing endpoint when the image is attached.
+        uploadUrl:
+          type: string
+          description: Presigned PUT URL. A secret for 10 minutes; do not log.
+        method:
+          type: string
+          enum: [PUT]
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: Headers the client must send exactly (Content-Type, Content-Length).
+          examples:
+            - Content-Type: image/jpeg
+              Content-Length: "204800"
+        expiresAt:
+          type: string
+          format: date-time
+        publicUrl:
+          type: string
+          description: Where the object is served from once uploaded.
     Money:
       type: object
       description: An amount of money in the smallest currency unit (pesewas).
