@@ -42,8 +42,31 @@ services:
       timeout: 3s
       retries: 60
 
+  # Local stand-in for Cloudflare R2 (S3-compatible): media uploads in dev
+  # and tests. Dev credentials only. rustfs replaced minio/minio because the
+  # latter is no longer pullable (ADR-0016).
+  rustfs:
+    image: rustfs/rustfs:1.0.0-alpha.44
+    # The image's entrypoint execs its command verbatim, so the binary is
+    # part of the command line.
+    command: ["/usr/bin/rustfs", "/data"]
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ACCESS_KEY: farmish
+      RUSTFS_SECRET_KEY: farmish-secret
+    ports:
+      - "127.0.0.1:${FARMISH_S3_PORT:-9000}:9000"
+    volumes:
+      - s3data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9000/ >/dev/null 2>&1"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
 volumes:
   pgdata18:
+  s3data:
 
 networks:
   default:

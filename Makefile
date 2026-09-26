@@ -20,13 +20,15 @@ TEST_DATABASE_URL ?= postgres://farmish:farmish@127.0.0.1:$(or $(FARMISH_PG_PORT
 TEST_AUTH_EMULATOR_HOST ?= 127.0.0.1:$(or $(FARMISH_AUTH_EMULATOR_PORT),9099)
 # Local Redis from docker-compose (tests never touch Upstash).
 TEST_REDIS_URL ?= redis://127.0.0.1:$(or $(FARMISH_REDIS_PORT),63790)
+# Local S3 (rustfs) from docker-compose, a stand-in for Cloudflare R2.
+TEST_S3_ENDPOINT ?= http://127.0.0.1:$(or $(FARMISH_S3_PORT),9000)
 REDOCLY   := docker run --rm -u $$(id -u):$$(id -g) -v $(CURDIR):/spec -w /spec redocly/cli:$(REDOCLY_VERSION)
 SQLC      := docker run --rm -u $$(id -u):$$(id -g) -v $(CURDIR):/src -w /src sqlc/sqlc:$(SQLC_VERSION)
 
 .DEFAULT_GOAL := help
 .PHONY: help run build test lint fmt fmt-check tidy tidy-check vuln docker-build smoke ci tools \
         db-up db-down db-reset migrate-up migrate-down migrate-version migrate-new sqlc sqlc-check \
-        generate generate-check api-lint auth-up redis-up grant-admin revoke-admin
+        generate generate-check api-lint auth-up redis-up rustfs-up grant-admin revoke-admin
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n",$$1,$$2}'
@@ -37,10 +39,11 @@ run: ## Run the API locally (loads $(ENV_FILE))
 build: ## Build a static binary to bin/api
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BIN_DIR)/api ./cmd/api
 
-test: db-up auth-up redis-up ## Run all tests (incl. DB, Auth emulator and Redis tests) with the race detector
+test: db-up auth-up redis-up rustfs-up ## Run all tests (incl. DB, Auth emulator, Redis and S3 tests) with the race detector
 	TEST_DATABASE_URL='$(TEST_DATABASE_URL)' DBTEST_REQUIRED=1 \
 	FIREBASE_AUTH_EMULATOR_HOST='$(TEST_AUTH_EMULATOR_HOST)' AUTHTEST_REQUIRED=1 \
 	REDIS_TEST_URL='$(TEST_REDIS_URL)' REDISTEST_REQUIRED=1 \
+	MEDIA_TEST_S3_ENDPOINT='$(TEST_S3_ENDPOINT)' MEDIA_TEST_S3_REQUIRED=1 \
 	go test -race -count=1 ./...
 
 lint: $(GOLANGCI) ## Run go vet and golangci-lint
@@ -73,6 +76,9 @@ db-up: ## Start compose Postgres and wait until healthy
 
 redis-up: ## Start local Redis (127.0.0.1:63790), a stand-in for Upstash
 	docker compose up -d --wait redis
+
+rustfs-up: ## Start local S3 (127.0.0.1:9000), a stand-in for Cloudflare R2
+	docker compose up -d --wait rustfs
 
 auth-up: ## Start the Firebase Auth emulator (127.0.0.1:9099) and wait until healthy
 	docker compose up -d --wait --build firebase-auth

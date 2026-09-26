@@ -97,6 +97,18 @@ type CategoryAttribute struct {
 	UpdatedAt  time.Time
 }
 
+type MediaObject struct {
+	ID          uuid.UUID
+	OwnerID     uuid.UUID
+	Key         string
+	Purpose     string
+	ContentType string
+	SizeBytes   int64
+	Status      string
+	CreatedAt   time.Time
+	AttachedAt  *time.Time
+}
+
 type RiverJob struct {
 	ID           int64
 	State        RiverJobState

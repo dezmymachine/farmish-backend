@@ -11,11 +11,15 @@ import (
 )
 
 type Querier interface {
+	// Marks the object attached, but only while it is still pending.
+	AttachMediaObject(ctx context.Context, id uuid.UUID) (MediaObject, error)
 	CountSellerProfilesByStatus(ctx context.Context, verificationStatus string) (int64, error)
 	DeleteAttribute(ctx context.Context, arg DeleteAttributeParams) (uuid.UUID, error)
+	DeleteMediaObject(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	GetCategoryAttribute(ctx context.Context, arg GetCategoryAttributeParams) (CategoryAttribute, error)
 	GetCategoryByID(ctx context.Context, id uuid.UUID) (Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (Category, error)
+	GetMediaObject(ctx context.Context, id uuid.UUID) (MediaObject, error)
 	// Narrow projection for the public endpoint: never selects id_number_enc.
 	GetPublicSeller(ctx context.Context, userID uuid.UUID) (GetPublicSellerRow, error)
 	GetSellerProfile(ctx context.Context, userID uuid.UUID) (SellerProfile, error)
@@ -27,12 +31,15 @@ type Querier interface {
 	InsertAuditEvent(ctx context.Context, arg InsertAuditEventParams) (AuditEvent, error)
 	// Returns no row when the slug is taken (callers map that to 409).
 	InsertCategory(ctx context.Context, arg InsertCategoryParams) (Category, error)
+	InsertMediaObject(ctx context.Context, arg InsertMediaObjectParams) (MediaObject, error)
 	// Returns no row if a concurrent request created the user first.
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
 	ListActiveCategories(ctx context.Context) ([]Category, error)
 	ListAttributesByCategory(ctx context.Context, categoryID uuid.UUID) ([]CategoryAttribute, error)
 	// Installed Postgres extensions; used by tests to assert migration 000001.
 	ListExtensions(ctx context.Context) ([]string, error)
+	// Cleanup sweep: pending rows older than the cutoff, oldest first.
+	ListPendingMediaBefore(ctx context.Context, arg ListPendingMediaBeforeParams) ([]MediaObject, error)
 	// Admin review queue: oldest submission first.
 	ListSellerProfilesByStatus(ctx context.Context, arg ListSellerProfilesByStatusParams) ([]ListSellerProfilesByStatusRow, error)
 	// Several accounts may share an email (no account linking in v1).
