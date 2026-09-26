@@ -295,14 +295,12 @@ func TestCreateListing_Attributes(t *testing.T) {
 func TestCreateListing_RequiresSellerProfile(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	plain := uuid.New()
 	u, err := users.New(f.pool).Resolve(ctx, auth.Identity{UID: "no-profile", Email: "np@farmish.test", Provider: "password"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	plain = u.ID
 
-	_, err = f.svc.Create(ctx, plain, validInput(), false)
+	_, err = f.svc.Create(ctx, u.ID, validInput(), false)
 	if !errors.Is(err, listings.ErrSellerProfileRequired) {
 		t.Fatalf("err = %v, want ErrSellerProfileRequired", err)
 	}

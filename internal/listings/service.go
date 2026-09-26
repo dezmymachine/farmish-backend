@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"strconv"
@@ -164,6 +165,9 @@ func (s *Service) ListOwn(ctx context.Context, sellerID uuid.UUID, status string
 		if err != nil {
 			return nil, 0, fmt.Errorf("count listing images: %w", err)
 		}
+		if images > math.MaxInt32 {
+			return nil, 0, errors.New("too many images on a listing")
+		}
 		cat, err := s.catalog.Resolved(ctx, r.CategoryID)
 		if err != nil {
 			return nil, 0, err
@@ -171,7 +175,7 @@ func (s *Service) ListOwn(ctx context.Context, sellerID uuid.UUID, status string
 		out = append(out, Summary{
 			ID: r.ID, Title: r.Title, Slug: r.Slug, CategorySlug: cat.Slug,
 			PricePesewas: r.PricePesewas, QuantityAvailable: r.QuantityAvailable,
-			Status: r.Status, ImageCount: int32(images), ViewCount: r.ViewCount,
+			Status: r.Status, ImageCount: int32(images), ViewCount: r.ViewCount, //nolint:gosec // bounded above
 			FavoriteCount: r.FavoriteCount, ExpiresAt: r.ExpiresAt,
 			CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 		})
