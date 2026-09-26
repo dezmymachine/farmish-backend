@@ -67,6 +67,26 @@ type Config struct {
 	// R2 configures media storage. Endpoint is empty for real R2 (built
 	// from AccountID) and points at the local S3 stand-in in dev/test.
 	R2 R2
+	// Paystack configures the payment provider (Phase 13a).
+	Paystack Paystack
+}
+
+// Paystack configures the Paystack API.
+type Paystack struct {
+	// SecretKey authenticates every call and signs webhook verification. It
+	// must never be logged or returned in an error.
+	SecretKey string
+	// PublicKey is for clients only; the backend never calls anything with it.
+	PublicKey string
+	// BaseURL is the API root, overridable so tests point at an httptest
+	// server.
+	BaseURL string
+	// CallbackURL is where Paystack returns the buyer after a payment: the
+	// frontend's payment-status page.
+	CallbackURL string
+	// FeeBps is Paystack's Ghana processing fee in basis points, grossed up
+	// onto the buyer (DOMAIN §2.2). 195 = 1.95%.
+	FeeBps int
 }
 
 // R2 configures Cloudflare R2 (or any S3-compatible endpoint).
@@ -341,6 +361,40 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 			errs = append(errs, fmt.Errorf("R2_ENDPOINT must not be set when APP_ENV=%s (it is for local S3 only)", cfg.Env))
 		}
 	}
+	// Paystack: the key prefix has to match the environment, so a test key can
+	// never reach production and a live key never reaches a dev database.
+	cfg.Paystack = Paystack{
+		SecretKey:   required("PAYSTACK_SECRET_KEY"),
+		PublicKey:   required("PAYSTACK_PUBLIC_KEY"),
+		BaseURL:     "https://api.paystack.co",
+		CallbackURL: required("PAYSTACK_CALLBACK_URL"),
+		FeeBps:      195,
+	}
+	if v := get("PAYSTACK_BASE_URL"); v != "" {
+		cfg.Paystack.BaseURL = strings.TrimRight(v, "/")
+	}
+	wantSecret, wantPublic := "sk_test_", "pk_test_"
+	if deployed {
+		wantSecret, wantPublic = "sk_live_", "pk_live_"
+	}
+	for _, key := range []struct{ name, prefix, value string }{
+		{"PAYSTACK_SECRET_KEY", wantSecret, cfg.Paystack.SecretKey},
+		{"PAYSTACK_PUBLIC_KEY", wantPublic, cfg.Paystack.PublicKey},
+	} {
+		if key.value != "" && !strings.HasPrefix(key.value, key.prefix) {
+			errs = append(errs, fmt.Errorf("%s must start with %s when APP_ENV=%s", key.name, key.prefix, cfg.Env))
+		}
+	}
+	if v := get("PAYSTACK_FEE_BPS"); v != "" {
+		bps, err := strconv.Atoi(v)
+		switch {
+		case err != nil || bps < 0 || bps > 1000:
+			errs = append(errs, fmt.Errorf("PAYSTACK_FEE_BPS must be a basis-point rate between 0 and 1000, got %q", v))
+		default:
+			cfg.Paystack.FeeBps = bps
+		}
+	}
+
 	if cfg.Firebase.EmulatorHost != "" && deployed {
 		// Emulator mode skips token signature checks: never allow it when deployed.
 		errs = append(errs, fmt.Errorf("FIREBASE_AUTH_EMULATOR_HOST must not be set when APP_ENV=%s", cfg.Env))

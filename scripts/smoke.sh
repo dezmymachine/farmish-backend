@@ -48,6 +48,8 @@ docker create --name "$name" -p "127.0.0.1:${port}:8080" \
   -e APP_ENV=test -e CORS_ORIGINS=http://localhost:3000 -e DATABASE_URL="$db_url" \
   -e FIREBASE_PROJECT_ID=demo-farmish -e FIREBASE_AUTH_EMULATOR_HOST=firebase-auth:9099 \
   -e TURNSTILE_SECRET=1x0000000000000000000000000000000AA -e REDIS_URL=redis://redis:6379 \
+  -e PAYSTACK_SECRET_KEY=sk_test_smoke -e PAYSTACK_PUBLIC_KEY=pk_test_smoke \
+  -e PAYSTACK_CALLBACK_URL=https://farmish.gh/payments/status \
   -e DATA_ENCRYPTION_KEY=9MkjfhxyTr/ApaqBuztKBSrbWYo6kr/wIcg5/RfbmUs= "$image" >/dev/null
 docker network connect "$net" "$name"
 docker start "$name" >/dev/null

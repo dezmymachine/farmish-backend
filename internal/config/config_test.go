@@ -15,14 +15,26 @@ func lookup(m map[string]string) func(string) (string, bool) {
 	}
 }
 
+// paystackKey returns a key with the prefix the environment demands, so a test
+// case that only cares about something else doesn't trip the prefix rule.
+func paystackKey(env, prefix string) string {
+	if env == "production" || env == "staging" {
+		return prefix + "_live_0123456789abcdef"
+	}
+	return prefix + "_test_0123456789abcdef"
+}
+
 func TestFromLookup_Defaults(t *testing.T) {
 	cfg, err := FromLookup(lookup(map[string]string{
-		"APP_ENV":             "development",
-		"CORS_ORIGINS":        "http://localhost:3000, https://farmish.gh/",
-		"DATABASE_URL":        "postgres://u:p@localhost:5432/farmish",
-		"FIREBASE_PROJECT_ID": "farmish-dev",
-		"TURNSTILE_SECRET":    "1x0000000000000000000000000000000AA",
-		"DATA_ENCRYPTION_KEY": DevDataEncryptionKey,
+		"APP_ENV":               "development",
+		"CORS_ORIGINS":          "http://localhost:3000, https://farmish.gh/",
+		"DATABASE_URL":          "postgres://u:p@localhost:5432/farmish",
+		"FIREBASE_PROJECT_ID":   "farmish-dev",
+		"TURNSTILE_SECRET":      "1x0000000000000000000000000000000AA",
+		"DATA_ENCRYPTION_KEY":   DevDataEncryptionKey,
+		"PAYSTACK_SECRET_KEY":   "sk_test_0123456789abcdef",
+		"PAYSTACK_PUBLIC_KEY":   "pk_test_0123456789abcdef",
+		"PAYSTACK_CALLBACK_URL": "https://farmish.gh/payments/status",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -58,6 +70,9 @@ func TestFromLookup_Overrides(t *testing.T) {
 		"DATA_ENCRYPTION_KEY":       "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
 		"TRUSTED_PROXIES":           "10.0.0.0/8, 100.64.0.1/10",
 		"TRUST_CLOUDFLARE":          "true",
+		"PAYSTACK_SECRET_KEY":       "sk_live_0123456789abcdef",
+		"PAYSTACK_PUBLIC_KEY":       "pk_live_0123456789abcdef",
+		"PAYSTACK_CALLBACK_URL":     "https://farmish.gh/payments/status",
 	}, r2())))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -109,12 +124,15 @@ func TestFromLookup_Invalid(t *testing.T) {
 
 func base(extra map[string]string) map[string]string {
 	m := map[string]string{
-		"APP_ENV":             "development",
-		"CORS_ORIGINS":        "https://farmish.gh",
-		"DATABASE_URL":        "postgres://x",
-		"FIREBASE_PROJECT_ID": "farmish-dev",
-		"TURNSTILE_SECRET":    "1x0000000000000000000000000000000AA",
-		"DATA_ENCRYPTION_KEY": DevDataEncryptionKey,
+		"APP_ENV":               "development",
+		"CORS_ORIGINS":          "https://farmish.gh",
+		"DATABASE_URL":          "postgres://x",
+		"FIREBASE_PROJECT_ID":   "farmish-dev",
+		"TURNSTILE_SECRET":      "1x0000000000000000000000000000000AA",
+		"PAYSTACK_SECRET_KEY":   "sk_test_0123456789abcdef",
+		"PAYSTACK_PUBLIC_KEY":   "pk_test_0123456789abcdef",
+		"PAYSTACK_CALLBACK_URL": "https://farmish.gh/payments/status",
+		"DATA_ENCRYPTION_KEY":   DevDataEncryptionKey,
 	}
 	for k, v := range extra {
 		if v == "" {
@@ -263,7 +281,10 @@ func TestConfig_DataEncryptionKey(t *testing.T) {
 		t.Fatalf("dev key in development: %v", err)
 	}
 	for _, env := range []string{"staging", "production"} {
-		extra := merge(r2(), map[string]string{"APP_ENV": env, "FIREBASE_CREDENTIALS_JSON": saJSON, "TURNSTILE_SECRET": "0x4real"})
+		extra := merge(r2(), map[string]string{
+			"APP_ENV": env, "FIREBASE_CREDENTIALS_JSON": saJSON, "TURNSTILE_SECRET": "0x4real",
+			"PAYSTACK_SECRET_KEY": paystackKey(env, "sk"), "PAYSTACK_PUBLIC_KEY": paystackKey(env, "pk"),
+		})
 		if _, err := FromLookup(lookup(base(extra))); err == nil ||
 			!strings.Contains(err.Error(), "dev key") {
 			t.Fatalf("%s with dev key: err = %v", env, err)
@@ -301,6 +322,7 @@ func TestConfig_R2(t *testing.T) {
 	// Required when deployed.
 	prod := map[string]string{
 		"APP_ENV": "production", "FIREBASE_CREDENTIALS_JSON": saJSON, "TURNSTILE_SECRET": "0x4real",
+		"PAYSTACK_SECRET_KEY": "sk_live_0123456789abcdef", "PAYSTACK_PUBLIC_KEY": "pk_live_0123456789abcdef",
 		"DATA_ENCRYPTION_KEY": "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
 	}
 	_, err = FromLookup(lookup(base(prod)))
@@ -313,6 +335,7 @@ func TestConfig_R2(t *testing.T) {
 	// R2_ENDPOINT is for local S3 only.
 	cfg, err = FromLookup(lookup(base(map[string]string{
 		"APP_ENV": "production", "FIREBASE_CREDENTIALS_JSON": saJSON, "TURNSTILE_SECRET": "0x4real",
+		"PAYSTACK_SECRET_KEY": "sk_live_0123456789abcdef", "PAYSTACK_PUBLIC_KEY": "pk_live_0123456789abcdef",
 		"DATA_ENCRYPTION_KEY": "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
 		"R2_ENDPOINT":         "http://127.0.0.1:9000",
 	})))
@@ -350,7 +373,10 @@ func TestRedisURL(t *testing.T) {
 		merge(r2(), map[string]string{
 			"REDIS_URL": "rediss://default:tok@x.upstash.io:6379", "APP_ENV": "production",
 			"FIREBASE_CREDENTIALS_JSON": saJSON, "TURNSTILE_SECRET": "0x4real",
-			"DATA_ENCRYPTION_KEY": "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
+			"DATA_ENCRYPTION_KEY":   "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
+			"PAYSTACK_SECRET_KEY":   "sk_live_0123456789abcdef",
+			"PAYSTACK_PUBLIC_KEY":   "pk_live_0123456789abcdef",
+			"PAYSTACK_CALLBACK_URL": "https://farmish.gh/payments/status",
 		}),
 	} {
 		if _, err := FromLookup(lookup(base(ok))); err != nil {
@@ -372,4 +398,108 @@ func TestRedisURL(t *testing.T) {
 			t.Error("error leaks the Redis password")
 		}
 	}
+}
+
+// TestConfig_PaystackKeys covers the environment/prefix rules: a test key can
+// never be configured when deployed, and a live key can never reach a
+// development database.
+func TestConfig_PaystackKeys(t *testing.T) {
+	deployed := func(extra map[string]string) map[string]string {
+		// The test's own keys win over the deployed defaults, so merge puts the
+		// defaults first.
+		return merge(map[string]string{
+			"APP_ENV": "production", "CORS_ORIGINS": "https://farmish.gh",
+			"DATABASE_URL":              "postgres://x",
+			"FIREBASE_CREDENTIALS_JSON": `{"type":"service_account","project_id":"farmish-prod"}`,
+			"FIREBASE_PROJECT_ID":       "farmish-prod",
+			"TURNSTILE_SECRET":          "0x4real",
+			"DATA_ENCRYPTION_KEY":       "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
+			"PAYSTACK_SECRET_KEY":       "sk_live_x",
+			"PAYSTACK_PUBLIC_KEY":       "pk_live_x",
+			"PAYSTACK_CALLBACK_URL":     "https://farmish.gh/payments/status",
+			"R2_ACCOUNT_ID":             "acct",
+			"R2_ACCESS_KEY_ID":          "ak",
+			"R2_SECRET_ACCESS_KEY":      "sk",
+			"R2_BUCKET":                 "farmish",
+			"R2_PUBLIC_BASE_URL":        "https://media.farmish.gh",
+		}, extra)
+	}
+
+	t.Run("defaults", func(t *testing.T) {
+		cfg, err := FromLookup(lookup(base(nil)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.Paystack.BaseURL != "https://api.paystack.co" {
+			t.Errorf("BaseURL = %q, want the Paystack API root", cfg.Paystack.BaseURL)
+		}
+		if cfg.Paystack.FeeBps != 195 {
+			t.Errorf("FeeBps = %d, want 195 (1.95%%, DOMAIN §2.2)", cfg.Paystack.FeeBps)
+		}
+		if cfg.Paystack.CallbackURL != "https://farmish.gh/payments/status" {
+			t.Errorf("CallbackURL = %q", cfg.Paystack.CallbackURL)
+		}
+	})
+
+	t.Run("base url override drops a trailing slash", func(t *testing.T) {
+		cfg, err := FromLookup(lookup(base(map[string]string{
+			"PAYSTACK_BASE_URL": "http://127.0.0.1:9999/",
+		})))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.Paystack.BaseURL != "http://127.0.0.1:9999" {
+			t.Errorf("BaseURL = %q, want no trailing slash", cfg.Paystack.BaseURL)
+		}
+	})
+
+	for _, tt := range []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{"missing secret", map[string]string{"PAYSTACK_SECRET_KEY": ""}, "PAYSTACK_SECRET_KEY is required"},
+		{"missing public key", map[string]string{"PAYSTACK_PUBLIC_KEY": ""}, "PAYSTACK_PUBLIC_KEY is required"},
+		{"missing callback", map[string]string{"PAYSTACK_CALLBACK_URL": ""}, "PAYSTACK_CALLBACK_URL is required"},
+		{"live key in development", map[string]string{"PAYSTACK_SECRET_KEY": "sk_live_x"}, "must start with sk_test_"},
+		{"live public key in development", map[string]string{"PAYSTACK_PUBLIC_KEY": "pk_live_x"}, "must start with pk_test_"},
+		{"fee above the range", map[string]string{"PAYSTACK_FEE_BPS": "1001"}, "PAYSTACK_FEE_BPS must be"},
+		{"negative fee", map[string]string{"PAYSTACK_FEE_BPS": "-1"}, "PAYSTACK_FEE_BPS must be"},
+		{"fee not a number", map[string]string{"PAYSTACK_FEE_BPS": "1.95"}, "PAYSTACK_FEE_BPS must be"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := FromLookup(lookup(base(tt.env)))
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err = %v, want it to mention %q", err, tt.want)
+			}
+		})
+	}
+
+	t.Run("a zero fee is allowed", func(t *testing.T) {
+		cfg, err := FromLookup(lookup(base(map[string]string{"PAYSTACK_FEE_BPS": "0"})))
+		if err != nil || cfg.Paystack.FeeBps != 0 {
+			t.Fatalf("FeeBps = %d, %v; want 0 and no error", cfg.Paystack.FeeBps, err)
+		}
+	})
+
+	t.Run("deployed refuses test keys", func(t *testing.T) {
+		_, err := FromLookup(lookup(deployed(map[string]string{
+			"PAYSTACK_SECRET_KEY": "sk_test_x", "PAYSTACK_PUBLIC_KEY": "pk_test_x",
+		})))
+		if err == nil || !strings.Contains(err.Error(), "must start with sk_live_") {
+			t.Fatalf("err = %v, want the sk_live_ rule", err)
+		}
+	})
+
+	t.Run("deployed accepts live keys", func(t *testing.T) {
+		cfg, err := FromLookup(lookup(deployed(map[string]string{
+			"PAYSTACK_SECRET_KEY": "sk_live_x", "PAYSTACK_PUBLIC_KEY": "pk_live_x",
+		})))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.Paystack.SecretKey != "sk_live_x" {
+			t.Errorf("SecretKey = %q", cfg.Paystack.SecretKey)
+		}
+	})
 }
