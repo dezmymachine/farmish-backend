@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/dezmymachine/farmish-backend/internal/auth"
+	"github.com/dezmymachine/farmish-backend/internal/catalog"
 	"github.com/dezmymachine/farmish-backend/internal/config"
 	"github.com/dezmymachine/farmish-backend/internal/crypto"
 	"github.com/dezmymachine/farmish-backend/internal/database"
@@ -161,6 +162,7 @@ func run() error {
 			Verifier:      firebase,
 			Users:         users.New(pool),
 			Sellers:       sellers.New(pool, crypter, firebase),
+			Catalog:       catalog.New(pool),
 			Turnstile:     turnstile.New(cfg.TurnstileSecret),
 			IPLimiter:     ipLimiter,
 			SharedLimiter: shared,

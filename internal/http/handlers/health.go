@@ -33,6 +33,7 @@ type Server struct {
 	DB      Pinger
 	Users   UserStore
 	Sellers SellerStore
+	Catalog CatalogStore
 }
 
 var _ api.StrictServerInterface = Server{}

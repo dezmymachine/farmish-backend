@@ -22,6 +22,114 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for CategoryAttributeType.
+const (
+	CategoryAttributeTypeBoolean CategoryAttributeType = "boolean"
+	CategoryAttributeTypeDate    CategoryAttributeType = "date"
+	CategoryAttributeTypeNumber  CategoryAttributeType = "number"
+	CategoryAttributeTypeSelect  CategoryAttributeType = "select"
+	CategoryAttributeTypeText    CategoryAttributeType = "text"
+)
+
+// Valid indicates whether the value is a known member of the CategoryAttributeType enum.
+func (e CategoryAttributeType) Valid() bool {
+	switch e {
+	case CategoryAttributeTypeBoolean:
+		return true
+	case CategoryAttributeTypeDate:
+		return true
+	case CategoryAttributeTypeNumber:
+		return true
+	case CategoryAttributeTypeSelect:
+		return true
+	case CategoryAttributeTypeText:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CategoryDetailGroup.
+const (
+	CategoryDetailGroupEquipment CategoryDetailGroup = "equipment"
+	CategoryDetailGroupLand      CategoryDetailGroup = "land"
+	CategoryDetailGroupLivestock CategoryDetailGroup = "livestock"
+	CategoryDetailGroupQuality   CategoryDetailGroup = "quality"
+	CategoryDetailGroupService   CategoryDetailGroup = "service"
+)
+
+// Valid indicates whether the value is a known member of the CategoryDetailGroup enum.
+func (e CategoryDetailGroup) Valid() bool {
+	switch e {
+	case CategoryDetailGroupEquipment:
+		return true
+	case CategoryDetailGroupLand:
+		return true
+	case CategoryDetailGroupLivestock:
+		return true
+	case CategoryDetailGroupQuality:
+		return true
+	case CategoryDetailGroupService:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateAttributeRequestType.
+const (
+	CreateAttributeRequestTypeBoolean CreateAttributeRequestType = "boolean"
+	CreateAttributeRequestTypeDate    CreateAttributeRequestType = "date"
+	CreateAttributeRequestTypeNumber  CreateAttributeRequestType = "number"
+	CreateAttributeRequestTypeSelect  CreateAttributeRequestType = "select"
+	CreateAttributeRequestTypeText    CreateAttributeRequestType = "text"
+)
+
+// Valid indicates whether the value is a known member of the CreateAttributeRequestType enum.
+func (e CreateAttributeRequestType) Valid() bool {
+	switch e {
+	case CreateAttributeRequestTypeBoolean:
+		return true
+	case CreateAttributeRequestTypeDate:
+		return true
+	case CreateAttributeRequestTypeNumber:
+		return true
+	case CreateAttributeRequestTypeSelect:
+		return true
+	case CreateAttributeRequestTypeText:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateCategoryRequestListingGroup.
+const (
+	CreateCategoryRequestListingGroupEquipment CreateCategoryRequestListingGroup = "equipment"
+	CreateCategoryRequestListingGroupLand      CreateCategoryRequestListingGroup = "land"
+	CreateCategoryRequestListingGroupLivestock CreateCategoryRequestListingGroup = "livestock"
+	CreateCategoryRequestListingGroupQuality   CreateCategoryRequestListingGroup = "quality"
+	CreateCategoryRequestListingGroupService   CreateCategoryRequestListingGroup = "service"
+)
+
+// Valid indicates whether the value is a known member of the CreateCategoryRequestListingGroup enum.
+func (e CreateCategoryRequestListingGroup) Valid() bool {
+	switch e {
+	case CreateCategoryRequestListingGroupEquipment:
+		return true
+	case CreateCategoryRequestListingGroupLand:
+		return true
+	case CreateCategoryRequestListingGroupLivestock:
+		return true
+	case CreateCategoryRequestListingGroupQuality:
+		return true
+	case CreateCategoryRequestListingGroupService:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ErrorDetailLocation.
 const (
 	ErrorDetailLocationBody   ErrorDetailLocation = "body"
@@ -298,6 +406,33 @@ func (e SellerProfileInputRegion) Valid() bool {
 	}
 }
 
+// Defines values for UpdateAttributeRequestType.
+const (
+	UpdateAttributeRequestTypeBoolean UpdateAttributeRequestType = "boolean"
+	UpdateAttributeRequestTypeDate    UpdateAttributeRequestType = "date"
+	UpdateAttributeRequestTypeNumber  UpdateAttributeRequestType = "number"
+	UpdateAttributeRequestTypeSelect  UpdateAttributeRequestType = "select"
+	UpdateAttributeRequestTypeText    UpdateAttributeRequestType = "text"
+)
+
+// Valid indicates whether the value is a known member of the UpdateAttributeRequestType enum.
+func (e UpdateAttributeRequestType) Valid() bool {
+	switch e {
+	case UpdateAttributeRequestTypeBoolean:
+		return true
+	case UpdateAttributeRequestTypeDate:
+		return true
+	case UpdateAttributeRequestTypeNumber:
+		return true
+	case UpdateAttributeRequestTypeSelect:
+		return true
+	case UpdateAttributeRequestTypeText:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for VerifySellerRequestDecision.
 const (
 	VerifySellerRequestDecisionApprove VerifySellerRequestDecision = "approve"
@@ -339,6 +474,80 @@ func (e ListAdminSellersParamsStatus) Valid() bool {
 		return false
 	}
 }
+
+// CategoryAttribute An attribute definition. The id addresses it in the admin attribute endpoints.
+type CategoryAttribute struct {
+	Id       openapi_types.UUID    `json:"id"`
+	Key      string                `json:"key"`
+	Label    string                `json:"label"`
+	Options  []string              `json:"options"`
+	Required bool                  `json:"required"`
+	Type     CategoryAttributeType `json:"type"`
+}
+
+// CategoryAttributeType defines model for CategoryAttribute.Type.
+type CategoryAttributeType string
+
+// CategoryDetail One category. For a child, group, item states, units and attributes resolve through the parent.
+type CategoryDetail struct {
+	Attributes []CategoryAttribute `json:"attributes"`
+	Group      CategoryDetailGroup `json:"group"`
+	Icon       *string             `json:"icon,omitempty"`
+	Id         openapi_types.UUID  `json:"id"`
+	ItemStates []string            `json:"itemStates"`
+	Name       string              `json:"name"`
+	Parent     *struct {
+		Id   openapi_types.UUID `json:"id"`
+		Name string             `json:"name"`
+		Slug string             `json:"slug"`
+	} `json:"parent"`
+	Slug  string   `json:"slug"`
+	Units []string `json:"units"`
+}
+
+// CategoryDetailGroup defines model for CategoryDetail.Group.
+type CategoryDetailGroup string
+
+// CategoryList defines model for CategoryList.
+type CategoryList struct {
+	Items []CategoryNode `json:"items"`
+}
+
+// CategoryNode One tree node. Children carry an empty children array.
+type CategoryNode struct {
+	Children  []CategoryNode     `json:"children"`
+	Icon      *string            `json:"icon,omitempty"`
+	Id        openapi_types.UUID `json:"id"`
+	Name      string             `json:"name"`
+	Slug      string             `json:"slug"`
+	SortOrder int32              `json:"sortOrder"`
+}
+
+// CreateAttributeRequest defines model for CreateAttributeRequest.
+type CreateAttributeRequest struct {
+	Key       string                     `json:"key"`
+	Label     string                     `json:"label"`
+	Options   *[]string                  `json:"options,omitempty"`
+	Required  *bool                      `json:"required,omitempty"`
+	SortOrder *int32                     `json:"sortOrder,omitempty"`
+	Type      CreateAttributeRequestType `json:"type"`
+}
+
+// CreateAttributeRequestType defines model for CreateAttributeRequest.Type.
+type CreateAttributeRequestType string
+
+// CreateCategoryRequest defines model for CreateCategoryRequest.
+type CreateCategoryRequest struct {
+	Icon         *string                            `json:"icon,omitempty"`
+	ListingGroup *CreateCategoryRequestListingGroup `json:"listingGroup,omitempty"`
+	Name         string                             `json:"name"`
+	ParentId     *openapi_types.UUID                `json:"parentId,omitempty"`
+	Slug         *string                            `json:"slug,omitempty"`
+	SortOrder    *int32                             `json:"sortOrder,omitempty"`
+}
+
+// CreateCategoryRequestListingGroup defines model for CreateCategoryRequest.ListingGroup.
+type CreateCategoryRequestListingGroup string
 
 // Error The single error envelope used by every endpoint.
 type Error struct {
@@ -389,6 +598,11 @@ type HealthStatus struct {
 
 // HealthStatusStatus defines model for HealthStatus.Status.
 type HealthStatusStatus string
+
+// Locations defines model for Locations.
+type Locations struct {
+	Regions []RegionDistricts `json:"regions"`
+}
 
 // Me The signed-in user's own view of their account. Never returned for other users.
 type Me struct {
@@ -450,6 +664,12 @@ type PublicSeller struct {
 
 	// Verified True when the seller is verified.
 	Verified bool `json:"verified"`
+}
+
+// RegionDistricts defines model for RegionDistricts.
+type RegionDistricts struct {
+	Districts []string `json:"districts"`
+	Name      string   `json:"name"`
 }
 
 // SellerProfile The owner's view of their seller profile. Never contains the ID number, only its last 4.
@@ -533,6 +753,26 @@ type SellerProfileInputIdType string
 // SellerProfileInputRegion defines model for SellerProfileInput.Region.
 type SellerProfileInputRegion string
 
+// UpdateAttributeRequest defines model for UpdateAttributeRequest.
+type UpdateAttributeRequest struct {
+	Label     *string                     `json:"label,omitempty"`
+	Options   *[]string                   `json:"options,omitempty"`
+	Required  *bool                       `json:"required,omitempty"`
+	SortOrder *int32                      `json:"sortOrder,omitempty"`
+	Type      *UpdateAttributeRequestType `json:"type,omitempty"`
+}
+
+// UpdateAttributeRequestType defines model for UpdateAttributeRequest.Type.
+type UpdateAttributeRequestType string
+
+// UpdateCategoryRequest defines model for UpdateCategoryRequest.
+type UpdateCategoryRequest struct {
+	Icon      *string `json:"icon,omitempty"`
+	IsActive  *bool   `json:"isActive,omitempty"`
+	Name      *string `json:"name,omitempty"`
+	SortOrder *int32  `json:"sortOrder,omitempty"`
+}
+
 // UpdateMeRequest defines model for UpdateMeRequest.
 type UpdateMeRequest struct {
 	// DisplayName Leading/trailing whitespace is trimmed; must contain a non-space character.
@@ -594,6 +834,18 @@ type ListAdminSellersParams struct {
 // ListAdminSellersParamsStatus defines parameters for ListAdminSellers.
 type ListAdminSellersParamsStatus string
 
+// CreateCategoryJSONRequestBody defines body for CreateCategory for application/json ContentType.
+type CreateCategoryJSONRequestBody = CreateCategoryRequest
+
+// UpdateCategoryJSONRequestBody defines body for UpdateCategory for application/json ContentType.
+type UpdateCategoryJSONRequestBody = UpdateCategoryRequest
+
+// CreateCategoryAttributeJSONRequestBody defines body for CreateCategoryAttribute for application/json ContentType.
+type CreateCategoryAttributeJSONRequestBody = CreateAttributeRequest
+
+// UpdateCategoryAttributeJSONRequestBody defines body for UpdateCategoryAttribute for application/json ContentType.
+type UpdateCategoryAttributeJSONRequestBody = UpdateAttributeRequest
+
 // VerifySellerJSONRequestBody defines body for VerifySeller for application/json ContentType.
 type VerifySellerJSONRequestBody = VerifySellerRequest
 
@@ -611,12 +863,36 @@ type ServerInterface interface {
 	// GetReadyz Readiness probe
 	// (GET /readyz)
 	GetReadyz(c *gin.Context)
+	// CreateCategory Create a category
+	// (POST /v1/admin/categories)
+	CreateCategory(c *gin.Context)
+	// UpdateCategory Edit a category
+	// (PATCH /v1/admin/categories/{id})
+	UpdateCategory(c *gin.Context, id openapi_types.UUID)
+	// CreateCategoryAttribute Add an attribute to a category
+	// (POST /v1/admin/categories/{id}/attributes)
+	CreateCategoryAttribute(c *gin.Context, id openapi_types.UUID)
+	// DeleteCategoryAttribute Delete an attribute
+	// (DELETE /v1/admin/categories/{id}/attributes/{attributeId})
+	DeleteCategoryAttribute(c *gin.Context, id openapi_types.UUID, attributeId openapi_types.UUID)
+	// UpdateCategoryAttribute Edit an attribute
+	// (PATCH /v1/admin/categories/{id}/attributes/{attributeId})
+	UpdateCategoryAttribute(c *gin.Context, id openapi_types.UUID, attributeId openapi_types.UUID)
 	// ListAdminSellers List seller profiles by verification status
 	// (GET /v1/admin/sellers)
 	ListAdminSellers(c *gin.Context, params ListAdminSellersParams)
 	// VerifySeller Approve or reject a seller
 	// (POST /v1/admin/sellers/{userId}/verification)
 	VerifySeller(c *gin.Context, userId openapi_types.UUID)
+	// ListCategories List the category tree
+	// (GET /v1/categories)
+	ListCategories(c *gin.Context)
+	// GetCategory Get one category
+	// (GET /v1/categories/{slug})
+	GetCategory(c *gin.Context, slug string)
+	// GetLocations List Ghana regions with district suggestions
+	// (GET /v1/locations)
+	GetLocations(c *gin.Context)
 	// GetMe Get my account
 	// (GET /v1/me)
 	GetMe(c *gin.Context)
@@ -667,6 +943,137 @@ func (siw *ServerInterfaceWrapper) GetReadyz(c *gin.Context) {
 	}
 
 	siw.Handler.GetReadyz(c)
+}
+
+// CreateCategory operation middleware
+func (siw *ServerInterfaceWrapper) CreateCategory(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.CreateCategory(c)
+}
+
+// UpdateCategory operation middleware
+func (siw *ServerInterfaceWrapper) UpdateCategory(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.UpdateCategory(c, id)
+}
+
+// CreateCategoryAttribute operation middleware
+func (siw *ServerInterfaceWrapper) CreateCategoryAttribute(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.CreateCategoryAttribute(c, id)
+}
+
+// DeleteCategoryAttribute operation middleware
+func (siw *ServerInterfaceWrapper) DeleteCategoryAttribute(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Path parameter "attributeId" -------------
+	var attributeId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "attributeId", c.Param("attributeId"), &attributeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter attributeId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.DeleteCategoryAttribute(c, id, attributeId)
+}
+
+// UpdateCategoryAttribute operation middleware
+func (siw *ServerInterfaceWrapper) UpdateCategoryAttribute(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Path parameter "attributeId" -------------
+	var attributeId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "attributeId", c.Param("attributeId"), &attributeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter attributeId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.UpdateCategoryAttribute(c, id, attributeId)
 }
 
 // ListAdminSellers operation middleware
@@ -735,6 +1142,57 @@ func (siw *ServerInterfaceWrapper) VerifySeller(c *gin.Context) {
 	}
 
 	siw.Handler.VerifySeller(c, userId)
+}
+
+// ListCategories operation middleware
+func (siw *ServerInterfaceWrapper) ListCategories(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ListCategories(c)
+}
+
+// GetCategory operation middleware
+func (siw *ServerInterfaceWrapper) GetCategory(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", c.Param("slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter slug: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetCategory(c, slug)
+}
+
+// GetLocations operation middleware
+func (siw *ServerInterfaceWrapper) GetLocations(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetLocations(c)
 }
 
 // GetMe operation middleware
@@ -850,6 +1308,14 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.GET(options.BaseURL+"/v1/sellers/:userId", wrapper.GetPublicSeller)
 	router.GET(options.BaseURL+"/v1/admin/sellers", wrapper.ListAdminSellers)
 	router.POST(options.BaseURL+"/v1/admin/sellers/:userId/verification", wrapper.VerifySeller)
+	router.GET(options.BaseURL+"/v1/categories", wrapper.ListCategories)
+	router.GET(options.BaseURL+"/v1/categories/:slug", wrapper.GetCategory)
+	router.GET(options.BaseURL+"/v1/locations", wrapper.GetLocations)
+	router.POST(options.BaseURL+"/v1/admin/categories", wrapper.CreateCategory)
+	router.PATCH(options.BaseURL+"/v1/admin/categories/:id", wrapper.UpdateCategory)
+	router.POST(options.BaseURL+"/v1/admin/categories/:id/attributes", wrapper.CreateCategoryAttribute)
+	router.DELETE(options.BaseURL+"/v1/admin/categories/:id/attributes/:attributeId", wrapper.DeleteCategoryAttribute)
+	router.PATCH(options.BaseURL+"/v1/admin/categories/:id/attributes/:attributeId", wrapper.UpdateCategoryAttribute)
 }
 
 type BadRequestJSONResponse Error
@@ -930,6 +1396,525 @@ func (response GetReadyz503JSONResponse) VisitGetReadyzResponse(w http.ResponseW
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCategoryRequestObject struct {
+	Body *CreateCategoryJSONRequestBody
+}
+
+type CreateCategoryResponseObject interface {
+	VisitCreateCategoryResponse(w http.ResponseWriter) error
+}
+
+type CreateCategory201JSONResponse CategoryDetail
+
+func (response CreateCategory201JSONResponse) VisitCreateCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCategory400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CreateCategory400JSONResponse) VisitCreateCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCategory401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateCategory401JSONResponse) VisitCreateCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCategory403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateCategory403JSONResponse) VisitCreateCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCategory409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateCategory409JSONResponse) VisitCreateCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCategory429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response CreateCategory429JSONResponse) VisitCreateCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCategoryRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateCategoryJSONRequestBody
+}
+
+type UpdateCategoryResponseObject interface {
+	VisitUpdateCategoryResponse(w http.ResponseWriter) error
+}
+
+type UpdateCategory200JSONResponse CategoryDetail
+
+func (response UpdateCategory200JSONResponse) VisitUpdateCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCategory400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpdateCategory400JSONResponse) VisitUpdateCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCategory401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateCategory401JSONResponse) VisitUpdateCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCategory403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateCategory403JSONResponse) VisitUpdateCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCategory404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateCategory404JSONResponse) VisitUpdateCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCategory429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response UpdateCategory429JSONResponse) VisitUpdateCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCategoryAttributeRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *CreateCategoryAttributeJSONRequestBody
+}
+
+type CreateCategoryAttributeResponseObject interface {
+	VisitCreateCategoryAttributeResponse(w http.ResponseWriter) error
+}
+
+type CreateCategoryAttribute201JSONResponse CategoryAttribute
+
+func (response CreateCategoryAttribute201JSONResponse) VisitCreateCategoryAttributeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCategoryAttribute400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CreateCategoryAttribute400JSONResponse) VisitCreateCategoryAttributeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCategoryAttribute401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateCategoryAttribute401JSONResponse) VisitCreateCategoryAttributeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCategoryAttribute403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateCategoryAttribute403JSONResponse) VisitCreateCategoryAttributeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCategoryAttribute404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateCategoryAttribute404JSONResponse) VisitCreateCategoryAttributeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCategoryAttribute409JSONResponse struct{ ConflictJSONResponse }
+
+func (response CreateCategoryAttribute409JSONResponse) VisitCreateCategoryAttributeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCategoryAttribute429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response CreateCategoryAttribute429JSONResponse) VisitCreateCategoryAttributeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCategoryAttributeRequestObject struct {
+	Id          openapi_types.UUID `json:"id"`
+	AttributeId openapi_types.UUID `json:"attributeId"`
+}
+
+type DeleteCategoryAttributeResponseObject interface {
+	VisitDeleteCategoryAttributeResponse(w http.ResponseWriter) error
+}
+
+type DeleteCategoryAttribute204Response struct {
+}
+
+func (response DeleteCategoryAttribute204Response) VisitDeleteCategoryAttributeResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteCategoryAttribute401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteCategoryAttribute401JSONResponse) VisitDeleteCategoryAttributeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCategoryAttribute403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteCategoryAttribute403JSONResponse) VisitDeleteCategoryAttributeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCategoryAttribute404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteCategoryAttribute404JSONResponse) VisitDeleteCategoryAttributeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCategoryAttribute429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response DeleteCategoryAttribute429JSONResponse) VisitDeleteCategoryAttributeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCategoryAttributeRequestObject struct {
+	Id          openapi_types.UUID `json:"id"`
+	AttributeId openapi_types.UUID `json:"attributeId"`
+	Body        *UpdateCategoryAttributeJSONRequestBody
+}
+
+type UpdateCategoryAttributeResponseObject interface {
+	VisitUpdateCategoryAttributeResponse(w http.ResponseWriter) error
+}
+
+type UpdateCategoryAttribute200JSONResponse CategoryAttribute
+
+func (response UpdateCategoryAttribute200JSONResponse) VisitUpdateCategoryAttributeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCategoryAttribute400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpdateCategoryAttribute400JSONResponse) VisitUpdateCategoryAttributeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCategoryAttribute401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateCategoryAttribute401JSONResponse) VisitUpdateCategoryAttributeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCategoryAttribute403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateCategoryAttribute403JSONResponse) VisitUpdateCategoryAttributeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCategoryAttribute404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateCategoryAttribute404JSONResponse) VisitUpdateCategoryAttributeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCategoryAttribute429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response UpdateCategoryAttribute429JSONResponse) VisitUpdateCategoryAttributeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1120,6 +2105,192 @@ func (response VerifySeller409JSONResponse) VisitVerifySellerResponse(w http.Res
 type VerifySeller429JSONResponse struct{ TooManyRequestsJSONResponse }
 
 func (response VerifySeller429JSONResponse) VisitVerifySellerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCategoriesRequestObject struct {
+}
+
+type ListCategoriesResponseObject interface {
+	VisitListCategoriesResponse(w http.ResponseWriter) error
+}
+
+type ListCategories200ResponseHeaders struct {
+	CacheControl *string
+}
+
+type ListCategories200JSONResponse struct {
+	Body    CategoryList
+	Headers ListCategories200ResponseHeaders
+}
+
+func (response ListCategories200JSONResponse) VisitListCategoriesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCategories429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response ListCategories429JSONResponse) VisitListCategoriesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCategoryRequestObject struct {
+	Slug string `json:"slug"`
+}
+
+type GetCategoryResponseObject interface {
+	VisitGetCategoryResponse(w http.ResponseWriter) error
+}
+
+type GetCategory200ResponseHeaders struct {
+	CacheControl *string
+}
+
+type GetCategory200JSONResponse struct {
+	Body    CategoryDetail
+	Headers GetCategory200ResponseHeaders
+}
+
+func (response GetCategory200JSONResponse) VisitGetCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCategory404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetCategory404JSONResponse) VisitGetCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCategory429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response GetCategory429JSONResponse) VisitGetCategoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetLocationsRequestObject struct {
+}
+
+type GetLocationsResponseObject interface {
+	VisitGetLocationsResponse(w http.ResponseWriter) error
+}
+
+type GetLocations200ResponseHeaders struct {
+	CacheControl *string
+}
+
+type GetLocations200JSONResponse struct {
+	Body    Locations
+	Headers GetLocations200ResponseHeaders
+}
+
+func (response GetLocations200JSONResponse) VisitGetLocationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetLocations429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response GetLocations429JSONResponse) VisitGetLocationsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -1515,12 +2686,36 @@ type StrictServerInterface interface {
 	// GetReadyz Readiness probe
 	// (GET /readyz)
 	GetReadyz(ctx context.Context, request GetReadyzRequestObject) (GetReadyzResponseObject, error)
+	// CreateCategory Create a category
+	// (POST /v1/admin/categories)
+	CreateCategory(ctx context.Context, request CreateCategoryRequestObject) (CreateCategoryResponseObject, error)
+	// UpdateCategory Edit a category
+	// (PATCH /v1/admin/categories/{id})
+	UpdateCategory(ctx context.Context, request UpdateCategoryRequestObject) (UpdateCategoryResponseObject, error)
+	// CreateCategoryAttribute Add an attribute to a category
+	// (POST /v1/admin/categories/{id}/attributes)
+	CreateCategoryAttribute(ctx context.Context, request CreateCategoryAttributeRequestObject) (CreateCategoryAttributeResponseObject, error)
+	// DeleteCategoryAttribute Delete an attribute
+	// (DELETE /v1/admin/categories/{id}/attributes/{attributeId})
+	DeleteCategoryAttribute(ctx context.Context, request DeleteCategoryAttributeRequestObject) (DeleteCategoryAttributeResponseObject, error)
+	// UpdateCategoryAttribute Edit an attribute
+	// (PATCH /v1/admin/categories/{id}/attributes/{attributeId})
+	UpdateCategoryAttribute(ctx context.Context, request UpdateCategoryAttributeRequestObject) (UpdateCategoryAttributeResponseObject, error)
 	// ListAdminSellers List seller profiles by verification status
 	// (GET /v1/admin/sellers)
 	ListAdminSellers(ctx context.Context, request ListAdminSellersRequestObject) (ListAdminSellersResponseObject, error)
 	// VerifySeller Approve or reject a seller
 	// (POST /v1/admin/sellers/{userId}/verification)
 	VerifySeller(ctx context.Context, request VerifySellerRequestObject) (VerifySellerResponseObject, error)
+	// ListCategories List the category tree
+	// (GET /v1/categories)
+	ListCategories(ctx context.Context, request ListCategoriesRequestObject) (ListCategoriesResponseObject, error)
+	// GetCategory Get one category
+	// (GET /v1/categories/{slug})
+	GetCategory(ctx context.Context, request GetCategoryRequestObject) (GetCategoryResponseObject, error)
+	// GetLocations List Ghana regions with district suggestions
+	// (GET /v1/locations)
+	GetLocations(ctx context.Context, request GetLocationsRequestObject) (GetLocationsResponseObject, error)
 	// GetMe Get my account
 	// (GET /v1/me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
@@ -1643,6 +2838,164 @@ func (sh *strictHandler) GetReadyz(ctx *gin.Context) {
 	}
 }
 
+// CreateCategory operation middleware
+func (sh *strictHandler) CreateCategory(ctx *gin.Context) {
+	var request CreateCategoryRequestObject
+
+	var body CreateCategoryJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateCategory(ctx, request.(CreateCategoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateCategory")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(CreateCategoryResponseObject); ok {
+		if err := validResponse.VisitCreateCategoryResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateCategory operation middleware
+func (sh *strictHandler) UpdateCategory(ctx *gin.Context, id openapi_types.UUID) {
+	var request UpdateCategoryRequestObject
+
+	request.Id = id
+
+	var body UpdateCategoryJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateCategory(ctx, request.(UpdateCategoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateCategory")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(UpdateCategoryResponseObject); ok {
+		if err := validResponse.VisitUpdateCategoryResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateCategoryAttribute operation middleware
+func (sh *strictHandler) CreateCategoryAttribute(ctx *gin.Context, id openapi_types.UUID) {
+	var request CreateCategoryAttributeRequestObject
+
+	request.Id = id
+
+	var body CreateCategoryAttributeJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateCategoryAttribute(ctx, request.(CreateCategoryAttributeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateCategoryAttribute")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(CreateCategoryAttributeResponseObject); ok {
+		if err := validResponse.VisitCreateCategoryAttributeResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteCategoryAttribute operation middleware
+func (sh *strictHandler) DeleteCategoryAttribute(ctx *gin.Context, id openapi_types.UUID, attributeId openapi_types.UUID) {
+	var request DeleteCategoryAttributeRequestObject
+
+	request.Id = id
+	request.AttributeId = attributeId
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteCategoryAttribute(ctx, request.(DeleteCategoryAttributeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteCategoryAttribute")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(DeleteCategoryAttributeResponseObject); ok {
+		if err := validResponse.VisitDeleteCategoryAttributeResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateCategoryAttribute operation middleware
+func (sh *strictHandler) UpdateCategoryAttribute(ctx *gin.Context, id openapi_types.UUID, attributeId openapi_types.UUID) {
+	var request UpdateCategoryAttributeRequestObject
+
+	request.Id = id
+	request.AttributeId = attributeId
+
+	var body UpdateCategoryAttributeJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateCategoryAttribute(ctx, request.(UpdateCategoryAttributeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateCategoryAttribute")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(UpdateCategoryAttributeResponseObject); ok {
+		if err := validResponse.VisitUpdateCategoryAttributeResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListAdminSellers operation middleware
 func (sh *strictHandler) ListAdminSellers(ctx *gin.Context, params ListAdminSellersParams) {
 	var request ListAdminSellersRequestObject
@@ -1695,6 +3048,80 @@ func (sh *strictHandler) VerifySeller(ctx *gin.Context, userId openapi_types.UUI
 		sh.options.HandlerErrorFunc(ctx, err)
 	} else if validResponse, ok := response.(VerifySellerResponseObject); ok {
 		if err := validResponse.VisitVerifySellerResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListCategories operation middleware
+func (sh *strictHandler) ListCategories(ctx *gin.Context) {
+	var request ListCategoriesRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.ListCategories(ctx, request.(ListCategoriesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListCategories")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(ListCategoriesResponseObject); ok {
+		if err := validResponse.VisitListCategoriesResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCategory operation middleware
+func (sh *strictHandler) GetCategory(ctx *gin.Context, slug string) {
+	var request GetCategoryRequestObject
+
+	request.Slug = slug
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCategory(ctx, request.(GetCategoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCategory")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetCategoryResponseObject); ok {
+		if err := validResponse.VisitGetCategoryResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetLocations operation middleware
+func (sh *strictHandler) GetLocations(ctx *gin.Context) {
+	var request GetLocationsRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetLocations(ctx, request.(GetLocationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetLocations")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetLocationsResponseObject); ok {
+		if err := validResponse.VisitGetLocationsResponse(ctx.Writer); err != nil {
 			sh.options.ResponseErrorHandlerFunc(ctx, err)
 		}
 	} else if response != nil {
@@ -1843,80 +3270,100 @@ func (sh *strictHandler) GetPublicSeller(ctx *gin.Context, userId openapi_types.
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"y3hruerKdnVy9b8DAA==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

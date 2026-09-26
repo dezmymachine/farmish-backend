@@ -104,6 +104,8 @@ func (s *Service) Detail(ctx context.Context, slug string) (Detail, error) {
 	if !ok {
 		return Detail{}, fmt.Errorf("category %s has unknown group %q", slug, group)
 	}
+	// Expose the resolved group on the view: children inherit the parent's.
+	c.Group = &group
 	attrs, err := s.resolvedAttributes(ctx, q, c, holder)
 	if err != nil {
 		return Detail{}, err

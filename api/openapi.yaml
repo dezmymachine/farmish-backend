@@ -52,6 +52,8 @@ tags:
     description: The signed-in user's own account.
   - name: sellers
     description: Seller profiles and verification.
+  - name: catalog
+    description: Categories, attributes and Ghana locations.
 paths:
   /healthz:
     get:
@@ -271,6 +273,252 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/categories:
+    get:
+      tags: [catalog]
+      operationId: listCategories
+      summary: List the category tree
+      description: Active parents with their active children, in sort order.
+      security: []
+      responses:
+        "200":
+          description: The category tree.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryList"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/categories/{slug}:
+    get:
+      tags: [catalog]
+      operationId: getCategory
+      summary: Get one category
+      description: Group, item states, units and attributes resolve through the parent for children.
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The category detail.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/locations:
+    get:
+      tags: [catalog]
+      operationId: getLocations
+      summary: List Ghana regions with district suggestions
+      description: The 16 regions with suggested districts (unknown districts are still accepted).
+      security: []
+      responses:
+        "200":
+          description: Regions with district suggestions.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Locations"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/categories:
+    post:
+      tags: [catalog]
+      operationId: createCategory
+      summary: Create a category
+      description: A parent needs a listing group; a child takes its parent's. The slug is generated unless given.
+      x-farmish-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryRequest"
+      responses:
+        "201":
+          description: The created category.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/categories/{id}:
+    patch:
+      tags: [catalog]
+      operationId: updateCategory
+      summary: Edit a category
+      description: Name, icon, sort order and the active flag. The slug and group never change here.
+      x-farmish-role: admin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCategoryRequest"
+      responses:
+        "200":
+          description: The updated category.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/categories/{id}/attributes:
+    post:
+      tags: [catalog]
+      operationId: createCategoryAttribute
+      summary: Add an attribute to a category
+      description: A taken key on the same category gets 409.
+      x-farmish-role: admin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAttributeRequest"
+      responses:
+        "201":
+          description: The created attribute.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryAttribute"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/categories/{id}/attributes/{attributeId}:
+    patch:
+      tags: [catalog]
+      operationId: updateCategoryAttribute
+      summary: Edit an attribute
+      description: Scoped to the category (an attribute of another category reads as missing).
+      x-farmish-role: admin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: attributeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAttributeRequest"
+      responses:
+        "200":
+          description: The updated attribute.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryAttribute"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    delete:
+      tags: [catalog]
+      operationId: deleteCategoryAttribute
+      summary: Delete an attribute
+      x-farmish-role: admin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: attributeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: The attribute is gone.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
 components:
@@ -630,6 +878,196 @@ components:
           type: string
           maxLength: 500
           description: Required when rejecting (1-500 characters).
+    CategoryNode:
+      type: object
+      description: One tree node. Children carry an empty children array.
+      required: [id, name, slug, sortOrder, children]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        icon:
+          type: string
+        sortOrder:
+          type: integer
+          format: int32
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryNode"
+    CategoryList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryNode"
+    CategoryDetail:
+      type: object
+      description: One category. For a child, group, item states, units and attributes resolve through the parent.
+      required: [id, name, slug, parent, group, itemStates, units, attributes]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        icon:
+          type: string
+        parent:
+          type: ["object", "null"]
+          required: [id, name, slug]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            slug:
+              type: string
+        group:
+          type: string
+          enum: [equipment, quality, livestock, land, service]
+        itemStates:
+          type: array
+          items:
+            type: string
+        units:
+          type: array
+          items:
+            type: string
+        attributes:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryAttribute"
+    CategoryAttribute:
+      type: object
+      description: An attribute definition. The id addresses it in the admin attribute endpoints.
+      required: [id, key, label, type, options, required]
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          type: string
+        label:
+          type: string
+        type:
+          type: string
+          enum: [text, number, boolean, select, date]
+        options:
+          type: array
+          items:
+            type: string
+        required:
+          type: boolean
+    CreateCategoryRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        slug:
+          type: string
+          pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+        parentId:
+          type: string
+          format: uuid
+        icon:
+          type: string
+        listingGroup:
+          type: string
+          enum: [equipment, quality, livestock, land, service]
+        sortOrder:
+          type: integer
+          format: int32
+    UpdateCategoryRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        icon:
+          type: string
+        sortOrder:
+          type: integer
+          format: int32
+        isActive:
+          type: boolean
+    CreateAttributeRequest:
+      type: object
+      additionalProperties: false
+      required: [key, label, type]
+      properties:
+        key:
+          type: string
+          pattern: '^[a-z][a-z0-9_]{1,40}$'
+        label:
+          type: string
+          minLength: 1
+          maxLength: 80
+        type:
+          type: string
+          enum: [text, number, boolean, select, date]
+        options:
+          type: array
+          items:
+            type: string
+        required:
+          type: boolean
+        sortOrder:
+          type: integer
+          format: int32
+    UpdateAttributeRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 80
+        type:
+          type: string
+          enum: [text, number, boolean, select, date]
+        options:
+          type: array
+          items:
+            type: string
+        required:
+          type: boolean
+        sortOrder:
+          type: integer
+          format: int32
+    Locations:
+      type: object
+      required: [regions]
+      properties:
+        regions:
+          type: array
+          items:
+            $ref: "#/components/schemas/RegionDistricts"
+    RegionDistricts:
+      type: object
+      required: [name, districts]
+      properties:
+        name:
+          type: string
+        districts:
+          type: array
+          items:
+            type: string
     Money:
       type: object
       description: An amount of money in the smallest currency unit (pesewas).

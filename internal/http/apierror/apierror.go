@@ -14,6 +14,7 @@ const (
 	CodeBadRequest        = "bad_request"
 	CodeValidationFailed  = "validation_failed"
 	CodeInvalidTransition = "invalid_transition"
+	CodeConflict          = "conflict"
 	CodeUnauthorized      = "unauthorized"
 	CodeReauthRequired    = "reauth_required"
 	CodeForbidden         = "forbidden"
