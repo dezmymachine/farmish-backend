@@ -15,6 +15,7 @@ import (
 type Querier interface {
 	// Marks the object attached, but only while it is still pending.
 	AttachMediaObject(ctx context.Context, id uuid.UUID) (MediaObject, error)
+	CompleteWebhookEvent(ctx context.Context, arg CompleteWebhookEventParams) error
 	// A listing's category must be a leaf (or a parent with no children).
 	CountCategoryChildren(ctx context.Context, parentID pgtype.UUID) (int64, error)
 	CountListingImages(ctx context.Context, listingID uuid.UUID) (int64, error)
@@ -41,6 +42,13 @@ type Querier interface {
 	// when the matching show_* flag is true.
 	GetListingContactDetails(ctx context.Context, id uuid.UUID) (GetListingContactDetailsRow, error)
 	GetMediaObject(ctx context.Context, id uuid.UUID) (MediaObject, error)
+	GetPaymentByID(ctx context.Context, id uuid.UUID) (Payment, error)
+	GetPaymentByReference(ctx context.Context, reference string) (Payment, error)
+	// Row-locked. Two webhook deliveries for the same reference must not both
+	// settle the payment, so the handler settles it under this lock.
+	GetPaymentByReferenceForUpdate(ctx context.Context, reference string) (Payment, error)
+	// A buyer retrying after a failed attempt needs to find the earlier rows.
+	GetPaymentsByPurposeRef(ctx context.Context, arg GetPaymentsByPurposeRefParams) ([]Payment, error)
 	// One listing with its category, its active promotion and the seller's safe
 	// profile fields. Never selects contact or identity data. The caller decides
 	// whether the listing is browsable.
@@ -62,8 +70,14 @@ type Querier interface {
 	InsertListingAttribute(ctx context.Context, arg InsertListingAttributeParams) error
 	InsertListingImage(ctx context.Context, arg InsertListingImageParams) error
 	InsertMediaObject(ctx context.Context, arg InsertMediaObjectParams) (MediaObject, error)
+	// A pending payment, before Paystack is called. The gross-up is computed by
+	// the caller from internal/money and the CHECK on charge_pesewas enforces it.
+	InsertPayment(ctx context.Context, arg InsertPaymentParams) (Payment, error)
 	// Returns no row if a concurrent request created the user first.
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
+	// Returns no row when (provider, event_key) already exists: that is a replay,
+	// and the caller answers 200 without dispatching anything.
+	InsertWebhookEvent(ctx context.Context, arg InsertWebhookEventParams) (WebhookEvent, error)
 	ListActiveCategories(ctx context.Context) ([]Category, error)
 	ListAttributesByCategory(ctx context.Context, categoryID uuid.UUID) ([]CategoryAttribute, error)
 	// A category filter on a parent slug must include its children (DOMAIN §9);
@@ -82,6 +96,8 @@ type Querier interface {
 	ListSellerProfilesByStatus(ctx context.Context, arg ListSellerProfilesByStatusParams) ([]ListSellerProfilesByStatusRow, error)
 	// Several accounts may share an email (no account linking in v1).
 	ListUsersByEmail(ctx context.Context, email *string) ([]User, error)
+	MarkPaymentAbandoned(ctx context.Context, arg MarkPaymentAbandonedParams) (Payment, error)
+	MarkPaymentFailed(ctx context.Context, arg MarkPaymentFailedParams) (Payment, error)
 	// Public search (Phase 12). `now` is always passed from the service clock,
 	// never SQL now(), so tests are deterministic.
 	//
@@ -99,12 +115,18 @@ type Querier interface {
 	// Only published_at / expires_at are set when they are given (publish sets
 	// both; mark-sold and archive leave them alone).
 	SetListingStatus(ctx context.Context, arg SetListingStatusParams) (Listing, error)
+	// Stored after InitializeTransaction, which happens outside the insert's
+	// transaction: the provider call must never hold a database transaction open.
+	SetPaymentAuthorizationURL(ctx context.Context, arg SetPaymentAuthorizationURLParams) (Payment, error)
 	// Stores a (new) encrypted ID and (re)submits the profile for verification.
 	SetSellerIdentity(ctx context.Context, arg SetSellerIdentityParams) (SellerProfile, error)
 	// Records an admin verification decision (reviewed_at = now()).
 	SetSellerVerification(ctx context.Context, arg SetSellerVerificationParams) (SellerProfile, error)
 	SetUserRole(ctx context.Context, arg SetUserRoleParams) (User, error)
 	SetUserSellerVerified(ctx context.Context, arg SetUserSellerVerifiedParams) (User, error)
+	// The single writer of success. It only fires from pending, so a replay (or a
+	// webhook racing the verify fallback) is a no-op that returns no row.
+	SettlePaymentSuccess(ctx context.Context, arg SettlePaymentSuccessParams) (Payment, error)
 	SlugExists(ctx context.Context, slug string) (bool, error)
 	// Mirror Firebase-owned identity fields; only writes when something changed.
 	SyncUserIdentity(ctx context.Context, arg SyncUserIdentityParams) (User, error)

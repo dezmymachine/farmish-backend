@@ -162,6 +162,26 @@ type MediaObject struct {
 	AttachedAt  *time.Time
 }
 
+type Payment struct {
+	ID                   uuid.UUID
+	Reference            string
+	UserID               uuid.UUID
+	Purpose              string
+	PurposeRef           string
+	BasePesewas          int64
+	ProcessingFeePesewas int64
+	ChargePesewas        int64
+	Currency             string
+	Status               string
+	PaystackFeePesewas   *int64
+	Channel              *string
+	AuthorizationUrl     *string
+	PaidAt               *time.Time
+	FailureReason        *string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
 type RiverJob struct {
 	ID           int64
 	State        RiverJobState
@@ -238,4 +258,15 @@ type User struct {
 	SellerVerified bool
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+}
+
+type WebhookEvent struct {
+	ID          int64
+	Provider    string
+	EventKey    string
+	EventType   string
+	Payload     []byte
+	ReceivedAt  time.Time
+	ProcessedAt *time.Time
+	Outcome     *string
 }
