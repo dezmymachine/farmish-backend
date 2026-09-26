@@ -46,6 +46,8 @@ type Server struct {
 	Payments PaymentStore
 	// Promotions sells packages, reports balances and applies promotions.
 	Promotions PromotionStore
+	// Checkout prices carts from server-side snapshots.
+	Checkout CheckoutStore
 	// Views enqueues the listing view count. Nil disables counting, which
 	// keeps the read path working without a job queue.
 	Views listings.ViewCounter

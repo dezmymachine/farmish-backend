@@ -15,7 +15,9 @@ import (
 
 	"github.com/dezmymachine/farmish-backend/internal/auth/authtest"
 	"github.com/dezmymachine/farmish-backend/internal/catalog"
+	"github.com/dezmymachine/farmish-backend/internal/checkout"
 	"github.com/dezmymachine/farmish-backend/internal/database/dbtest"
+	"github.com/dezmymachine/farmish-backend/internal/delivery"
 	"github.com/dezmymachine/farmish-backend/internal/http/api"
 	"github.com/dezmymachine/farmish-backend/internal/http/apierror"
 	"github.com/dezmymachine/farmish-backend/internal/http/middleware"
@@ -48,6 +50,7 @@ func listingRouterWithLimits(t *testing.T, limits *middleware.RateLimits) (*gin.
 		DB: fakePinger{}, Verifier: fb, Users: users.New(pool),
 		Sellers: sellersSvc, Media: media.New(pool, store),
 		Listings: listingsSvc, PublicListings: listingsSvc,
+		Checkout: checkout.New(pool, delivery.Manual{}, 195),
 	}
 	if limits != nil {
 		deps.RateLimits = limits

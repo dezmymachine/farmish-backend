@@ -17,9 +17,11 @@ import (
 
 	"github.com/dezmymachine/farmish-backend/internal/auth"
 	"github.com/dezmymachine/farmish-backend/internal/catalog"
+	"github.com/dezmymachine/farmish-backend/internal/checkout"
 	"github.com/dezmymachine/farmish-backend/internal/config"
 	"github.com/dezmymachine/farmish-backend/internal/crypto"
 	"github.com/dezmymachine/farmish-backend/internal/database"
+	"github.com/dezmymachine/farmish-backend/internal/delivery"
 	httpapi "github.com/dezmymachine/farmish-backend/internal/http"
 	"github.com/dezmymachine/farmish-backend/internal/http/handlers"
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
@@ -170,6 +172,7 @@ func run() error {
 	// A settled promotion payment grants credits through the same purpose-handler
 	// mechanism Phase 13a defined. Register it before any worker can run.
 	paymentsSvc.RegisterPurpose(payments.PurposePromotion, promotionsSvc.HandlePromotionPaid)
+	checkoutSvc := checkout.New(pool, delivery.Manual{}, cfg.Paystack.FeeBps)
 
 	jobClient, err := jobs.NewClient(pool, registry(log, mediaSvc, listingsSvc, paymentsSvc), log, jobs.Options{
 		Work:       cfg.RunMode.WorksJobs(),
@@ -226,6 +229,7 @@ func run() error {
 			ViewerHash:    handlers.NewViewerHasher(cfg.DataEncryptionKey),
 			Payments:      paymentsSvc,
 			Promotions:    promotionsSvc,
+			Checkout:      checkoutSvc,
 			Turnstile:     turnstile.New(cfg.TurnstileSecret),
 			IPLimiter:     ipLimiter,
 			SharedLimiter: shared,

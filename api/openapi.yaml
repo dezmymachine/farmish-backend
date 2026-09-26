@@ -734,6 +734,35 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /v1/checkout/quote:
+    post:
+      tags: [checkout]
+      operationId: quoteCheckout
+      summary: Quote a cart
+      description: |
+        Prices a cart from server-side snapshots. Cart lines carry quantities
+        only; prices, availability, activity and category relationships come
+        from the database. Nothing is reserved and no checkout or order rows
+        are created.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckoutQuoteRequest"
+      responses:
+        "200":
+          description: The priced cart. Commission is not exposed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutQuote"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /v1/media/upload-url:
     post:
       tags: [media]
@@ -2428,6 +2457,113 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromotionApplication"
+    CheckoutCartLine:
+      type: object
+      description: One requested quantity. Prices are never accepted here.
+      additionalProperties: false
+      required: [listingId, quantity]
+      properties:
+        listingId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+    CheckoutDelivery:
+      type: object
+      additionalProperties: false
+      required: [sellerId, method]
+      properties:
+        sellerId:
+          type: string
+          format: uuid
+        method:
+          type: string
+          enum: [pickup, seller_delivery, courier]
+        address:
+          type: string
+          maxLength: 300
+        region:
+          type: string
+          maxLength: 80
+        district:
+          type: string
+          maxLength: 80
+        recipientName:
+          type: string
+          maxLength: 120
+        recipientPhone:
+          type: string
+          pattern: '^\+233[0-9]{9}$'
+    CheckoutQuoteRequest:
+      type: object
+      additionalProperties: false
+      required: [lines, delivery]
+      properties:
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/CheckoutCartLine"
+        delivery:
+          type: array
+          items:
+            $ref: "#/components/schemas/CheckoutDelivery"
+    CheckoutQuoteItem:
+      type: object
+      required: [listingId, title, unit, unitPrice, quantity, lineTotal]
+      properties:
+        listingId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        unit:
+          type: string
+        unitPrice:
+          $ref: "#/components/schemas/Money"
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+        lineTotal:
+          $ref: "#/components/schemas/Money"
+    CheckoutOrderQuote:
+      type: object
+      required: [sellerId, sellerName, items, subtotal, deliveryFee, base]
+      properties:
+        sellerId:
+          type: string
+          format: uuid
+        sellerName:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CheckoutQuoteItem"
+        subtotal:
+          $ref: "#/components/schemas/Money"
+        deliveryFee:
+          $ref: "#/components/schemas/Money"
+        base:
+          $ref: "#/components/schemas/Money"
+    CheckoutQuote:
+      type: object
+      required: [orders, base, processingFee, charge]
+      properties:
+        orders:
+          type: array
+          items:
+            $ref: "#/components/schemas/CheckoutOrderQuote"
+        base:
+          $ref: "#/components/schemas/Money"
+        processingFee:
+          $ref: "#/components/schemas/Money"
+          description: The fee grossed onto the buyer. Non-refundable.
+        charge:
+          $ref: "#/components/schemas/Money"
     Money:
       type: object
       description: An amount of money in the smallest currency unit (pesewas).
