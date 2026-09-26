@@ -1,0 +1,203 @@
+openapi: 3.1.0
+info:
+  title: Farmish API
+  version: 0.1.0
+  summary: Farmish Ghana agricultural marketplace API.
+  description: |
+    Contract-first HTTP API for Farmish. This file is the source of truth:
+    Go server types are generated from it (`make generate`), and requests are
+    validated against it at runtime.
+
+    Conventions:
+    - JSON properties and query parameters are camelCase.
+    - Money is always integer pesewas (`Money.amount`) plus `currency: GHS`.
+    - Errors use one envelope: `{"error": {"code", "message", "details?"}}`.
+      `code` is a stable snake_case identifier; `message` is human-readable
+      and may change.
+    - List endpoints take `page` (from 1) and `limit` (1-50) and return `PageMeta`.
+    - Authenticated endpoints take a Firebase ID token as `Authorization: Bearer <token>`.
+  contact:
+    name: Farmish Ghana
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: https://api.farmish.gh
+    description: Production (local development runs on http://localhost:8080)
+security:
+  - bearerAuth: []
+tags:
+  - name: system
+    description: Liveness and readiness probes.
+paths:
+  /healthz:
+    get:
+      tags: [system]
+      operationId: getHealthz
+      summary: Liveness probe
+      description: Returns 200 while the process can serve HTTP. Checks no dependencies.
+      security: []
+      responses:
+        "200":
+          description: The process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /readyz:
+    get:
+      tags: [system]
+      operationId: getReadyz
+      summary: Readiness probe
+      description: Returns 200 when the database answers a ping within 2 seconds, otherwise 503.
+      security: []
+      responses:
+        "200":
+          description: Ready to serve traffic.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Firebase ID token.
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: 1-based page number.
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        default: 1
+    Limit:
+      name: limit
+      in: query
+      description: Page size.
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 50
+        default: 20
+  responses:
+    BadRequest:
+      description: The request is malformed or fails validation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing, expired or invalid credentials.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Authenticated, but not allowed to do this.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: The resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: Unexpected server error.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unavailable:
+      description: A dependency is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+    Error:
+      type: object
+      description: The single error envelope used by every endpoint.
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorBody"
+    ErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable snake_case error code, e.g. `validation_failed`, `not_found`.
+          examples: [validation_failed]
+        message:
+          type: string
+          description: Human-readable summary. Do not parse.
+          examples: [Request validation failed]
+        details:
+          type: array
+          description: Per-field problems, present for `validation_failed`.
+          items:
+            $ref: "#/components/schemas/ErrorDetail"
+    ErrorDetail:
+      type: object
+      required: [location, message]
+      properties:
+        location:
+          type: string
+          enum: [path, query, header, cookie, body]
+        field:
+          type: string
+          description: Parameter name, or a JSON pointer into the body (e.g. `/items/0/qty`).
+          examples: [/items/0/qty]
+        message:
+          type: string
+          examples: [must be >= 1]
+    Money:
+      type: object
+      description: An amount of money in the smallest currency unit (pesewas).
+      required: [amount, currency]
+      properties:
+        amount:
+          type: integer
+          format: int64
+          description: Integer pesewas. GHS 12.50 is `1250`.
+          examples: [1250]
+        currency:
+          type: string
+          enum: [GHS]
+    PageMeta:
+      type: object
+      required: [page, limit, total]
+      properties:
+        page:
+          type: integer
+          format: int32
+          minimum: 1
+        limit:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 50
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Total matching items across all pages.

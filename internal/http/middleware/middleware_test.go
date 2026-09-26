@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/dezmymachine/farmish-backend/internal/http/api"
 	"github.com/dezmymachine/farmish-backend/internal/http/apierror"
 	"github.com/dezmymachine/farmish-backend/pkg/logger"
 )
@@ -90,7 +91,7 @@ func TestRecoveryAndAccessLog(t *testing.T) {
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d", w.Code)
 	}
-	var env apierror.Envelope
+	var env api.Error
 	if err := json.Unmarshal(w.Body.Bytes(), &env); err != nil || env.Error.Code != apierror.CodeInternal {
 		t.Fatalf("body %q not an internal_error envelope (%v)", w.Body.String(), err)
 	}

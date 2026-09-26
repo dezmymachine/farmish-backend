@@ -1,0 +1,9 @@
+extends:
+  - recommended-strict
+rules:
+  # Shared components (Money, PageMeta, Page/Limit, error responses) are defined
+  # ahead of the endpoints that will use them.
+  no-unused-components: off
+  # /healthz and /readyz take no input and have no 4xx outcomes. Every other
+  # operation must still declare its 4xx responses (enforced in review).
+  operation-4xx-response: off

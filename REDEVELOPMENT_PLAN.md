@@ -62,12 +62,12 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
     docs/adr/                    # architecture decision records (one per §8 decision)
     .github/workflows/ci.yml
     cmd/api/main.go              # wiring only: config → logger → db → river → router → run
-    api/openapi.yaml             # source of truth for the HTTP contract
+    api/openapi.yaml             # source of truth for the HTTP contract (+ oapi-codegen.yaml; redocly.yaml at root)
     cmd/migrate/main.go          # embedded golang-migrate runner (ADR-0005)
     migrations/                  # NNNNNN_name.{up,down}.sql, embedded via embed.FS
     db/queries/*.sql  sqlc.yaml  # sqlc input → internal/db (generated)
     internal/
-      config/ database/ (pgxpool, dbtest) db/ (sqlc) http/ (router, middleware, handlers, api.gen.go) auth/ users/
+      config/ database/ (pgxpool, dbtest) db/ (sqlc) http/ (router, middleware, handlers, apierror, api/api.gen.go) auth/ users/
       catalog/ listings/ media/ search/
       payments/ ledger/ promotions/ checkout/ orders/ escrow/ payouts/ refunds/ delivery/
       messaging/ engagement/ (reviews, favorites, reports) supply/ notify/ jobs/ ratelimit/ audit/
@@ -139,7 +139,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
   - Add Spectral/Redocly lint in CI and request validation middleware against the spec.
   - Error-envelope helper.
 - **Done when:** handlers are served through generated interfaces, spec lint passes, an invalid request returns a 400 envelope, and the CI drift check works.
-- [ ] Phase 3
+- [x] Phase 3
 
 ### Phase 4: Auth core (Firebase) + users
 - **Depends on:** 2, 3
@@ -429,6 +429,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-25 | Split into two repos (`farmish-backend`, `farmish-frontend`); `~/work/farmish` is a plain folder; plan + ADRs live in the backend repo | ADR-0003 |
 | 2026-09-25 | GitHub Actions removed (account billing lock); local `make ci` is the gate | ADR-0004 |
 | 2026-09-25 | Phase 2: own `cmd/migrate` (embedded golang-migrate) instead of the CLI; sqlc via Docker; per-test databases; compose on port 54320; bounded pool close; `DB_MAX_CONNS`/`DB_STATEMENT_TIMEOUT` | ADR-0005 |
+| 2026-09-26 | Phase 3: OpenAPI 3.1 + oapi-codegen v2.8.0; generated code in `internal/http/api/`; camelCase JSON/query, snake_case error codes; validator passes unknown routes through and skips auth; Redocly via Docker; drift check in `make ci` | ADR-0006 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
@@ -436,6 +437,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-25 | 0 | initial commits (both repos) | Redone after the two-repo split (ADR-0003). `.gitignore` excludes `.env*` but keeps `!.env.example` |
 | 2026-09-25 | 1 | Phase 1 commit | Local checks pass: `make run` + `/healthz` 200 JSON, `make lint test`, image builds (26.5 MB distroless/nonroot) and serves `/healthz`, `make ci` green (tidy, fmt, vet, lint, race tests, govulncheck, docker smoke incl. graceful SIGTERM). GitHub Actions removed per ADR-0004. See ADR-0002 |
 | 2026-09-25 | 2 | Phase 2 commit | `make ci` green. Migrations up→down→up clean (test + Makefile); `/readyz` 200 → 503 (DB stopped) → 200 on the running API; sqlc `ListExtensions` compiled and tested; per-test DB helper. Smoke test caught a pool-close hang on SIGTERM with the DB unreachable, now fixed. See ADR-0005 |
+| 2026-09-26 | 3 | Phase 3 commit | `make ci` green. `/healthz` + `/readyz` served via the generated strict interface; responses validated against the spec in tests; Redocly lint passes; the validator returns 400 `validation_failed` with per-field details (fixture spec); drift check fails on spec edits and on hand-edits of generated code. See ADR-0006 |
 
 ## 10. Backlog (not scheduled)
 - Restore GitHub Actions (a workflow that runs `make ci`) once account billing is fixed; retire ADR-0004

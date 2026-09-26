@@ -1,30 +1,46 @@
-// Package apierror writes the single JSON error envelope used by every
-// endpoint: {"error": {"code", "message", "details?"}}.
+// Package apierror builds and writes the single JSON error envelope used by
+// every endpoint: {"error": {"code", "message", "details?"}}. The types are
+// generated from api/openapi.yaml, so the envelope can't drift from the spec.
 package apierror
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
 
-// Envelope is the top-level error response body.
-type Envelope struct {
-	Error Body `json:"error"`
-}
+	"github.com/dezmymachine/farmish-backend/internal/http/api"
+)
 
-// Body describes a single error.
-type Body struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Details any    `json:"details,omitempty"`
-}
-
-// Stable error codes shared across handlers.
+// Stable error codes. Clients may switch on these; never rename one.
 const (
+	CodeBadRequest       = "bad_request"
+	CodeValidationFailed = "validation_failed"
 	CodeNotFound         = "not_found"
 	CodeMethodNotAllowed = "method_not_allowed"
 	CodeInternal         = "internal_error"
 	CodeUnavailable      = "unavailable"
 )
 
+// New returns an envelope with code and message. Strict handlers use it to
+// build typed error responses, e.g. api.GetReadyz503JSONResponse{...}.
+func New(code, message string) api.Error {
+	return api.Error{Error: api.ErrorBody{Code: code, Message: message}}
+}
+
+// WithDetails returns an envelope carrying per-field details.
+func WithDetails(code, message string, details []api.ErrorDetail) api.Error {
+	e := New(code, message)
+	if len(details) > 0 {
+		e.Error.Details = &details
+	}
+	return e
+}
+
 // Abort writes the envelope with status and stops the handler chain.
 func Abort(c *gin.Context, status int, code, message string) {
-	c.AbortWithStatusJSON(status, Envelope{Error: Body{Code: code, Message: message}})
+	c.AbortWithStatusJSON(status, New(code, message))
+}
+
+// AbortWithDetails writes an envelope with per-field details and stops the
+// handler chain.
+func AbortWithDetails(c *gin.Context, status int, code, message string, details []api.ErrorDetail) {
+	c.AbortWithStatusJSON(status, WithDetails(code, message, details))
 }

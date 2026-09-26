@@ -3,20 +3,26 @@
 GOLANGCI_LINT_VERSION := v2.14.0
 GOVULNCHECK_VERSION   := v1.8.0
 SQLC_VERSION          := 1.31.1
+OAPI_CODEGEN_VERSION  := v2.8.0
+REDOCLY_VERSION       := 2.54.3
 BIN_DIR   := $(CURDIR)/bin
 GOLANGCI  := $(BIN_DIR)/golangci-lint
 GOVULN    := $(BIN_DIR)/govulncheck
+OAPI      := $(BIN_DIR)/oapi-codegen
+API_GEN   := internal/http/api/api.gen.go
 IMAGE     ?= farmish-backend:dev
 # `make run` loads .env if present, else the committed example defaults.
 ENV_FILE  ?= $(if $(wildcard .env),.env,.env.example)
 LOAD_ENV  := set -a && . ./$(ENV_FILE) && set +a
 # Admin connection to the compose Postgres; dbtest creates a throwaway DB per test.
 TEST_DATABASE_URL ?= postgres://farmish:farmish@127.0.0.1:$(or $(FARMISH_PG_PORT),54320)/farmish?sslmode=disable
+REDOCLY   := docker run --rm -u $$(id -u):$$(id -g) -v $(CURDIR):/spec -w /spec redocly/cli:$(REDOCLY_VERSION)
 SQLC      := docker run --rm -u $$(id -u):$$(id -g) -v $(CURDIR):/src -w /src sqlc/sqlc:$(SQLC_VERSION)
 
 .DEFAULT_GOAL := help
 .PHONY: help run build test lint fmt fmt-check tidy tidy-check vuln docker-build smoke ci tools \
-        db-up db-down db-reset migrate-up migrate-down migrate-version migrate-new sqlc sqlc-check
+        db-up db-down db-reset migrate-up migrate-down migrate-version migrate-new sqlc sqlc-check \
+        generate generate-check api-lint
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n",$$1,$$2}'
@@ -83,14 +89,29 @@ sqlc-check: ## Fail if generated sqlc code is stale or queries don't compile
 	$(SQLC) diff
 	$(SQLC) vet
 
+generate: $(OAPI) ## Generate Go server types from api/openapi.yaml
+	$(OAPI) -config api/oapi-codegen.yaml api/openapi.yaml
+
+generate-check: $(OAPI) ## Fail if the generated API code is stale
+	@dir=$$(mktemp -d) && trap 'rm -rf $$dir' EXIT && \
+	sed "s#^output:.*#output: $$dir/api.gen.go#" api/oapi-codegen.yaml > $$dir/cfg.yaml && \
+	$(OAPI) -config $$dir/cfg.yaml api/openapi.yaml && \
+	diff -u $(API_GEN) $$dir/api.gen.go || { echo "$(API_GEN) is stale: run make generate"; exit 1; }
+
+api-lint: ## Lint api/openapi.yaml with Redocly (redocly.yaml rules)
+	$(REDOCLY) lint --format=stylish api/openapi.yaml
+
 # Local stand-in for CI while GitHub Actions is off (ADR-0004). Run before every push.
-ci: tidy-check fmt-check sqlc-check lint test vuln smoke ## Run every pre-push check
+ci: tidy-check fmt-check api-lint generate-check sqlc-check lint test vuln smoke ## Run every pre-push check
 	@echo "ci: all checks passed"
 
-tools: $(GOLANGCI) $(GOVULN) ## Install pinned dev tools into bin/
+tools: $(GOLANGCI) $(GOVULN) $(OAPI) ## Install pinned dev tools into bin/
 
 $(GOLANGCI):
 	GOBIN=$(BIN_DIR) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 $(GOVULN):
 	GOBIN=$(BIN_DIR) go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+
+$(OAPI):
+	GOBIN=$(BIN_DIR) go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)

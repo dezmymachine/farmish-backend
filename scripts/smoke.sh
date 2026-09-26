@@ -27,7 +27,7 @@ fail() { echo "smoke: $*" >&2; docker logs "$name" >&2 2>/dev/null || true; exit
 expect() {
   local out code body
   out="$(curl -sS -m 5 -w '\n%{http_code}' "${base}$1" || true)"
-  code="${out##*$'\n'}"; body="${out%$'\n'*}"
+  code="${out##*$'\n'}"; body="${out%$'\n'*}"; body="${body%$'\n'}" # ignore trailing newline
   [[ "$code" == "$2" ]] || fail "$1: status $code, want $2 (body: $body)"
   [[ -z "${3:-}" || "$body" == "$3" ]] || fail "$1: body $body, want $3"
 }

@@ -25,6 +25,8 @@ curl localhost:8080/healthz localhost:8080/readyz
 | `make test` | `go test -race ./...`, including DB tests against compose Postgres |
 | `make db-up` / `db-down` / `db-reset` | Compose Postgres (`db-reset` wipes data) |
 | `make migrate-up` / `migrate-down N=…` / `migrate-version` / `migrate-new name=…` | Migrations |
+| `make generate` | Regenerate the API server code from `api/openapi.yaml` |
+| `make api-lint` | Lint the OpenAPI spec (Redocly) |
 | `make sqlc` | Regenerate `internal/db` |
 | `make lint` | `go vet` + golangci-lint (pinned, auto-installed into `bin/`) |
 | `make fmt` | gofumpt + goimports |
@@ -44,5 +46,6 @@ Environment variables only; the service exits at startup listing every missing/i
 - `internal/database`: pgx pool; `dbtest/` gives each test a throwaway database
 - `internal/db`: sqlc-generated queries (from `db/queries/`)
 - `migrations/`: embedded SQL migrations; `cmd/migrate` applies them
-- `internal/http`: router, server, `middleware/`, `handlers/`, `apierror/`
+- `api/openapi.yaml`: the HTTP contract (source of truth)
+- `internal/http`: router, server, `middleware/` (incl. OpenAPI request validation), `handlers/` (implements the generated interface), `apierror/`, `api/` (generated)
 - `pkg/logger`: slog JSON logger + context helpers

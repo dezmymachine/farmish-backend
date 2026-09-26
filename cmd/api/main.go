@@ -50,7 +50,10 @@ func run() error {
 	}()
 	log.Info("database connected", "max_conns", cfg.DB.MaxConns)
 
-	router := httpapi.NewRouter(cfg, log, httpapi.Deps{DB: pool})
+	router, err := httpapi.NewRouter(cfg, log, httpapi.Deps{DB: pool})
+	if err != nil {
+		return err
+	}
 	addr := net.JoinHostPort("", strconv.Itoa(cfg.Port))
 	var lc net.ListenConfig
 	ln, err := lc.Listen(ctx, "tcp", addr)

@@ -45,14 +45,18 @@ Never edit it or import from it.
   - without `TEST_DATABASE_URL`, DB tests skip
 - `make migrate-up`, `make migrate-down N=1|all`, `make migrate-version`: run `cmd/migrate` against `DATABASE_URL`
 - `make migrate-new name=snake_case`: creates the next `migrations/NNNNNN_name.{up,down}.sql` pair
+- `make generate`: regenerates `internal/http/api/api.gen.go` from `api/openapi.yaml` (oapi-codegen, pinned). Never hand-edit it
+- `make api-lint`: Redocly lint of the spec (pinned Docker image, rules in `redocly.yaml`)
 - `make sqlc`: regenerates `internal/db` from `db/queries/*.sql` + `migrations/` (pinned Docker image). Never hand-edit `internal/db`
 - `make lint`: `go vet` plus golangci-lint v2, which is pinned and auto-installed into `bin/`
 - `make fmt`: gofumpt + goimports
 - `make docker-build`: builds the distroless image
 - `make smoke`: builds the image, migrates a throwaway DB with `/migrate`, checks `/healthz`, `/readyz` (200, then 503 after cutting the DB network) and graceful SIGTERM
-- `make ci`: **the required gate** before every push and to close a phase (ADR-0004). It runs tidy-check, fmt-check, sqlc-check, lint, test, vuln (govulncheck) and smoke
+- `make ci`: **the required gate** before every push and to close a phase (ADR-0004). It runs tidy-check, fmt-check, api-lint, generate-check, sqlc-check, lint, test, vuln (govulncheck) and smoke
 
 GitHub Actions is off for now (account billing lock). Never claim a phase is done without a green `make ci`.
+
+**Adding an endpoint:** edit `api/openapi.yaml` (camelCase JSON/query, `$ref` the shared `Error`/`Money`/`PageMeta`, declare 4xx responses), run `make generate`, then implement the new method on `handlers.Server`. Requests are validated against the spec automatically. Build errors with `apierror` (stable snake_case codes). Never return `err.Error()` to clients.
 
 DB tests use `dbtest.Pool(t)` (fresh migrated database per test) or `dbtest.EmptyURL(t)` (unmigrated). Both are in `internal/database/dbtest`.
 
