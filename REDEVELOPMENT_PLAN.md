@@ -230,7 +230,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
   - `EXPLAIN` shows index use
   - responses contain no private seller fields
   - ETag/304 works
-- [ ] Phase 12
+- [x] Phase 12
 
 ### Phase 13a: Payments core (Paystack, webhooks) · [spec](docs/phases/phase-13a.md)
 - **Depends on:** 4, 5, 8 (audit events, `forbid_mutation()`, `InTx`)
@@ -366,6 +366,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-26 | Phase 9: `CategoryAttribute` gains `id` (the spec's PATCH/DELETE paths need discoverable ids) | ADR-0015 |
 | 2026-09-26 | Phase 10: rustfs replaces MinIO as the local S3 stand-in (owner decision; MinIO images are no longer pullable); storage `Head` allowed inside the attach transaction before row locks | ADR-0016, ADR-0017 |
 | 2026-09-26 | Phase 11: `PATCH /v1/listings/{id}` takes a fully optional body (pointer patch model, merged and validated as a whole); `SellerListing` omits any seller identity field on purpose (public detail is Phase 12) | — |
+| 2026-09-26 | Phase 12: seller listing writes move to `/v1/me/listings/{id}` so the public detail can be `GET /v1/listings/{slug}` (OpenAPI forbids two paths differing only by the parameter name; owner decision). View dedup uses `HMAC(DATA_ENCRYPTION_KEY, "view:"+ip)`: no new secret, one-way, domain-separated (owner decision). The `EXPLAIN` fixture uses 20k production-shaped rows, not the spec's 2000 stub rows | ADR-0018, ADR-0019 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
@@ -381,9 +382,12 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-26 | 8 | Phase 8 commits | `make ci` green. Seller profile CRUD with server-side validation; ID submission encrypts (`v1:` ciphertext) and re-pends in one tx with audit; approve/reject flips the DB flag plus best-effort Firebase claim; public projection test asserts private keys absent; `InTx`/`validation`/`crypto`/`audit` building blocks tested. A pooled-gin-context race on the claim HTTP call was fixed at the handler boundary with a regression test |
 | 2026-09-26 | 11 | Phase 11 commits | `make ci` green. Create/publish/list/patch/delete plus the four status operations, all contract-validated; DOMAIN §7 validation with per-field details (unit, item state, min order, delivery fee, typed attributes); ownership 403, unknown 404, suspended 409, wrong state 409; slug collisions `x`, `x-2`, `x-3` and 5 concurrent creates; `listings.expire` runs hourly through River. `main` now builds its services once for workers and router |
 | 2026-09-26 | 10 | Phase 10 commits | `make ci` green. Presigned PUT verified end to end against the local S3 stand-in (exact bytes 200, wrong body size 403); type/size allowlist, key format, 401, sensitive rate limit and the attach guards tested; `media.cleanup_orphans` runs hourly through River and the job test proves it. Owner decision: rustfs instead of MinIO. The smoke script needed a `pipefail`-safe log read. See ADR-0016, ADR-0017 |
+| 2026-09-26 | 12 | Phase 12 commits | `make ci` green. Public search (q, category incl. parent expansion, region, district, price range, item state; relevance/newest/price_asc/price_desc) with promoted-first ordering; public detail with the Phase 8 seller projection; opt-in contact reveal. Cache-Control + weak ETag + 304 on both reads (ETag over the exact body bytes). `listings.count_view` via River, deduped per listing/viewer/hour. `EXPLAIN` proves the FTS, trigram, region and published indexes are used. Manual QA surfaced the detail page reporting `promoted: null` for a promoted listing, now fixed and pinned by a test. Known limitation: a long fuzzy query gets a ~1.0 trigram selectivity estimate, so near-miss search can fall back to a scan. See ADR-0018, ADR-0019 |
 | 2026-09-26 | 9 | Phase 9 commits | `make ci` green. `make seed` ports DOMAIN §9 (12 parents, 72 children, 32 attributes) idempotently; public tree/detail/locations with Cache-Control; admin category + attribute CRUD (409 on taken slug/key); child inherits parent group/attributes with override merge. See ADR-0015 |
 
 ## 10. Backlog (not scheduled)
+- Bound the trigram branch's selectivity so a long near-miss query ("Bulk consignmnt 5") uses `listings_title_trgm_idx` instead of scanning: Postgres estimates `title % $1` at ~1.0 without trigram statistics. A `UNION` of two indexed queries, or an extended-statistics/rewritten predicate, would fix it. Found by Phase 12's `EXPLAIN` check
+- `GhanaRegion` now exists as a schema but the three older inline region enums (seller profile, locations, admin) still repeat the list
 - Restore GitHub Actions (a workflow that runs `make ci`) once account billing is fixed; retire ADR-0004
 - Courier integration via `DeliveryProvider`, and provider-quoted delivery fees
 - Account linking across Firebase methods
