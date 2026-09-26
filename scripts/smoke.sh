@@ -66,8 +66,11 @@ token="$(curl -fsS -X POST "${emu}/identitytoolkit.googleapis.com/v1/accounts:si
   -d "{\"email\":\"smoke-$$-${RANDOM}@farmish.test\",\"password\":\"smoke-pass\",\"returnSecureToken\":true}" \
   | sed -E 's/.*"idToken":"([^"]+)".*/\1/')" || fail "could not get an emulator token"
 expect /v1/me 200 "" -H "Authorization: Bearer ${token}"
-docker logs "$name" 2>&1 | grep -q '"shared":"redis"' || fail "shared rate limiter is not on Redis"
-docker logs "$name" 2>&1 | grep -q '"msg":"redis connected"' || fail "API did not connect to Redis"
+# Read the container log once: `docker logs | grep -q` can SIGPIPE the writer
+# and trip `pipefail` once the log outgrows the pipe buffer.
+logs="$(docker logs "$name" 2>&1)"
+grep -q '"shared":"redis"' <<<"$logs" || fail "shared rate limiter is not on Redis"
+grep -q '"msg":"redis connected"' <<<"$logs" || fail "API did not connect to Redis"
 
 docker network disconnect "$net" "$name"
 expect /readyz 503
@@ -76,6 +79,7 @@ expect /healthz 200 '{"status":"ok"}'
 docker stop -t 10 "$name" >/dev/null
 code="$(docker inspect -f '{{.State.ExitCode}}' "$name")"
 [[ "$code" == "0" ]] || fail "container exited $code after SIGTERM"
-docker logs "$name" 2>&1 | grep -q '"msg":"http server stopped"' || fail "no graceful shutdown log"
+docker logs "$name" >/dev/null 2>&1 || true
+grep -q '"msg":"http server stopped"' <<<"$(docker logs "$name" 2>&1)" || fail "no graceful shutdown log"
 
 echo "smoke: migrate ok, /healthz ok, redis limits ok, /v1/me 401 -> 200 with token, /readyz 200 -> 503 on DB loss, graceful shutdown ok"
