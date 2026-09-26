@@ -221,7 +221,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
   - a non-owner gets 403
   - invalid attributes return 400
   - the expiry job flips past-due listings
-- [ ] Phase 11
+- [x] Phase 11
 
 ### Phase 12: Search & browse · [spec](docs/phases/phase-12.md)
 - **Depends on:** 11
@@ -365,6 +365,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-26 | Phase 7: step-up revocation test adapted to the Auth emulator (SDK checks revocation on both paths in emulator mode; 1.2s sleep for `validSince` granularity). Production routing proved with a fake instead | ADR-0014 |
 | 2026-09-26 | Phase 9: `CategoryAttribute` gains `id` (the spec's PATCH/DELETE paths need discoverable ids) | ADR-0015 |
 | 2026-09-26 | Phase 10: rustfs replaces MinIO as the local S3 stand-in (owner decision; MinIO images are no longer pullable); storage `Head` allowed inside the attach transaction before row locks | ADR-0016, ADR-0017 |
+| 2026-09-26 | Phase 11: `PATCH /v1/listings/{id}` takes a fully optional body (pointer patch model, merged and validated as a whole); `SellerListing` omits any seller identity field on purpose (public detail is Phase 12) | — |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
@@ -378,6 +379,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-26 | 6 | Phase 6 commit | `make ci` green. Over the limit → 429 `rate_limited` with `Retry-After` + `X-RateLimit-*` (contract-valid, CORS-readable); probes exempt; per-user budgets independent on a shared IP; missing/bad Turnstile token → 400 `turnstile_failed`, Cloudflare down → 503; spoofed `CF-Connecting-IP`/XFF ignored unless via trusted proxy/Cloudflare edge; live check with Cloudflare test secrets. See ADR-0011 |
 | 2026-09-26 | 7 | Phase 7 commit | `make ci` green. Fresh emulator sign-in passes the step-up fixture op; +6 min clock → 401 `reauth_required` with `WWW-Authenticate: Bearer error="insufficient_user_authentication"`; revoked token → 401 on step-up (emulator checks revocation on both paths, see ADR-0014); normal ops never call `VerifyStrict`; `internal/geo` phone/region helpers table-tested; Firebase phone runbook written. See ADR-0014 |
 | 2026-09-26 | 8 | Phase 8 commits | `make ci` green. Seller profile CRUD with server-side validation; ID submission encrypts (`v1:` ciphertext) and re-pends in one tx with audit; approve/reject flips the DB flag plus best-effort Firebase claim; public projection test asserts private keys absent; `InTx`/`validation`/`crypto`/`audit` building blocks tested. A pooled-gin-context race on the claim HTTP call was fixed at the handler boundary with a regression test |
+| 2026-09-26 | 11 | Phase 11 commits | `make ci` green. Create/publish/list/patch/delete plus the four status operations, all contract-validated; DOMAIN §7 validation with per-field details (unit, item state, min order, delivery fee, typed attributes); ownership 403, unknown 404, suspended 409, wrong state 409; slug collisions `x`, `x-2`, `x-3` and 5 concurrent creates; `listings.expire` runs hourly through River. `main` now builds its services once for workers and router |
 | 2026-09-26 | 10 | Phase 10 commits | `make ci` green. Presigned PUT verified end to end against the local S3 stand-in (exact bytes 200, wrong body size 403); type/size allowlist, key format, 401, sensitive rate limit and the attach guards tested; `media.cleanup_orphans` runs hourly through River and the job test proves it. Owner decision: rustfs instead of MinIO. The smoke script needed a `pipefail`-safe log read. See ADR-0016, ADR-0017 |
 | 2026-09-26 | 9 | Phase 9 commits | `make ci` green. `make seed` ports DOMAIN §9 (12 parents, 72 children, 32 attributes) idempotently; public tree/detail/locations with Cache-Control; admin category + attribute CRUD (409 on taken slug/key); child inherits parent group/attributes with override merge. See ADR-0015 |
 
