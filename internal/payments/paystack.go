@@ -175,14 +175,6 @@ type Transfer struct {
 	RecipientsName string
 }
 
-// PaystackStatus* are the payment statuses Farmish stores.
-const (
-	StatusPending   = "pending"
-	StatusSuccess   = "success"
-	StatusFailed    = "failed"
-	StatusAbandoned = "abandoned"
-)
-
 // PaystackClient talks to Paystack's REST API.
 //
 // Paystack wraps every response in {"status":bool,"message":string,"data":…}.
@@ -195,12 +187,12 @@ type PaystackClient struct {
 	http    *http.Client
 }
 
-// Option customises a client. Tests use WithHTTPClient for timeouts and
-// WithBaseURL to point at an httptest server.
-type Option func(*PaystackClient)
+// ClientOption customises a client. Tests use WithHTTPClient for timeouts and
+// point the client at an httptest server through NewPaystackClient's baseURL.
+type ClientOption func(*PaystackClient)
 
 // WithHTTPClient replaces the HTTP client.
-func WithHTTPClient(c *http.Client) Option {
+func WithHTTPClient(c *http.Client) ClientOption {
 	return func(p *PaystackClient) {
 		if c != nil {
 			p.http = c
@@ -210,7 +202,7 @@ func WithHTTPClient(c *http.Client) Option {
 
 // NewPaystackClient returns a client for the API at baseURL (empty means
 // Paystack's own). secret is the API key; it is never logged or returned.
-func NewPaystackClient(secret, baseURL string, opts ...Option) *PaystackClient {
+func NewPaystackClient(secret, baseURL string, opts ...ClientOption) *PaystackClient {
 	if baseURL == "" {
 		baseURL = "https://api.paystack.co"
 	}
