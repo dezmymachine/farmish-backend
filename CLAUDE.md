@@ -37,7 +37,7 @@ Never edit it or import from it.
 
 ## Commands
 
-- `make db-up` / `db-down` / `db-reset`: compose Postgres 16 on `127.0.0.1:54320`. `db-reset` deletes the data
+- `make db-up` / `db-down` / `db-reset`: compose Postgres 18 (matches Neon) on `127.0.0.1:54320`. `db-reset` deletes the data
 - `make auth-up`: Firebase Auth emulator on `127.0.0.1:9099` (project `demo-farmish`). `.env.example` points at it by default
 - `make run`: runs the API on `:8080`, loading `.env` if present, else `.env.example`. Needs `make db-up` and `make migrate-up`
 - `make build`: static binary at `bin/api`

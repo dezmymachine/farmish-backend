@@ -10,7 +10,7 @@ Requires Go 1.27+ and Docker.
 
 ```sh
 cp .env.example .env    # optional; `make run` falls back to .env.example
-make db-up auth-up      # Postgres 16 on :54320, Firebase Auth emulator on :9099
+make db-up auth-up      # Postgres 18 on :54320, Firebase Auth emulator on :9099
 make migrate-up
 make run                # serves on :8080
 curl localhost:8080/healthz localhost:8080/readyz

@@ -119,7 +119,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 ### Phase 2: Database foundation
 - **Depends on:** 1
 - **Tasks:**
-  - `docker-compose.yml` with `postgres:16`.
+  - `docker-compose.yml` with `postgres:16` (now `postgres:18` to match Neon, ADR-0009).
   - `pgxpool` wiring with timeouts.
   - golang-migrate with `make migrate-up/down/new`.
   - sqlc setup (`sqlc.yaml`, `make sqlc`).
@@ -433,6 +433,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-26 | Phase 3: OpenAPI 3.1 + oapi-codegen v2.8.0; generated code in `internal/http/api/`; camelCase JSON/query, snake_case error codes; validator passes unknown routes through and skips auth; Redocly via Docker; drift check in `make ci` | ADR-0006 |
 | 2026-09-26 | Firebase phone sign-in replaces the custom mNotify OTP flow; Phase 7 becomes phone hardening + step-up re-auth; mNotify kept for transactional SMS only (Phase 16); Turnstile stays in Phase 6 | ADR-0007 |
 | 2026-09-26 | Phase 4: spec-driven auth (`bearerAuth` / `x-farmish-role`) in `internal/http/middleware`; `users.role` authoritative, claim mirrors it; no per-request revocation check; `custom`/`anonymous` providers rejected; `email_verified` column; credentials inline or path; emulator refused when deployed | ADR-0008 |
+| 2026-09-26 | Local/test Postgres bumped 16 → 18 to match Neon (18.6); new `pgdata18` volume | ADR-0009 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |

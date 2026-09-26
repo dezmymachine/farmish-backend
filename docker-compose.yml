@@ -1,7 +1,8 @@
 # Local dependencies. `make db-up` starts them; `make db-down` stops them.
 services:
   postgres:
-    image: postgres:16
+    # Match Neon's major version (ADR-0009).
+    image: postgres:18
     environment:
       POSTGRES_USER: farmish
       POSTGRES_PASSWORD: farmish
@@ -10,7 +11,8 @@ services:
       # 54320 on the host avoids clashing with a locally installed Postgres.
       - "127.0.0.1:${FARMISH_PG_PORT:-54320}:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # Postgres 18+ images keep data under /var/lib/postgresql/<major>/docker.
+      - pgdata18:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U farmish -d farmish"]
       interval: 2s
@@ -29,7 +31,7 @@ services:
       retries: 60
 
 volumes:
-  pgdata:
+  pgdata18:
 
 networks:
   default:
