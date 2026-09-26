@@ -165,6 +165,34 @@ func (q *Queries) SetUserRole(ctx context.Context, arg SetUserRoleParams) (User,
 	return i, err
 }
 
+const setUserSellerVerified = `-- name: SetUserSellerVerified :one
+UPDATE users SET seller_verified = $2 WHERE id = $1 RETURNING id, firebase_uid, signup_method, email, email_verified, phone_e164, display_name, role, seller_verified, created_at, updated_at
+`
+
+type SetUserSellerVerifiedParams struct {
+	ID             uuid.UUID
+	SellerVerified bool
+}
+
+func (q *Queries) SetUserSellerVerified(ctx context.Context, arg SetUserSellerVerifiedParams) (User, error) {
+	row := q.db.QueryRow(ctx, setUserSellerVerified, arg.ID, arg.SellerVerified)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.FirebaseUid,
+		&i.SignupMethod,
+		&i.Email,
+		&i.EmailVerified,
+		&i.PhoneE164,
+		&i.DisplayName,
+		&i.Role,
+		&i.SellerVerified,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const syncUserIdentity = `-- name: SyncUserIdentity :one
 UPDATE users
 SET email = $2, email_verified = $3, phone_e164 = $4

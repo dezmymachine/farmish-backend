@@ -11,18 +11,35 @@ import (
 )
 
 type Querier interface {
+	CountSellerProfilesByStatus(ctx context.Context, verificationStatus string) (int64, error)
+	// Narrow projection for the public endpoint: never selects id_number_enc.
+	GetPublicSeller(ctx context.Context, userID uuid.UUID) (GetPublicSellerRow, error)
+	GetSellerProfile(ctx context.Context, userID uuid.UUID) (SellerProfile, error)
+	GetSellerProfileForUpdate(ctx context.Context, userID uuid.UUID) (SellerProfile, error)
 	GetUserByFirebaseUID(ctx context.Context, firebaseUid string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	InsertAuditEvent(ctx context.Context, arg InsertAuditEventParams) (AuditEvent, error)
 	// Returns no row if a concurrent request created the user first.
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
 	// Installed Postgres extensions; used by tests to assert migration 000001.
 	ListExtensions(ctx context.Context) ([]string, error)
+	// Admin review queue: oldest submission first.
+	ListSellerProfilesByStatus(ctx context.Context, arg ListSellerProfilesByStatusParams) ([]ListSellerProfilesByStatusRow, error)
 	// Several accounts may share an email (no account linking in v1).
 	ListUsersByEmail(ctx context.Context, email *string) ([]User, error)
+	// Stores a (new) encrypted ID and (re)submits the profile for verification.
+	SetSellerIdentity(ctx context.Context, arg SetSellerIdentityParams) (SellerProfile, error)
+	// Records an admin verification decision (reviewed_at = now()).
+	SetSellerVerification(ctx context.Context, arg SetSellerVerificationParams) (SellerProfile, error)
 	SetUserRole(ctx context.Context, arg SetUserRoleParams) (User, error)
+	SetUserSellerVerified(ctx context.Context, arg SetUserSellerVerifiedParams) (User, error)
 	// Mirror Firebase-owned identity fields; only writes when something changed.
 	SyncUserIdentity(ctx context.Context, arg SyncUserIdentityParams) (User, error)
 	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) (User, error)
+	// Creates the profile or edits its non-identity fields. Identity
+	// (id_type/id_number) and verification status are managed separately, so an
+	// edit never changes them.
+	UpsertSellerProfile(ctx context.Context, arg UpsertSellerProfileParams) (SellerProfile, error)
 }
 
 var _ Querier = (*Queries)(nil)

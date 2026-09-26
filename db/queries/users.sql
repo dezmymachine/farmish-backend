@@ -28,3 +28,6 @@ UPDATE users SET display_name = $2 WHERE id = $1 RETURNING *;
 
 -- name: SetUserRole :one
 UPDATE users SET role = $2 WHERE id = $1 RETURNING *;
+
+-- name: SetUserSellerVerified :one
+UPDATE users SET seller_verified = $2 WHERE id = $1 RETURNING *;

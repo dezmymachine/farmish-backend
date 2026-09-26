@@ -61,6 +61,16 @@ func (ns NullRiverJobState) Value() (driver.Value, error) {
 	return string(ns.RiverJobState), nil
 }
 
+type AuditEvent struct {
+	ID         int64
+	ActorID    pgtype.UUID
+	Action     string
+	TargetType string
+	TargetID   string
+	Metadata   []byte
+	CreatedAt  time.Time
+}
+
 type RiverJob struct {
 	ID           int64
 	State        RiverJobState
@@ -102,6 +112,27 @@ type RiverQueue struct {
 	Metadata  []byte
 	PausedAt  *time.Time
 	UpdatedAt time.Time
+}
+
+type SellerProfile struct {
+	UserID             uuid.UUID
+	BusinessName       string
+	Region             string
+	District           string
+	Bio                *string
+	ShowPhone          bool
+	ShowWhatsapp       bool
+	WhatsappE164       *string
+	VerificationStatus string
+	IDType             *string
+	IDNumberEnc        *string
+	IDNumberLast4      *string
+	SubmittedAt        *time.Time
+	ReviewedAt         *time.Time
+	ReviewedBy         pgtype.UUID
+	RejectionReason    *string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 type User struct {
