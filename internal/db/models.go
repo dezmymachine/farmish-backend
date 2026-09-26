@@ -97,6 +97,28 @@ type CategoryAttribute struct {
 	UpdatedAt  time.Time
 }
 
+type Checkout struct {
+	ID                   uuid.UUID
+	BuyerID              uuid.UUID
+	IdempotencyKey       uuid.UUID
+	RequestHash          string
+	BasePesewas          int64
+	ProcessingFeePesewas int64
+	ChargePesewas        int64
+	PaymentID            pgtype.UUID
+	Status               string
+	ExpiresAt            time.Time
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
+type CommissionConfig struct {
+	ID         uuid.UUID
+	CategoryID pgtype.UUID
+	RateBps    int32
+	UpdatedAt  time.Time
+}
+
 type LedgerAccount struct {
 	ID        int64
 	Code      string
@@ -187,6 +209,59 @@ type MediaObject struct {
 	Status      string
 	CreatedAt   time.Time
 	AttachedAt  *time.Time
+}
+
+type Order struct {
+	ID                 uuid.UUID
+	CheckoutID         uuid.UUID
+	BuyerID            uuid.UUID
+	SellerID           uuid.UUID
+	Status             string
+	EscrowState        string
+	SubtotalPesewas    int64
+	DeliveryFeePesewas int64
+	BasePesewas        int64
+	CommissionRateBps  int32
+	CommissionPesewas  int64
+	RefundedPesewas    int64
+	DeliveryMethod     string
+	DeliveryAddress    *string
+	DeliveryRegion     *string
+	DeliveryDistrict   *string
+	RecipientName      *string
+	RecipientPhone     *string
+	TrackingRef        *string
+	PaidAt             *time.Time
+	AcceptedAt         *time.Time
+	ShippedAt          *time.Time
+	DeliveredAt        *time.Time
+	CompletedAt        *time.Time
+	CancelledAt        *time.Time
+	AutoCompleteAt     *time.Time
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+type OrderEvent struct {
+	ID         int64
+	OrderID    uuid.UUID
+	FromStatus *string
+	ToStatus   string
+	ActorType  string
+	ActorID    pgtype.UUID
+	Note       *string
+	CreatedAt  time.Time
+}
+
+type OrderItem struct {
+	ID               uuid.UUID
+	OrderID          uuid.UUID
+	ListingID        uuid.UUID
+	Title            string
+	Unit             string
+	UnitPricePesewas int64
+	Quantity         int32
+	LineTotalPesewas int64
 }
 
 type Payment struct {

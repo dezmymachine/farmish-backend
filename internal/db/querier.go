@@ -109,6 +109,9 @@ type Querier interface {
 	// A category filter on a parent slug must include its children (DOMAIN §9);
 	// on a child slug it returns just that child.
 	ListCategoryAndChildIDs(ctx context.Context, slug string) ([]uuid.UUID, error)
+	// Every category override plus the default row, for server-side commission
+	// resolution. DOMAIN §2.1 snapshots the resolved rate on each order.
+	ListCommissionConfigs(ctx context.Context) ([]ListCommissionConfigsRow, error)
 	// Installed Postgres extensions; used by tests to assert migration 000001.
 	ListExtensions(ctx context.Context) ([]string, error)
 	ListListingAttributes(ctx context.Context, listingID uuid.UUID) ([]ListListingAttributesRow, error)
@@ -119,6 +122,10 @@ type Querier interface {
 	ListListingPromotions(ctx context.Context, listingID uuid.UUID) ([]ListingPromotion, error)
 	// Cleanup sweep: pending rows older than the cutoff, oldest first.
 	ListPendingMediaBefore(ctx context.Context, arg ListPendingMediaBeforeParams) ([]MediaObject, error)
+	// The server-side snapshot a quote may use. Prices come only from this query:
+	// cart lines carry quantities, never prices. Active is evaluated against the
+	// caller's clock, which tests control; the pricing function itself stays pure.
+	ListQuoteListings(ctx context.Context, arg ListQuoteListingsParams) ([]ListQuoteListingsRow, error)
 	ListSellerListings(ctx context.Context, arg ListSellerListingsParams) ([]Listing, error)
 	// Admin review queue: oldest submission first.
 	ListSellerProfilesByStatus(ctx context.Context, arg ListSellerProfilesByStatusParams) ([]ListSellerProfilesByStatusRow, error)
