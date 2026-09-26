@@ -10,8 +10,8 @@ This is the canonical instruction file for AI coding agents (Muse Spark, Claude,
 
 ## Current state (update this section when a phase completes)
 
-- **Done:** Phases 0–9 (skeleton, Postgres 18 + migrations + sqlc, OpenAPI 3.1 contract + codegen + validation, Firebase auth + users, River jobs, rate limiting + Turnstile, phone hardening + step-up re-auth, profiles & seller onboarding, catalog), plus Upstash Redis for shared rate limits (ADR-0012).
-- **Next:** **Phase 10** (`docs/phases/phase-10.md`).
+- **Done:** Phases 0–10 (skeleton, Postgres 18 + migrations + sqlc, OpenAPI 3.1 contract + codegen + validation, Firebase auth + users, River jobs, rate limiting + Turnstile, phone hardening + step-up re-auth, profiles & seller onboarding, catalog, media uploads on R2), plus Upstash Redis for shared rate limits (ADR-0012).
+- **Next:** **Phase 11** (`docs/phases/phase-11.md`) (Listings CRUD; needs 8, 9, 10 — all done).
 - **Owner decisions** are recorded in `docs/DOMAIN.md` §2–3 (ADR-0013).
 
 ## What this is
@@ -84,6 +84,7 @@ Run from this repo:
 | Command | What |
 |---|---|
 | `make db-up auth-up redis-up` | Local Postgres 18 (:54320), Firebase Auth emulator (:9099), Redis 8 (:63790) |
+| `make rustfs-up` | Local S3 (rustfs, :9000), a stand-in for Cloudflare R2 |
 | `make migrate-up` / `migrate-down N=1\|all` / `migrate-version` / `migrate-new name=x` | Migrations (`cmd/migrate`, embedded) |
 | `make seed` | Seed reference data (catalog) into `DATABASE_URL` (`cmd/seed`, idempotent) |
 | `make sqlc` | Regenerate `internal/db` from `db/queries` + `migrations` |
