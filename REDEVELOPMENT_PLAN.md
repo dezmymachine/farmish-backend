@@ -202,7 +202,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
   - verification writes an audit event and updates the DB flag plus the Firebase claim
   - ID numbers are encrypted at rest
   - `InTx`, `validation`, `crypto` and `audit` exist and are tested
-- [ ] Phase 8
+- [x] Phase 8
 
 ### Phase 9: Catalog (categories, attributes, locations) · [spec](docs/phases/phase-09.md)
 - **Depends on:** 2, 3
@@ -375,6 +375,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-26 | 5 | Phase 5 commit | `make ci` green. Rolled-back tx: job (and business row) never exists or runs; committed tx: runs exactly once; periodic job fires on start and on interval; retry, unique, insert-only (api mode) and soft/hard stop tested; all three `RUN_MODE`s run and exit cleanly. Smoke test caught a SIGKILL on shutdown with the DB unreachable, fixed with one concurrent shutdown budget. See ADR-0010 |
 | 2026-09-26 | 6 | Phase 6 commit | `make ci` green. Over the limit → 429 `rate_limited` with `Retry-After` + `X-RateLimit-*` (contract-valid, CORS-readable); probes exempt; per-user budgets independent on a shared IP; missing/bad Turnstile token → 400 `turnstile_failed`, Cloudflare down → 503; spoofed `CF-Connecting-IP`/XFF ignored unless via trusted proxy/Cloudflare edge; live check with Cloudflare test secrets. See ADR-0011 |
 | 2026-09-26 | 7 | Phase 7 commit | `make ci` green. Fresh emulator sign-in passes the step-up fixture op; +6 min clock → 401 `reauth_required` with `WWW-Authenticate: Bearer error="insufficient_user_authentication"`; revoked token → 401 on step-up (emulator checks revocation on both paths, see ADR-0014); normal ops never call `VerifyStrict`; `internal/geo` phone/region helpers table-tested; Firebase phone runbook written. See ADR-0014 |
+| 2026-09-26 | 8 | Phase 8 commits | `make ci` green. Seller profile CRUD with server-side validation; ID submission encrypts (`v1:` ciphertext) and re-pends in one tx with audit; approve/reject flips the DB flag plus best-effort Firebase claim; public projection test asserts private keys absent; `InTx`/`validation`/`crypto`/`audit` building blocks tested. A pooled-gin-context race on the claim HTTP call was fixed at the handler boundary with a regression test |
 
 ## 10. Backlog (not scheduled)
 - Restore GitHub Actions (a workflow that runs `make ci`) once account billing is fixed; retire ADR-0004

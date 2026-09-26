@@ -10,8 +10,8 @@ This is the canonical instruction file for AI coding agents (Muse Spark, Claude,
 
 ## Current state (update this section when a phase completes)
 
-- **Done:** Phases 0–7 (skeleton, Postgres 18 + migrations + sqlc, OpenAPI 3.1 contract + codegen + validation, Firebase auth + users, River jobs, rate limiting + Turnstile, phone hardening + step-up re-auth), plus Upstash Redis for shared rate limits (ADR-0012).
-- **Next:** **Phase 8** (`docs/phases/phase-08.md`). Phases 9 and 10 are also unblocked (their dependencies are done).
+- **Done:** Phases 0–8 (skeleton, Postgres 18 + migrations + sqlc, OpenAPI 3.1 contract + codegen + validation, Firebase auth + users, River jobs, rate limiting + Turnstile, phone hardening + step-up re-auth, profiles & seller onboarding), plus Upstash Redis for shared rate limits (ADR-0012).
+- **Next:** **Phase 9** (`docs/phases/phase-09.md`). Phase 10 is also unblocked (its dependencies are done).
 - **Owner decisions** are recorded in `docs/DOMAIN.md` §2–3 (ADR-0013).
 
 ## What this is
