@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gin-gonic/gin"
@@ -22,7 +23,17 @@ const (
 	bearerScheme = "bearerAuth"
 	// roleExtension on an operation names the role it requires.
 	roleExtension = "x-farmish-role"
+	// stepUpExtension marks operations that need a fresh sign-in.
+	stepUpExtension = "x-farmish-step-up"
+	// StepUpMaxAge is how fresh the sign-in (auth_time) must be for a
+	// step-up operation (DOMAIN §3). Frontend re-authenticates when it gets
+	// a reauth_required 401.
+	StepUpMaxAge = 5 * time.Minute
 )
+
+// stepUpNow is the clock for the step-up freshness check, overridable in
+// tests to simulate a stale token without waiting 5 minutes.
+var stepUpNow = time.Now
 
 // UserResolver maps a verified identity to a users row (users.Service).
 type UserResolver interface {
@@ -31,6 +42,7 @@ type UserResolver interface {
 
 // Authenticate enforces what api/openapi.yaml declares for each operation:
 //   - security includes bearerAuth: RequireAuth (verified token + users row)
+//   - x-farmish-step-up: true: VerifyStrict plus a 5-minute auth_time check
 //   - x-farmish-role: admin: additionally RequireAdmin
 //   - security: [] (public): nothing
 //
@@ -39,11 +51,15 @@ func Authenticate(spec *openapi3.T, v auth.Verifier, r UserResolver) (gin.Handle
 	if err := checkRoleExtensions(spec); err != nil {
 		return nil, err
 	}
+	if err := checkStepUpExtensions(spec); err != nil {
+		return nil, err
+	}
 	router, err := newSpecRouter(spec)
 	if err != nil {
 		return nil, err
 	}
 	requireAuth := RequireAuth(v, r)
+	requireStepUp := RequireStepUp(v, r)
 	requireAdmin := RequireAdmin()
 
 	return func(c *gin.Context) {
@@ -52,7 +68,11 @@ func Authenticate(spec *openapi3.T, v auth.Verifier, r UserResolver) (gin.Handle
 			c.Next()
 			return
 		}
-		if requireAuth(c); c.IsAborted() {
+		if needsStepUp(route.Operation) {
+			if requireStepUp(c); c.IsAborted() {
+				return
+			}
+		} else if requireAuth(c); c.IsAborted() {
 			return
 		}
 		if roleOf(route.Operation) == users.RoleAdmin {
@@ -99,6 +119,47 @@ func RequireAuth(v auth.Verifier, r UserResolver) gin.HandlerFunc {
 	}
 }
 
+// RequireStepUp verifies with revocation checking (VerifyStrict) and
+// requires a fresh sign-in (auth_time within StepUpMaxAge). A missing or
+// invalid token gets the generic 401; only a valid-but-stale sign-in gets
+// 401 reauth_required, so the client knows to re-authenticate rather than
+// just refresh the token.
+func RequireStepUp(v auth.Verifier, r UserResolver) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		log := logger.FromContext(ctx)
+
+		token, ok := bearerToken(c.GetHeader("Authorization"))
+		if !ok {
+			abortUnauthorized(c, log, "missing or malformed Authorization header")
+			return
+		}
+		id, err := v.VerifyStrict(ctx, token)
+		if err != nil {
+			abortUnauthorized(c, log, err.Error())
+			return
+		}
+		if stepUpNow().Sub(id.AuthTime) > StepUpMaxAge {
+			abortReauthRequired(c, log, "stale auth_time")
+			return
+		}
+		u, err := r.Resolve(ctx, id)
+		if errors.Is(err, users.ErrUnsupportedProvider) {
+			abortUnauthorized(c, log, err.Error())
+			return
+		}
+		if err != nil {
+			log.Error("resolve user failed", slog.String("error", err.Error()))
+			apierror.Abort(c, http.StatusInternalServerError, apierror.CodeInternal, "Internal server error")
+			return
+		}
+
+		ctx = users.WithContext(ctx, u)
+		ctx = logger.WithContext(ctx, log.With(slog.String("user_id", u.ID.String())))
+		c.Request = c.Request.WithContext(ctx)
+	}
+}
+
 // RequireAdmin allows only users whose users.role is admin. It must run after
 // RequireAuth.
 func RequireAdmin() gin.HandlerFunc {
@@ -118,6 +179,12 @@ func abortUnauthorized(c *gin.Context, log *slog.Logger, reason string) {
 	log.Info("authentication failed", slog.String("reason", reason))
 	c.Header("WWW-Authenticate", "Bearer")
 	apierror.Abort(c, http.StatusUnauthorized, apierror.CodeUnauthorized, "Authentication required")
+}
+
+func abortReauthRequired(c *gin.Context, log *slog.Logger, reason string) {
+	log.Info("step-up authentication required", slog.String("reason", reason))
+	c.Header("WWW-Authenticate", `Bearer error="insufficient_user_authentication"`)
+	apierror.Abort(c, http.StatusUnauthorized, apierror.CodeReauthRequired, "Please sign in again to continue")
 }
 
 // bearerToken extracts the token from "Bearer <token>" (scheme is
@@ -150,6 +217,32 @@ func needsBearer(spec *openapi3.T, op *openapi3.Operation) bool {
 func roleOf(op *openapi3.Operation) string {
 	role, _ := op.Extensions[roleExtension].(string)
 	return role
+}
+
+// needsStepUp reports whether op requires a fresh sign-in.
+func needsStepUp(op *openapi3.Operation) bool {
+	on, _ := op.Extensions[stepUpExtension].(bool)
+	return on
+}
+
+// checkStepUpExtensions fails fast on a non-boolean extension or on a
+// step-up mark on a public operation, which would otherwise silently do
+// nothing (public routes skip auth entirely).
+func checkStepUpExtensions(spec *openapi3.T) error {
+	return forEachOperation(spec, func(method, path string, op *openapi3.Operation) error {
+		raw, present := op.Extensions[stepUpExtension]
+		if !present {
+			return nil
+		}
+		on, ok := raw.(bool)
+		if !ok {
+			return fmt.Errorf("%s %s: %s must be a boolean, got %v", method, path, stepUpExtension, raw)
+		}
+		if on && !needsBearer(spec, op) {
+			return fmt.Errorf("%s %s: %s requires bearerAuth security", method, path, stepUpExtension)
+		}
+		return nil
+	})
 }
 
 // checkRoleExtensions fails fast on a typo'd role, which would otherwise

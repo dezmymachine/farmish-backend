@@ -21,6 +21,12 @@ info:
     - `x-farmish-role: admin` on an operation additionally requires the admin
       role (403 `forbidden` otherwise). The server enforces exactly what the
       spec declares.
+    - `x-farmish-step-up: true` on an operation requires a fresh sign-in
+      (Firebase `auth_time` within 5 minutes) verified with a revocation
+      check. A stale sign-in gets 401 `reauth_required` with
+      `WWW-Authenticate: Bearer error="insufficient_user_authentication"`,
+      so the client knows to sign the user in again. Missing or invalid
+      tokens still get the generic 401 `unauthorized`.
     - Rate limits: every request (except the health probes) is limited per
       client address, and signed-in requests per user. `x-farmish-rate-limit:
       sensitive` adds a stricter per-operation limit. Over the limit: 429
@@ -235,8 +241,11 @@ components:
           type: string
           description: |
             Stable snake_case error code: `bad_request`, `validation_failed`,
-            `unauthorized`, `forbidden`, `not_found`, `method_not_allowed`,
-            `rate_limited`, `turnstile_failed`, `internal_error`, `unavailable`.
+            `unauthorized`, `reauth_required`, `forbidden`, `not_found`,
+            `method_not_allowed`, `rate_limited`, `turnstile_failed`,
+            `internal_error`, `unavailable`. `reauth_required` means the
+            sign-in is too old for a step-up operation: sign the user in
+            again and retry.
           examples: [validation_failed]
         message:
           type: string

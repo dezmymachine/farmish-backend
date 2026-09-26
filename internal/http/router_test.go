@@ -46,6 +46,10 @@ func (rejectAll) Verify(context.Context, string) (auth.Identity, error) {
 	return auth.Identity{}, auth.ErrInvalidToken
 }
 
+func (rejectAll) VerifyStrict(context.Context, string) (auth.Identity, error) {
+	return auth.Identity{}, auth.ErrInvalidToken
+}
+
 // noTurnstile rejects every token (no production operation uses Turnstile yet).
 type noTurnstile struct{}
 

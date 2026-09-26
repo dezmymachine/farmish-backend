@@ -14,6 +14,10 @@ paths:
     get:
       x-farmish-role: admin
       responses: {"200": {description: ok}}
+  /step-up:
+    get:
+      x-farmish-step-up: true
+      responses: {"200": {description: ok}}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
