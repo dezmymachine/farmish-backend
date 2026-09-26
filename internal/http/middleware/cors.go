@@ -13,8 +13,8 @@ func CORS(origins []string) gin.HandlerFunc {
 	return cors.New(cors.Config{
 		AllowOrigins:     origins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Authorization", "Content-Type", "Idempotency-Key", RequestIDHeader},
-		ExposeHeaders:    []string{RequestIDHeader, "Retry-After"},
+		AllowHeaders:     []string{"Authorization", "Content-Type", "Idempotency-Key", RequestIDHeader, TurnstileHeader},
+		ExposeHeaders:    []string{RequestIDHeader, "Retry-After", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"},
 		AllowCredentials: false,
 		MaxAge:           12 * time.Hour,
 	})

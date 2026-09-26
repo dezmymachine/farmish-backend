@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	legacyrouter "github.com/getkin/kin-openapi/routers/legacy"
 	"github.com/gin-gonic/gin"
 
 	"github.com/dezmymachine/farmish-backend/internal/auth"
@@ -40,10 +39,9 @@ func Authenticate(spec *openapi3.T, v auth.Verifier, r UserResolver) (gin.Handle
 	if err := checkRoleExtensions(spec); err != nil {
 		return nil, err
 	}
-	spec.Servers = nil // match on path only, as in OpenAPIValidator
-	router, err := legacyrouter.NewRouter(spec)
+	router, err := newSpecRouter(spec)
 	if err != nil {
-		return nil, fmt.Errorf("openapi router: %w", err)
+		return nil, err
 	}
 	requireAuth := RequireAuth(v, r)
 	requireAdmin := RequireAdmin()
@@ -157,20 +155,17 @@ func roleOf(op *openapi3.Operation) string {
 // checkRoleExtensions fails fast on a typo'd role, which would otherwise
 // silently leave an admin route open to every signed-in user.
 func checkRoleExtensions(spec *openapi3.T) error {
-	for path, item := range spec.Paths.Map() {
-		for method, op := range item.Operations() {
-			raw, present := op.Extensions[roleExtension]
-			if !present {
-				continue
-			}
-			role, _ := raw.(string)
-			if role != users.RoleAdmin {
-				return fmt.Errorf("%s %s: %s must be %q, got %v", method, path, roleExtension, users.RoleAdmin, raw)
-			}
-			if !needsBearer(spec, op) {
-				return fmt.Errorf("%s %s: %s requires bearerAuth security", method, path, roleExtension)
-			}
+	return forEachOperation(spec, func(method, path string, op *openapi3.Operation) error {
+		raw, present := op.Extensions[roleExtension]
+		if !present {
+			return nil
 		}
-	}
-	return nil
+		if role, _ := raw.(string); role != users.RoleAdmin {
+			return fmt.Errorf("%s %s: %s must be %q, got %v", method, path, roleExtension, users.RoleAdmin, raw)
+		}
+		if !needsBearer(spec, op) {
+			return fmt.Errorf("%s %s: %s requires bearerAuth security", method, path, roleExtension)
+		}
+		return nil
+	})
 }

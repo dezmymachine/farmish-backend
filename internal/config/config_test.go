@@ -21,6 +21,7 @@ func TestFromLookup_Defaults(t *testing.T) {
 		"CORS_ORIGINS":        "http://localhost:3000, https://farmish.gh/",
 		"DATABASE_URL":        "postgres://u:p@localhost:5432/farmish",
 		"FIREBASE_PROJECT_ID": "farmish-dev",
+		"TURNSTILE_SECRET":    "1x0000000000000000000000000000000AA",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -52,6 +53,9 @@ func TestFromLookup_Overrides(t *testing.T) {
 		"DB_STATEMENT_TIMEOUT":      "2s",
 		"FIREBASE_PROJECT_ID":       "farmish-prod",
 		"FIREBASE_CREDENTIALS_JSON": `{"type":"service_account","project_id":"farmish-prod"}`,
+		"TURNSTILE_SECRET":          "0x4AAAAAAA-real-secret",
+		"TRUSTED_PROXIES":           "10.0.0.0/8, 100.64.0.1/10",
+		"TRUST_CLOUDFLARE":          "true",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -62,6 +66,10 @@ func TestFromLookup_Overrides(t *testing.T) {
 	if cfg.DB.MaxConns != 25 || cfg.DB.StatementTimeout != 2*time.Second {
 		t.Errorf("DB overrides not applied: %+v", cfg.DB)
 	}
+	if !cfg.ClientIP.TrustCloudflare || len(cfg.ClientIP.TrustedProxies) != 2 ||
+		cfg.ClientIP.TrustedProxies[1].String() != "100.64.0.0/10" || cfg.TurnstileSecret != "0x4AAAAAAA-real-secret" {
+		t.Errorf("client IP / turnstile overrides not applied: %+v %q", cfg.ClientIP, cfg.TurnstileSecret)
+	}
 }
 
 func TestFromLookup_Invalid(t *testing.T) {
@@ -70,7 +78,7 @@ func TestFromLookup_Invalid(t *testing.T) {
 		env  map[string]string
 		want []string
 	}{
-		{"missing required", map[string]string{}, []string{"APP_ENV is required", "CORS_ORIGINS is required", "DATABASE_URL is required", "FIREBASE_PROJECT_ID is required"}},
+		{"missing required", map[string]string{}, []string{"APP_ENV is required", "CORS_ORIGINS is required", "DATABASE_URL is required", "FIREBASE_PROJECT_ID is required", "TURNSTILE_SECRET is required"}},
 		{"bad db url", map[string]string{"APP_ENV": "test", "CORS_ORIGINS": "https://a.gh", "DATABASE_URL": "mysql://x", "FIREBASE_PROJECT_ID": "p"}, []string{"DATABASE_URL must start with"}},
 		{"bad max conns", map[string]string{"APP_ENV": "test", "CORS_ORIGINS": "https://a.gh", "DATABASE_URL": "postgres://x", "DB_MAX_CONNS": "0"}, []string{"DB_MAX_CONNS must be"}},
 		{"bad statement timeout", map[string]string{"APP_ENV": "test", "CORS_ORIGINS": "https://a.gh", "DATABASE_URL": "postgres://x", "DB_STATEMENT_TIMEOUT": "soon"}, []string{"DB_STATEMENT_TIMEOUT must be"}},
@@ -103,6 +111,7 @@ func base(extra map[string]string) map[string]string {
 		"CORS_ORIGINS":        "https://farmish.gh",
 		"DATABASE_URL":        "postgres://x",
 		"FIREBASE_PROJECT_ID": "farmish-dev",
+		"TURNSTILE_SECRET":    "1x0000000000000000000000000000000AA",
 	}
 	for k, v := range extra {
 		m[k] = v
@@ -159,7 +168,7 @@ func TestFirebase_Invalid(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("err = %v, want %q", err, tt.want)
 			}
-			if strings.Contains(err.Error(), "secret") {
+			if strings.Contains(err.Error(), "PRIVATE KEY") || strings.Contains(err.Error(), "\\nsecret") {
 				t.Error("error leaks credential content")
 			}
 		})
@@ -184,5 +193,25 @@ func TestRunMode(t *testing.T) {
 		if _, err := FromLookup(lookup(base(map[string]string{env: "0"}))); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s=0: err %v", env, err)
 		}
+	}
+}
+
+func TestClientIPAndTurnstile_Invalid(t *testing.T) {
+	prod := map[string]string{"APP_ENV": "production", "FIREBASE_CREDENTIALS_JSON": saJSON}
+	tests := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{"bad cidr", map[string]string{"TRUSTED_PROXIES": "10.0.0.0/8,not-a-cidr"}, "TRUSTED_PROXIES entry"},
+		{"bad bool", map[string]string{"TRUST_CLOUDFLARE": "yes please"}, "TRUST_CLOUDFLARE must be"},
+		{"test secret in production", prod, "Cloudflare test secret"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := FromLookup(lookup(base(tt.env))); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err = %v, want %q", err, tt.want)
+			}
+		})
 	}
 }

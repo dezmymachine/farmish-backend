@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/dezmymachine/farmish-backend/internal/turnstile"
 )
 
 // Env is the deployment environment.
@@ -48,6 +51,19 @@ type Config struct {
 	Firebase        Firebase
 	RunMode         RunMode
 	JobsMaxWorkers  int
+	ClientIP        ClientIP
+	TurnstileSecret string
+}
+
+// ClientIP configures how the real client address is derived (rate limits,
+// logs, Turnstile). See middleware.ClientIPResolver.
+type ClientIP struct {
+	// TrustedProxies are proxies in front of the API (the hosting platform's
+	// edge) whose X-Forwarded-For entries are believed.
+	TrustedProxies []netip.Prefix
+	// TrustCloudflare believes CF-Connecting-IP when the request reached us
+	// from a Cloudflare edge address.
+	TrustCloudflare bool
 }
 
 // Firebase configures token verification and the Admin SDK.
@@ -195,6 +211,32 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 			errs = append(errs, fmt.Errorf("JOBS_MAX_WORKERS must be an integer in 1..200, got %q", v))
 		} else {
 			cfg.JobsMaxWorkers = n
+		}
+	}
+
+	for _, c := range strings.Split(get("TRUSTED_PROXIES"), ",") {
+		if c = strings.TrimSpace(c); c == "" {
+			continue
+		}
+		p, err := netip.ParsePrefix(c)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("TRUSTED_PROXIES entry %q is not a CIDR (e.g. 10.0.0.0/8)", c))
+			continue
+		}
+		cfg.ClientIP.TrustedProxies = append(cfg.ClientIP.TrustedProxies, p.Masked())
+	}
+	if v := get("TRUST_CLOUDFLARE"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("TRUST_CLOUDFLARE must be true or false, got %q", v))
+		}
+		cfg.ClientIP.TrustCloudflare = b
+	}
+
+	cfg.TurnstileSecret = required("TURNSTILE_SECRET")
+	if cfg.Env == EnvStaging || cfg.Env == EnvProduction {
+		if turnstile.IsTestSecret(cfg.TurnstileSecret) {
+			errs = append(errs, fmt.Errorf("TURNSTILE_SECRET is a Cloudflare test secret; not allowed when APP_ENV=%s", cfg.Env))
 		}
 	}
 

@@ -18,6 +18,8 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/database"
 	httpapi "github.com/dezmymachine/farmish-backend/internal/http"
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
+	"github.com/dezmymachine/farmish-backend/internal/ratelimit"
+	"github.com/dezmymachine/farmish-backend/internal/turnstile"
 	"github.com/dezmymachine/farmish-backend/internal/users"
 	"github.com/dezmymachine/farmish-backend/pkg/logger"
 )
@@ -108,12 +110,20 @@ func run() error {
 		if cfg.Firebase.EmulatorHost != "" {
 			log.Warn("FIREBASE AUTH EMULATOR IN USE: token signatures are NOT verified", "host", cfg.Firebase.EmulatorHost)
 		}
-		router, err = httpapi.NewRouter(cfg, log, httpapi.Deps{DB: pool, Verifier: firebase, Users: users.New(pool)})
+		limiter := ratelimit.NewMemory()
+		go limiter.RunSweeper(ctx, time.Minute)
+		router, err = httpapi.NewRouter(cfg, log, httpapi.Deps{
+			DB:        pool,
+			Verifier:  firebase,
+			Users:     users.New(pool),
+			Turnstile: turnstile.New(cfg.TurnstileSecret),
+			Limiter:   limiter,
+		})
 		if err != nil {
 			return err
 		}
 	} else {
-		router = httpapi.NewProbeRouter(log, pool)
+		router = httpapi.NewProbeRouter(cfg, log, pool)
 	}
 	log.Info("starting", "run_mode", string(cfg.RunMode))
 	addr := net.JoinHostPort("", strconv.Itoa(cfg.Port))

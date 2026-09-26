@@ -66,7 +66,13 @@ GitHub Actions is off for now (account billing lock). Never claim a phase is don
 - `security: []` makes one public
 - `x-farmish-role: admin` makes it admin-only
 
-In handlers, get the caller with `users.FromContext(ctx)`. Never take a user ID from the request. Build errors with `apierror` (stable snake_case codes). Never return `err.Error()` to clients.
+In handlers, get the caller with `users.FromContext(ctx)`. Never take a user ID from the request.
+
+**Abuse controls are declared in the spec too:**
+- `x-farmish-rate-limit: sensitive` adds a stricter limit. Use it for writes that cost money or notify people, and for anonymous forms.
+- `x-farmish-turnstile: true` requires a Cloudflare Turnstile token in `X-Turnstile-Token`.
+- Per-IP and per-user limits apply automatically.
+- Use `middleware.GetClientIP(c)` for the client address, never `c.ClientIP()`. Build errors with `apierror` (stable snake_case codes). Never return `err.Error()` to clients.
 
 Auth tests use `authtest.EmailUser(t)` / `authtest.PhoneUser(t)` (real emulator accounts + tokens) and `authtest.UnsignedToken(claims)` for crafted bad tokens.
 

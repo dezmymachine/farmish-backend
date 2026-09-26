@@ -49,6 +49,7 @@ Environment variables only; the service exits at startup listing every missing/i
 - `internal/config`: env loading and validation
 - `internal/auth`: Firebase ID-token verification and custom claims; `authtest/` creates emulator users
 - `internal/users`: maps verified identities to `users` rows
+- `internal/ratelimit`: token-bucket limiter; `internal/turnstile`: Cloudflare Turnstile verification
 - `internal/jobs`: River background jobs (registry, client, unique helpers); schema in `migrations/000003_river_queue`
 - `internal/database`: pgx pool; `dbtest/` gives each test a throwaway database
 - `internal/db`: sqlc-generated queries (from `db/queries/`)

@@ -17,6 +17,8 @@ const (
 	CodeForbidden        = "forbidden"
 	CodeNotFound         = "not_found"
 	CodeMethodNotAllowed = "method_not_allowed"
+	CodeRateLimited      = "rate_limited"
+	CodeTurnstileFailed  = "turnstile_failed"
 	CodeInternal         = "internal_error"
 	CodeUnavailable      = "unavailable"
 )

@@ -8,7 +8,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -21,6 +24,8 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/http/apierror"
 	"github.com/dezmymachine/farmish-backend/internal/http/handlers"
 	"github.com/dezmymachine/farmish-backend/internal/http/middleware"
+	"github.com/dezmymachine/farmish-backend/internal/ratelimit"
+	"github.com/dezmymachine/farmish-backend/internal/turnstile"
 	"github.com/dezmymachine/farmish-backend/internal/users"
 	"github.com/dezmymachine/farmish-backend/pkg/logger"
 )
@@ -41,6 +46,11 @@ func (rejectAll) Verify(context.Context, string) (auth.Identity, error) {
 	return auth.Identity{}, auth.ErrInvalidToken
 }
 
+// noTurnstile rejects every token (no production operation uses Turnstile yet).
+type noTurnstile struct{}
+
+func (noTurnstile) Verify(context.Context, string, netip.Addr) error { return turnstile.ErrFailed }
+
 func testRouterWith(t *testing.T, db handlers.Pinger) *gin.Engine {
 	t.Helper()
 	return newTestRouter(t, Deps{DB: db, Verifier: rejectAll{}, Users: users.New(nil)})
@@ -49,6 +59,9 @@ func testRouterWith(t *testing.T, db handlers.Pinger) *gin.Engine {
 func newTestRouter(t *testing.T, deps Deps) *gin.Engine {
 	t.Helper()
 	cfg := config.Config{Env: config.EnvTest, CORSOrigins: []string{"https://farmish.gh"}}
+	if deps.Turnstile == nil {
+		deps.Turnstile = noTurnstile{}
+	}
 	r, err := NewRouter(cfg, logger.New(io.Discard, "error"), deps)
 	if err != nil {
 		t.Fatal(err)
@@ -209,7 +222,8 @@ func TestRequestErrorHandler(t *testing.T) {
 
 // RUN_MODE=worker serves health probes only; API routes don't exist there.
 func TestProbeRouter(t *testing.T) {
-	r := NewProbeRouter(logger.New(io.Discard, "error"), fakePinger{})
+	probeCfg := config.Config{Env: config.EnvTest}
+	r := NewProbeRouter(probeCfg, logger.New(io.Discard, "error"), fakePinger{})
 	for _, path := range []string{"/healthz", "/readyz"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		w := serve(t, r, req)
@@ -224,8 +238,41 @@ func TestProbeRouter(t *testing.T) {
 	}
 	assertErrorEnvelope(t, w.Body.Bytes(), apierror.CodeNotFound)
 
-	down := NewProbeRouter(logger.New(io.Discard, "error"), fakePinger{err: errors.New("db down")})
+	down := NewProbeRouter(probeCfg, logger.New(io.Discard, "error"), fakePinger{err: errors.New("db down")})
 	if w := serve(t, down, httptest.NewRequest(http.MethodGet, "/readyz", nil)); w.Code != http.StatusServiceUnavailable {
 		t.Errorf("readyz with db down: %d", w.Code)
+	}
+}
+
+// Through the real router: the per-IP limit returns a contract-valid 429,
+// and the health probes are never limited.
+func TestRouter_RateLimited(t *testing.T) {
+	limits := middleware.DefaultRateLimits()
+	limits.IP = ratelimit.Rule{Name: "ip", Limit: 1, Period: time.Minute, Burst: 2}
+	r := newTestRouter(t, Deps{DB: fakePinger{}, Verifier: rejectAll{}, Users: users.New(nil), RateLimits: &limits})
+
+	for range 2 {
+		if w := serve(t, r, httptest.NewRequest(http.MethodGet, "/v1/me", nil)); w.Code != http.StatusUnauthorized {
+			t.Fatalf("status %d", w.Code)
+		}
+	}
+	req := httptest.NewRequest(http.MethodGet, "/v1/me", nil)
+	req.Header.Set("Origin", "https://farmish.gh")
+	w := serve(t, r, req)
+	if w.Code != http.StatusTooManyRequests || w.Header().Get("Retry-After") == "" {
+		t.Fatalf("status %d, headers %v", w.Code, w.Header())
+	}
+	assertErrorEnvelope(t, w.Body.Bytes(), apierror.CodeRateLimited)
+	assertContract(t, req, w)
+	// Browsers can only read the 429 (and Retry-After) with CORS headers.
+	if w.Header().Get("Access-Control-Allow-Origin") != "https://farmish.gh" ||
+		!strings.Contains(w.Header().Get("Access-Control-Expose-Headers"), "Retry-After") {
+		t.Errorf("429 lacks CORS headers: %v", w.Header())
+	}
+
+	for range 5 {
+		if w := serve(t, r, httptest.NewRequest(http.MethodGet, "/healthz", nil)); w.Code != http.StatusOK {
+			t.Fatalf("probe limited: %d", w.Code)
+		}
 	}
 }

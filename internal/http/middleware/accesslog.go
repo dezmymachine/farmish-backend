@@ -33,7 +33,7 @@ func AccessLog() gin.HandlerFunc {
 			slog.Int("status", status),
 			slog.Int("bytes", c.Writer.Size()),
 			slog.Duration("duration", time.Since(start)),
-			slog.String("client_ip", c.ClientIP()),
+			slog.String("client_ip", GetClientIP(c).String()),
 			slog.String("user_agent", c.Request.UserAgent()),
 		)
 	}

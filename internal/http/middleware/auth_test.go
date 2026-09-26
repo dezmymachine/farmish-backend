@@ -46,7 +46,8 @@ func (f fakeResolver) Resolve(_ context.Context, id auth.Identity) (users.User, 
 	if id.UID == "admin-uid" {
 		role = users.RoleAdmin
 	}
-	return users.User{ID: uuid.New(), FirebaseUID: id.UID, Role: role}, nil
+	// Stable per account, like a real users row.
+	return users.User{ID: uuid.NewSHA1(uuid.NameSpaceOID, []byte(id.UID)), FirebaseUID: id.UID, Role: role}, nil
 }
 
 func loadSpec(t *testing.T, file string) *openapi3.T {

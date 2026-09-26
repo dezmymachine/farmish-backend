@@ -21,6 +21,14 @@ info:
     - `x-farmish-role: admin` on an operation additionally requires the admin
       role (403 `forbidden` otherwise). The server enforces exactly what the
       spec declares.
+    - Rate limits: every request (except the health probes) is limited per
+      client address, and signed-in requests per user. `x-farmish-rate-limit:
+      sensitive` adds a stricter per-operation limit. Over the limit: 429
+      `rate_limited` with `Retry-After`. Responses carry `X-RateLimit-Limit`,
+      `X-RateLimit-Remaining` and `X-RateLimit-Reset` (seconds).
+    - `x-farmish-turnstile: true` requires a Cloudflare Turnstile token in the
+      `X-Turnstile-Token` header; a missing or rejected token gets 400
+      `turnstile_failed`.
   contact:
     name: Farmish Ghana
   license:
@@ -84,6 +92,8 @@ paths:
                 $ref: "#/components/schemas/Me"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
     patch:
       tags: [me]
       operationId: updateMe
@@ -106,6 +116,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 components:
   securitySchemes:
     bearerAuth:
@@ -158,6 +170,23 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    TooManyRequests:
+      description: Rate limit exceeded. Retry after `Retry-After` seconds.
+      headers:
+        Retry-After:
+          description: Seconds until a request will be allowed.
+          schema:
+            type: integer
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     InternalError:
       description: Unexpected server error.
       content:
@@ -170,6 +199,19 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+  headers:
+    X-RateLimit-Limit:
+      description: Burst capacity of the limit that applied.
+      schema:
+        type: integer
+    X-RateLimit-Remaining:
+      description: Requests left before limiting.
+      schema:
+        type: integer
+    X-RateLimit-Reset:
+      description: Seconds until the limit is fully replenished.
+      schema:
+        type: integer
   schemas:
     HealthStatus:
       type: object
@@ -191,7 +233,10 @@ components:
       properties:
         code:
           type: string
-          description: Stable snake_case error code, e.g. `validation_failed`, `not_found`.
+          description: |
+            Stable snake_case error code: `bad_request`, `validation_failed`,
+            `unauthorized`, `forbidden`, `not_found`, `method_not_allowed`,
+            `rate_limited`, `turnstile_failed`, `internal_error`, `unavailable`.
           examples: [validation_failed]
         message:
           type: string

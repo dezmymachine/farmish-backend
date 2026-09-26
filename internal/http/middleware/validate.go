@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -10,7 +9,6 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers"
-	legacyrouter "github.com/getkin/kin-openapi/routers/legacy"
 	"github.com/gin-gonic/gin"
 
 	"github.com/dezmymachine/farmish-backend/internal/http/api"
@@ -25,12 +23,9 @@ import (
 // 404/405 handlers answer them. Security requirements are not checked here;
 // the auth middleware owns 401/403.
 func OpenAPIValidator(spec *openapi3.T) (gin.HandlerFunc, error) {
-	// Match on path only: the API is reachable under several hosts (Railway,
-	// Cloudflare, localhost), so the spec's server URLs must not constrain routing.
-	spec.Servers = nil
-	router, err := legacyrouter.NewRouter(spec)
+	router, err := newSpecRouter(spec)
 	if err != nil {
-		return nil, fmt.Errorf("openapi router: %w", err)
+		return nil, err
 	}
 	opts := &openapi3filter.Options{
 		AuthenticationFunc: openapi3filter.NoopAuthenticationFunc,

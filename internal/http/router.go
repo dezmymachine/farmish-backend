@@ -14,14 +14,21 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/http/apierror"
 	"github.com/dezmymachine/farmish-backend/internal/http/handlers"
 	"github.com/dezmymachine/farmish-backend/internal/http/middleware"
+	"github.com/dezmymachine/farmish-backend/internal/ratelimit"
+	"github.com/dezmymachine/farmish-backend/internal/turnstile"
 	"github.com/dezmymachine/farmish-backend/pkg/logger"
 )
 
 // Deps are the dependencies handlers need.
 type Deps struct {
-	DB       handlers.Pinger
-	Verifier auth.Verifier
-	Users    UserService
+	DB        handlers.Pinger
+	Verifier  auth.Verifier
+	Users     UserService
+	Turnstile turnstile.Verifier
+	// Limiter defaults to an in-process ratelimit.Memory; RateLimits
+	// defaults to middleware.DefaultRateLimits().
+	Limiter    ratelimit.Limiter
+	RateLimits *middleware.RateLimits
 }
 
 // UserService resolves authenticated users and serves the /v1/me handlers
@@ -52,10 +59,49 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 		return nil, err
 	}
 
-	r := newEngine(log)
-	// CORS answers preflights before auth sees them; auth runs before
-	// validation so anonymous callers learn nothing about request shapes.
-	r.Use(middleware.CORS(cfg.CORSOrigins), authenticate, validate)
+	limits := middleware.DefaultRateLimits()
+	if deps.RateLimits != nil {
+		limits = *deps.RateLimits
+	}
+	if err := limits.Validate(); err != nil {
+		return nil, err
+	}
+	limiter := deps.Limiter
+	if limiter == nil {
+		limiter = ratelimit.NewMemory()
+	}
+	limitSpec, err := api.GetSpec()
+	if err != nil {
+		return nil, fmt.Errorf("load openapi spec: %w", err)
+	}
+	limitOperations, err := middleware.RateLimitOperations(limitSpec, limiter, limits)
+	if err != nil {
+		return nil, err
+	}
+	turnstileSpec, err := api.GetSpec()
+	if err != nil {
+		return nil, fmt.Errorf("load openapi spec: %w", err)
+	}
+	requireTurnstile, err := middleware.TurnstileFromSpec(turnstileSpec, deps.Turnstile)
+	if err != nil {
+		return nil, err
+	}
+
+	r := newEngine(log, clientIPResolver(cfg))
+	// Order matters:
+	//   - CORS answers preflights first, and its headers reach 429s too.
+	//   - The per-IP limit runs before any expensive work (probes exempt).
+	//   - Auth resolves the user for per-user limits.
+	//   - Turnstile runs after limits, so floods don't reach Cloudflare.
+	//   - Validation runs last, so anonymous callers learn nothing about request shapes.
+	r.Use(
+		middleware.CORS(cfg.CORSOrigins),
+		middleware.RateLimitIP(limiter, limits.IP, "/healthz", "/readyz"),
+		authenticate,
+		limitOperations,
+		requireTurnstile,
+		validate,
+	)
 
 	api.RegisterHandlersWithOptions(r, strictServer(handlers.Server{DB: deps.DB, Users: deps.Users}), api.GinServerOptions{
 		ErrorHandler: func(c *gin.Context, err error, _ int) { requestError(c, err) },
@@ -65,8 +111,8 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 
 // NewProbeRouter serves only /healthz and /readyz, for RUN_MODE=worker
 // processes that need platform health checks but must not expose the API.
-func NewProbeRouter(log *slog.Logger, db handlers.Pinger) *gin.Engine {
-	r := newEngine(log)
+func NewProbeRouter(cfg config.Config, log *slog.Logger, db handlers.Pinger) *gin.Engine {
+	r := newEngine(log, clientIPResolver(cfg))
 	s := strictServer(handlers.Server{DB: db})
 	r.GET("/healthz", s.GetHealthz)
 	r.GET("/readyz", s.GetReadyz)
@@ -75,12 +121,12 @@ func NewProbeRouter(log *slog.Logger, db handlers.Pinger) *gin.Engine {
 
 // newEngine returns a Gin engine with the middleware and fallbacks every
 // router shares.
-func newEngine(log *slog.Logger) *gin.Engine {
+func newEngine(log *slog.Logger, ips middleware.ClientIPResolver) *gin.Engine {
 	// Release mode everywhere: debug mode prints non-JSON banners to stdout.
 	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.New()
-	// Don't trust X-Forwarded-For until Phase 6 wires CF-Connecting-IP.
+	// Gin's own ClientIP() is unused: middleware.ClientIP resolves addresses.
 	_ = r.SetTrustedProxies(nil)
 	r.HandleMethodNotAllowed = true
 	// Strict handlers receive *gin.Context as context.Context; fall back to the
@@ -88,7 +134,7 @@ func newEngine(log *slog.Logger) *gin.Engine {
 	r.ContextWithFallback = true
 
 	// AccessLog sits outside Recovery so recovered panics are logged as 500s.
-	r.Use(middleware.RequestID(log), middleware.AccessLog(), middleware.Recovery())
+	r.Use(middleware.RequestID(log), middleware.ClientIP(ips), middleware.AccessLog(), middleware.Recovery())
 
 	r.NoRoute(func(c *gin.Context) {
 		apierror.Abort(c, http.StatusNotFound, apierror.CodeNotFound, "Resource not found")
@@ -97,6 +143,13 @@ func newEngine(log *slog.Logger) *gin.Engine {
 		apierror.Abort(c, http.StatusMethodNotAllowed, apierror.CodeMethodNotAllowed, "Method not allowed")
 	})
 	return r
+}
+
+func clientIPResolver(cfg config.Config) middleware.ClientIPResolver {
+	return middleware.ClientIPResolver{
+		TrustedProxies:  cfg.ClientIP.TrustedProxies,
+		TrustCloudflare: cfg.ClientIP.TrustCloudflare,
+	}
 }
 
 func strictServer(s handlers.Server) api.ServerInterface {
