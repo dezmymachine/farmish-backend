@@ -95,6 +95,9 @@ migrate-version: ## Print the current migration version
 migrate-new: ## Create the next migration pair: make migrate-new name=create_users
 	@./scripts/migrate-new.sh "$(name)"
 
+seed: ## Seed reference data (catalog) into DATABASE_URL (from $(ENV_FILE))
+	@$(LOAD_ENV) && go run ./cmd/seed
+
 grant-admin: ## Make a user admin: make grant-admin EMAIL=you@x.com (or FUID=<firebase uid>)
 	@$(LOAD_ENV) && go run ./cmd/admin grant-admin $(if $(EMAIL),--email '$(EMAIL)') $(if $(FUID),--uid '$(FUID)')
 
