@@ -13,6 +13,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countListingImages = `-- name: CountListingImages :one
+SELECT count(*) FROM listing_images WHERE listing_id = $1
+`
+
+func (q *Queries) CountListingImages(ctx context.Context, listingID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countListingImages, listingID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSellerListings = `-- name: CountSellerListings :one
 SELECT count(*) FROM listings
 WHERE seller_id = $1 AND ($2::text IS NULL OR status = $2)

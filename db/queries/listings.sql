@@ -97,3 +97,6 @@ RETURNING id;
 
 -- name: DeleteListing :one
 DELETE FROM listings WHERE id = $1 RETURNING id;
+
+-- name: CountListingImages :one
+SELECT count(*) FROM listing_images WHERE listing_id = $1;

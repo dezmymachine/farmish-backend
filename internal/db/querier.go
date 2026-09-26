@@ -17,6 +17,7 @@ type Querier interface {
 	AttachMediaObject(ctx context.Context, id uuid.UUID) (MediaObject, error)
 	// A listing's category must be a leaf (or a parent with no children).
 	CountCategoryChildren(ctx context.Context, parentID pgtype.UUID) (int64, error)
+	CountListingImages(ctx context.Context, listingID uuid.UUID) (int64, error)
 	CountSellerListings(ctx context.Context, arg CountSellerListingsParams) (int64, error)
 	CountSellerProfilesByStatus(ctx context.Context, verificationStatus string) (int64, error)
 	DeleteAttribute(ctx context.Context, arg DeleteAttributeParams) (uuid.UUID, error)

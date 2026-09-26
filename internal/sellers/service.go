@@ -137,6 +137,20 @@ func (s *Service) UpsertMine(ctx context.Context, userID uuid.UUID, in ProfileIn
 	return out, nil
 }
 
+// Exists reports whether the user has a seller profile. Phase 11 requires
+// one before they may create a listing.
+func (s *Service) Exists(ctx context.Context, userID uuid.UUID) (bool, error) {
+	_, err := db.New(s.pool).GetSellerProfile(ctx, userID)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, pgx.ErrNoRows):
+		return false, nil
+	default:
+		return false, fmt.Errorf("get seller profile: %w", err)
+	}
+}
+
 // GetPublic returns the safe projection of a seller, or ErrNotFound when the
 // profile doesn't exist. It never touches id_number_enc.
 func (s *Service) GetPublic(ctx context.Context, userID uuid.UUID) (PublicProfile, error) {
