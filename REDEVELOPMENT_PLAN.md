@@ -193,7 +193,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
   - an emulator phone sign-in reaches `/v1/me` as `phone`
   - a fresh token passes a `x-farmish-step-up` operation, and a stale or revoked one gets 401 `reauth_required`
   - the Firebase phone runbook is done
-- [ ] Phase 7
+- [x] Phase 7
 
 ### Phase 8: Profiles & seller onboarding · [spec](docs/phases/phase-08.md)
 - **Depends on:** 4
@@ -362,6 +362,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-26 | Phase 6: in-process token buckets (ip 300/min, user 120/min, `sensitive` 10/min) with bounded memory, fail-open; spec extensions `x-farmish-rate-limit` / `x-farmish-turnstile`; client IP from `TRUSTED_PROXIES` + Cloudflare ranges only; Turnstile fails closed (503) when Cloudflare is unreachable | ADR-0011 |
 | 2026-09-26 | Upstash Redis for shared limits, hybrid (per-IP stays in-process); go-redis over TLS, atomic Lua bucket, in-process fallback on timeout/outage | ADR-0012 |
 | 2026-09-26 | Owner business decisions (5% commission; buyer pays the processing fee via gross-up; 48h accept / 3-day auto-release; GHS 20 daily payouts). Implementer handbook (`AGENTS.md`, guide, DOMAIN, phase specs, review protocol). Phases 13/15/17/18/20 pre-split. `fulfilling` state dropped. Legacy bugs not ported (DOMAIN §12) | ADR-0013 |
+| 2026-09-26 | Phase 7: step-up revocation test adapted to the Auth emulator (SDK checks revocation on both paths in emulator mode; 1.2s sleep for `validSince` granularity). Production routing proved with a fake instead | ADR-0014 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
@@ -373,6 +374,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-26 | 4 | Phase 4 commit | `make ci` green (Postgres + Auth emulator). `/v1/me` with emulator email and phone tokens → 200 with `signupMethod` email/phone; missing/garbage/expired/other-project/tampered/forged (real RS256 signature check) tokens → identical 401; non-admin 403 → admin 200 after `grant-admin` (DB + claim); concurrent first sign-ins create one row; PATCH validation. See ADR-0008 |
 | 2026-09-26 | 5 | Phase 5 commit | `make ci` green. Rolled-back tx: job (and business row) never exists or runs; committed tx: runs exactly once; periodic job fires on start and on interval; retry, unique, insert-only (api mode) and soft/hard stop tested; all three `RUN_MODE`s run and exit cleanly. Smoke test caught a SIGKILL on shutdown with the DB unreachable, fixed with one concurrent shutdown budget. See ADR-0010 |
 | 2026-09-26 | 6 | Phase 6 commit | `make ci` green. Over the limit → 429 `rate_limited` with `Retry-After` + `X-RateLimit-*` (contract-valid, CORS-readable); probes exempt; per-user budgets independent on a shared IP; missing/bad Turnstile token → 400 `turnstile_failed`, Cloudflare down → 503; spoofed `CF-Connecting-IP`/XFF ignored unless via trusted proxy/Cloudflare edge; live check with Cloudflare test secrets. See ADR-0011 |
+| 2026-09-26 | 7 | Phase 7 commit | `make ci` green. Fresh emulator sign-in passes the step-up fixture op; +6 min clock → 401 `reauth_required` with `WWW-Authenticate: Bearer error="insufficient_user_authentication"`; revoked token → 401 on step-up (emulator checks revocation on both paths, see ADR-0014); normal ops never call `VerifyStrict`; `internal/geo` phone/region helpers table-tested; Firebase phone runbook written. See ADR-0014 |
 
 ## 10. Backlog (not scheduled)
 - Restore GitHub Actions (a workflow that runs `make ci`) once account billing is fixed; retire ADR-0004
