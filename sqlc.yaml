@@ -10,3 +10,14 @@ sql:
         sql_package: pgx/v5
         emit_interface: true
         emit_empty_slices: true
+        emit_pointers_for_null_types: true # nullable text -> *string
+        overrides:
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: timestamptz
+            nullable: true
+            go_type:
+              type: time.Time
+              pointer: true

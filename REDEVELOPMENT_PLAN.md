@@ -64,10 +64,11 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
     cmd/api/main.go              # wiring only: config → logger → db → river → router → run
     api/openapi.yaml             # source of truth for the HTTP contract (+ oapi-codegen.yaml; redocly.yaml at root)
     cmd/migrate/main.go          # embedded golang-migrate runner (ADR-0005)
+    cmd/admin/main.go            # operator CLI: grant-admin / revoke-admin
     migrations/                  # NNNNNN_name.{up,down}.sql, embedded via embed.FS
     db/queries/*.sql  sqlc.yaml  # sqlc input → internal/db (generated)
     internal/
-      config/ database/ (pgxpool, dbtest) db/ (sqlc) http/ (router, middleware, handlers, apierror, api/api.gen.go) auth/ users/
+      config/ database/ (pgxpool, dbtest) db/ (sqlc) http/ (router, middleware incl. auth, handlers, apierror, api/api.gen.go) auth/ (Firebase, authtest) users/
       catalog/ listings/ media/ search/
       payments/ ledger/ promotions/ checkout/ orders/ escrow/ payouts/ refunds/ delivery/
       messaging/ engagement/ (reviews, favorites, reports) supply/ notify/ jobs/ ratelimit/ audit/
@@ -153,7 +154,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
   - Role sync: `users.role` is authoritative; the `role` custom claim mirrors it for the UI. Admin CLI `make grant-admin` / `revoke-admin`.
   - Tests use the Firebase Auth emulator (docker-compose).
 - **Done when:** a valid emulator token returns `/v1/me`, phone and email sign-ins map to the right `signup_method`, missing/expired/forged tokens return 401 (generic), and non-admins get 403 on an admin test route.
-- [ ] Phase 4
+- [x] Phase 4
 
 ### Phase 5: Jobs infrastructure (River)
 - **Depends on:** 2
@@ -431,6 +432,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-25 | Phase 2: own `cmd/migrate` (embedded golang-migrate) instead of the CLI; sqlc via Docker; per-test databases; compose on port 54320; bounded pool close; `DB_MAX_CONNS`/`DB_STATEMENT_TIMEOUT` | ADR-0005 |
 | 2026-09-26 | Phase 3: OpenAPI 3.1 + oapi-codegen v2.8.0; generated code in `internal/http/api/`; camelCase JSON/query, snake_case error codes; validator passes unknown routes through and skips auth; Redocly via Docker; drift check in `make ci` | ADR-0006 |
 | 2026-09-26 | Firebase phone sign-in replaces the custom mNotify OTP flow; Phase 7 becomes phone hardening + step-up re-auth; mNotify kept for transactional SMS only (Phase 16); Turnstile stays in Phase 6 | ADR-0007 |
+| 2026-09-26 | Phase 4: spec-driven auth (`bearerAuth` / `x-farmish-role`) in `internal/http/middleware`; `users.role` authoritative, claim mirrors it; no per-request revocation check; `custom`/`anonymous` providers rejected; `email_verified` column; credentials inline or path; emulator refused when deployed | ADR-0008 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
@@ -439,6 +441,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-25 | 1 | Phase 1 commit | Local checks pass: `make run` + `/healthz` 200 JSON, `make lint test`, image builds (26.5 MB distroless/nonroot) and serves `/healthz`, `make ci` green (tidy, fmt, vet, lint, race tests, govulncheck, docker smoke incl. graceful SIGTERM). GitHub Actions removed per ADR-0004. See ADR-0002 |
 | 2026-09-25 | 2 | Phase 2 commit | `make ci` green. Migrations up→down→up clean (test + Makefile); `/readyz` 200 → 503 (DB stopped) → 200 on the running API; sqlc `ListExtensions` compiled and tested; per-test DB helper. Smoke test caught a pool-close hang on SIGTERM with the DB unreachable, now fixed. See ADR-0005 |
 | 2026-09-26 | 3 | Phase 3 commit | `make ci` green. `/healthz` + `/readyz` served via the generated strict interface; responses validated against the spec in tests; Redocly lint passes; the validator returns 400 `validation_failed` with per-field details (fixture spec); drift check fails on spec edits and on hand-edits of generated code. See ADR-0006 |
+| 2026-09-26 | 4 | Phase 4 commit | `make ci` green (Postgres + Auth emulator). `/v1/me` with emulator email and phone tokens → 200 with `signupMethod` email/phone; missing/garbage/expired/other-project/tampered/forged (real RS256 signature check) tokens → identical 401; non-admin 403 → admin 200 after `grant-admin` (DB + claim); concurrent first sign-ins create one row; PATCH validation. See ADR-0008 |
 
 ## 10. Backlog (not scheduled)
 - Restore GitHub Actions (a workflow that runs `make ci`) once account billing is fixed; retire ADR-0004

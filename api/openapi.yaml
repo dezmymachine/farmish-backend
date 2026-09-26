@@ -16,6 +16,11 @@ info:
       and may change.
     - List endpoints take `page` (from 1) and `limit` (1-50) and return `PageMeta`.
     - Authenticated endpoints take a Firebase ID token as `Authorization: Bearer <token>`.
+      Every operation requires it unless it declares `security: []`. Missing,
+      expired or invalid tokens all get the same 401 `unauthorized` envelope.
+    - `x-farmish-role: admin` on an operation additionally requires the admin
+      role (403 `forbidden` otherwise). The server enforces exactly what the
+      spec declares.
   contact:
     name: Farmish Ghana
   license:
@@ -29,6 +34,8 @@ security:
 tags:
   - name: system
     description: Liveness and readiness probes.
+  - name: me
+    description: The signed-in user's own account.
 paths:
   /healthz:
     get:
@@ -60,6 +67,45 @@ paths:
                 $ref: "#/components/schemas/HealthStatus"
         "503":
           $ref: "#/components/responses/Unavailable"
+  /v1/me:
+    get:
+      tags: [me]
+      operationId: getMe
+      summary: Get my account
+      description: |
+        Returns the signed-in user's account. The first call after a Firebase
+        sign-in creates it.
+      responses:
+        "200":
+          description: The signed-in user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    patch:
+      tags: [me]
+      operationId: updateMe
+      summary: Update my account
+      description: Updates editable profile fields. Email and phone are managed through Firebase.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMeRequest"
+      responses:
+        "200":
+          description: The updated user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 components:
   securitySchemes:
     bearerAuth:
@@ -170,6 +216,50 @@ components:
         message:
           type: string
           examples: [must be >= 1]
+    Me:
+      type: object
+      description: The signed-in user's own view of their account. Never returned for other users.
+      required: [id, emailVerified, signupMethod, role, sellerVerified, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          description: Present when the Firebase account has an email.
+        emailVerified:
+          type: boolean
+        phone:
+          type: string
+          description: E.164 phone number, present for phone sign-ins.
+          examples: ["+233241234567"]
+        displayName:
+          type: string
+        signupMethod:
+          type: string
+          enum: [social, email, phone]
+        role:
+          type: string
+          enum: [user, admin]
+        sellerVerified:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    UpdateMeRequest:
+      type: object
+      additionalProperties: false
+      required: [displayName]
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 80
+          pattern: '\S'
+          description: Leading/trailing whitespace is trimmed; must contain a non-space character.
     Money:
       type: object
       description: An amount of money in the smallest currency unit (pesewas).

@@ -3,6 +3,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -29,6 +30,19 @@ type Config struct {
 	CORSOrigins     []string
 	ShutdownTimeout time.Duration
 	DB              DB
+	Firebase        Firebase
+}
+
+// Firebase configures token verification and the Admin SDK.
+type Firebase struct {
+	ProjectID string
+	// Credentials is the service-account JSON (read from a file if
+	// FIREBASE_CREDENTIALS_JSON is a path). Empty means no credentials:
+	// ID tokens can still be verified, but custom claims can't be set.
+	Credentials []byte
+	// EmulatorHost is FIREBASE_AUTH_EMULATOR_HOST. The SDK reads the env var
+	// itself; it's recorded here so startup can warn and config can refuse it.
+	EmulatorHost string
 }
 
 // DB configures the Postgres connection pool.
@@ -145,8 +159,52 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 		cfg.CORSOrigins = append(cfg.CORSOrigins, strings.TrimRight(o, "/"))
 	}
 
+	cfg.Firebase = Firebase{
+		ProjectID:    required("FIREBASE_PROJECT_ID"),
+		EmulatorHost: get("FIREBASE_AUTH_EMULATOR_HOST"),
+	}
+	deployed := cfg.Env == EnvStaging || cfg.Env == EnvProduction
+	if cfg.Firebase.EmulatorHost != "" && deployed {
+		// Emulator mode skips token signature checks: never allow it when deployed.
+		errs = append(errs, fmt.Errorf("FIREBASE_AUTH_EMULATOR_HOST must not be set when APP_ENV=%s", cfg.Env))
+	}
+	if v := get("FIREBASE_CREDENTIALS_JSON"); v != "" {
+		creds, projectID, err := loadCredentials(v)
+		switch {
+		case err != nil:
+			errs = append(errs, err)
+		case cfg.Firebase.ProjectID != "" && projectID != cfg.Firebase.ProjectID:
+			errs = append(errs, fmt.Errorf("FIREBASE_CREDENTIALS_JSON is for project %q, but FIREBASE_PROJECT_ID is %q",
+				projectID, cfg.Firebase.ProjectID))
+		}
+		cfg.Firebase.Credentials = creds
+	} else if deployed {
+		errs = append(errs, fmt.Errorf("FIREBASE_CREDENTIALS_JSON is required when APP_ENV=%s", cfg.Env))
+	}
+
 	if err := errors.Join(errs...); err != nil {
 		return Config{}, fmt.Errorf("invalid configuration: %w", err)
 	}
 	return cfg, nil
+}
+
+// loadCredentials accepts inline service-account JSON or a path to the file.
+func loadCredentials(v string) (data []byte, projectID string, err error) {
+	data = []byte(v)
+	if !strings.HasPrefix(v, "{") {
+		b, err := os.ReadFile(v) //nolint:gosec // G304: operator-supplied path from the process environment, not request input
+		if err != nil {
+			return nil, "", fmt.Errorf("FIREBASE_CREDENTIALS_JSON: cannot read file %q: %w", v, err)
+		}
+		data = b
+	}
+	var sa struct {
+		Type      string `json:"type"`
+		ProjectID string `json:"project_id"`
+	}
+	// Never echo the content: it contains a private key.
+	if err := json.Unmarshal(data, &sa); err != nil || sa.Type != "service_account" {
+		return nil, "", errors.New("FIREBASE_CREDENTIALS_JSON is not a service-account JSON key")
+	}
+	return data, sa.ProjectID, nil
 }

@@ -2,9 +2,10 @@
 # End-to-end check of the built image against compose Postgres:
 #   1. /migrate up on a fresh farmish_smoke database
 #   2. /healthz and /readyz return 200 {"status":"ok"}
+#   2b. /v1/me: 401 without a token, 200 with an Auth-emulator token
 #   3. cut the DB network: /readyz returns 503, /healthz stays 200
 #   4. SIGTERM exits 0 with the graceful-shutdown log
-# Usage: scripts/smoke.sh <image>   (needs `make db-up`)
+# Usage: scripts/smoke.sh <image>   (needs `make db-up auth-up`)
 set -euo pipefail
 
 image="${1:?usage: smoke.sh <image>}"
@@ -23,13 +24,14 @@ cleanup() {
 trap cleanup EXIT
 fail() { echo "smoke: $*" >&2; docker logs "$name" >&2 2>/dev/null || true; exit 1; }
 
-# expect <path> <status> [body]
+# expect <path> <status> [body] [curl args...]
 expect() {
-  local out code body
-  out="$(curl -sS -m 5 -w '\n%{http_code}' "${base}$1" || true)"
+  local path="$1" want="$2" want_body="${3:-}" out code body
+  shift $(( $# < 3 ? $# : 3 ))
+  out="$(curl -sS -m 5 -w '\n%{http_code}' "$@" "${base}${path}" || true)"
   code="${out##*$'\n'}"; body="${out%$'\n'*}"; body="${body%$'\n'}" # ignore trailing newline
-  [[ "$code" == "$2" ]] || fail "$1: status $code, want $2 (body: $body)"
-  [[ -z "${3:-}" || "$body" == "$3" ]] || fail "$1: body $body, want $3"
+  [[ "$code" == "$want" ]] || fail "$path: status $code, want $want (body: $body)"
+  [[ -z "$want_body" || "$body" == "$want_body" ]] || fail "$path: body $body, want $want_body"
 }
 
 psql "DROP DATABASE IF EXISTS ${db} WITH (FORCE)" 2>/dev/null
@@ -40,7 +42,8 @@ docker run --rm --network "$net" -e DATABASE_URL="$db_url" --entrypoint /migrate
 # The published port lives on the default bridge; the DB network is attached
 # separately so it can be cut later without losing the port.
 docker create --name "$name" -p "127.0.0.1:${port}:8080" \
-  -e APP_ENV=test -e CORS_ORIGINS=http://localhost:3000 -e DATABASE_URL="$db_url" "$image" >/dev/null
+  -e APP_ENV=test -e CORS_ORIGINS=http://localhost:3000 -e DATABASE_URL="$db_url" \
+  -e FIREBASE_PROJECT_ID=demo-farmish -e FIREBASE_AUTH_EMULATOR_HOST=firebase-auth:9099 "$image" >/dev/null
 docker network connect "$net" "$name"
 docker start "$name" >/dev/null
 
@@ -51,6 +54,14 @@ done
 expect /healthz 200 '{"status":"ok"}'
 expect /readyz 200 '{"status":"ok"}'
 
+expect /v1/me 401 '{"error":{"code":"unauthorized","message":"Authentication required"}}'
+emu="http://127.0.0.1:${FARMISH_AUTH_EMULATOR_PORT:-9099}"
+token="$(curl -fsS -X POST "${emu}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=emulator" \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"smoke-$$-${RANDOM}@farmish.test\",\"password\":\"smoke-pass\",\"returnSecureToken\":true}" \
+  | sed -E 's/.*"idToken":"([^"]+)".*/\1/')" || fail "could not get an emulator token"
+expect /v1/me 200 "" -H "Authorization: Bearer ${token}"
+
 docker network disconnect "$net" "$name"
 expect /readyz 503
 expect /healthz 200 '{"status":"ok"}'
@@ -60,4 +71,4 @@ code="$(docker inspect -f '{{.State.ExitCode}}' "$name")"
 [[ "$code" == "0" ]] || fail "container exited $code after SIGTERM"
 docker logs "$name" 2>&1 | grep -q '"msg":"http server stopped"' || fail "no graceful shutdown log"
 
-echo "smoke: migrate ok, /healthz ok, /readyz 200 -> 503 on DB loss, graceful shutdown ok"
+echo "smoke: migrate ok, /healthz ok, /v1/me 401 -> 200 with token, /readyz 200 -> 503 on DB loss, graceful shutdown ok"

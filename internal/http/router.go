@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/dezmymachine/farmish-backend/internal/auth"
 	"github.com/dezmymachine/farmish-backend/internal/config"
 	"github.com/dezmymachine/farmish-backend/internal/http/api"
 	"github.com/dezmymachine/farmish-backend/internal/http/apierror"
@@ -18,7 +19,16 @@ import (
 
 // Deps are the dependencies handlers need.
 type Deps struct {
-	DB handlers.Pinger
+	DB       handlers.Pinger
+	Verifier auth.Verifier
+	Users    UserService
+}
+
+// UserService resolves authenticated users and serves the /v1/me handlers
+// (users.Service).
+type UserService interface {
+	middleware.UserResolver
+	handlers.UserStore
 }
 
 // NewRouter returns the Gin engine with middleware and every operation in
@@ -29,6 +39,15 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 		return nil, fmt.Errorf("load openapi spec: %w", err)
 	}
 	validate, err := middleware.OpenAPIValidator(spec)
+	if err != nil {
+		return nil, err
+	}
+	// Separate spec copy: each middleware adjusts its own for routing.
+	authSpec, err := api.GetSpec()
+	if err != nil {
+		return nil, fmt.Errorf("load openapi spec: %w", err)
+	}
+	authenticate, err := middleware.Authenticate(authSpec, deps.Verifier, deps.Users)
 	if err != nil {
 		return nil, err
 	}
@@ -45,12 +64,14 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 	r.ContextWithFallback = true
 
 	// AccessLog sits outside Recovery so recovered panics are logged as 500s.
-	// CORS answers preflights before validation sees them.
+	// CORS answers preflights before auth sees them; auth runs before
+	// validation so anonymous callers learn nothing about request shapes.
 	r.Use(
 		middleware.RequestID(log),
 		middleware.AccessLog(),
 		middleware.Recovery(),
 		middleware.CORS(cfg.CORSOrigins),
+		authenticate,
 		validate,
 	)
 
@@ -61,7 +82,7 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 		apierror.Abort(c, http.StatusMethodNotAllowed, apierror.CodeMethodNotAllowed, "Method not allowed")
 	})
 
-	strict := api.NewStrictHandlerWithOptions(handlers.Server{DB: deps.DB}, nil, api.StrictGinServerOptions{
+	strict := api.NewStrictHandlerWithOptions(handlers.Server{DB: deps.DB, Users: deps.Users}, nil, api.StrictGinServerOptions{
 		RequestErrorHandlerFunc:  requestError,
 		HandlerErrorFunc:         internalError("handler error"),
 		ResponseErrorHandlerFunc: internalError("response error"),

@@ -3,3 +3,23 @@
 //   sqlc v1.31.1
 
 package db
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type User struct {
+	ID             uuid.UUID
+	FirebaseUid    string
+	SignupMethod   string
+	Email          *string
+	EmailVerified  bool
+	PhoneE164      *string
+	DisplayName    *string
+	Role           string
+	SellerVerified bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}

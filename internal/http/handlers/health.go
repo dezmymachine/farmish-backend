@@ -6,8 +6,11 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/dezmymachine/farmish-backend/internal/http/api"
 	"github.com/dezmymachine/farmish-backend/internal/http/apierror"
+	"github.com/dezmymachine/farmish-backend/internal/users"
 	"github.com/dezmymachine/farmish-backend/pkg/logger"
 )
 
@@ -20,9 +23,15 @@ type Pinger interface {
 	Ping(ctx context.Context) error
 }
 
+// UserStore is the part of users.Service the handlers use.
+type UserStore interface {
+	UpdateDisplayName(ctx context.Context, id uuid.UUID, name string) (users.User, error)
+}
+
 // Server implements every operation in api/openapi.yaml.
 type Server struct {
-	DB Pinger
+	DB    Pinger
+	Users UserStore
 }
 
 var _ api.StrictServerInterface = Server{}

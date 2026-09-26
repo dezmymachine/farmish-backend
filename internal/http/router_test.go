@@ -15,11 +15,13 @@ import (
 	legacyrouter "github.com/getkin/kin-openapi/routers/legacy"
 	"github.com/gin-gonic/gin"
 
+	"github.com/dezmymachine/farmish-backend/internal/auth"
 	"github.com/dezmymachine/farmish-backend/internal/config"
 	"github.com/dezmymachine/farmish-backend/internal/http/api"
 	"github.com/dezmymachine/farmish-backend/internal/http/apierror"
 	"github.com/dezmymachine/farmish-backend/internal/http/handlers"
 	"github.com/dezmymachine/farmish-backend/internal/http/middleware"
+	"github.com/dezmymachine/farmish-backend/internal/users"
 	"github.com/dezmymachine/farmish-backend/pkg/logger"
 )
 
@@ -32,10 +34,22 @@ func testRouter(t *testing.T) http.Handler {
 	return testRouterWith(t, fakePinger{})
 }
 
+// rejectAll is a Verifier for tests that never authenticate anyone.
+type rejectAll struct{}
+
+func (rejectAll) Verify(context.Context, string) (auth.Identity, error) {
+	return auth.Identity{}, auth.ErrInvalidToken
+}
+
 func testRouterWith(t *testing.T, db handlers.Pinger) *gin.Engine {
 	t.Helper()
+	return newTestRouter(t, Deps{DB: db, Verifier: rejectAll{}, Users: users.New(nil)})
+}
+
+func newTestRouter(t *testing.T, deps Deps) *gin.Engine {
+	t.Helper()
 	cfg := config.Config{Env: config.EnvTest, CORSOrigins: []string{"https://farmish.gh"}}
-	r, err := NewRouter(cfg, logger.New(io.Discard, "error"), Deps{DB: db})
+	r, err := NewRouter(cfg, logger.New(io.Discard, "error"), deps)
 	if err != nil {
 		t.Fatal(err)
 	}

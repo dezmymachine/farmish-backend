@@ -11,9 +11,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dezmymachine/farmish-backend/internal/auth"
 	"github.com/dezmymachine/farmish-backend/internal/config"
 	"github.com/dezmymachine/farmish-backend/internal/database"
 	httpapi "github.com/dezmymachine/farmish-backend/internal/http"
+	"github.com/dezmymachine/farmish-backend/internal/users"
 	"github.com/dezmymachine/farmish-backend/pkg/logger"
 )
 
@@ -50,7 +52,15 @@ func run() error {
 	}()
 	log.Info("database connected", "max_conns", cfg.DB.MaxConns)
 
-	router, err := httpapi.NewRouter(cfg, log, httpapi.Deps{DB: pool})
+	firebase, err := auth.NewFirebase(ctx, cfg.Firebase)
+	if err != nil {
+		return err
+	}
+	if cfg.Firebase.EmulatorHost != "" {
+		log.Warn("FIREBASE AUTH EMULATOR IN USE: token signatures are NOT verified", "host", cfg.Firebase.EmulatorHost)
+	}
+
+	router, err := httpapi.NewRouter(cfg, log, httpapi.Deps{DB: pool, Verifier: firebase, Users: users.New(pool)})
 	if err != nil {
 		return err
 	}

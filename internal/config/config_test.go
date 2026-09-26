@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,9 +17,10 @@ func lookup(m map[string]string) func(string) (string, bool) {
 
 func TestFromLookup_Defaults(t *testing.T) {
 	cfg, err := FromLookup(lookup(map[string]string{
-		"APP_ENV":      "development",
-		"CORS_ORIGINS": "http://localhost:3000, https://farmish.gh/",
-		"DATABASE_URL": "postgres://u:p@localhost:5432/farmish",
+		"APP_ENV":             "development",
+		"CORS_ORIGINS":        "http://localhost:3000, https://farmish.gh/",
+		"DATABASE_URL":        "postgres://u:p@localhost:5432/farmish",
+		"FIREBASE_PROJECT_ID": "farmish-dev",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -39,14 +42,16 @@ func TestFromLookup_Defaults(t *testing.T) {
 
 func TestFromLookup_Overrides(t *testing.T) {
 	cfg, err := FromLookup(lookup(map[string]string{
-		"APP_ENV":              "production",
-		"PORT":                 "9000",
-		"LOG_LEVEL":            "DEBUG",
-		"SHUTDOWN_TIMEOUT":     "5s",
-		"CORS_ORIGINS":         "https://farmish.gh",
-		"DATABASE_URL":         "postgresql://u:p@db:5432/farmish",
-		"DB_MAX_CONNS":         "25",
-		"DB_STATEMENT_TIMEOUT": "2s",
+		"APP_ENV":                   "production",
+		"PORT":                      "9000",
+		"LOG_LEVEL":                 "DEBUG",
+		"SHUTDOWN_TIMEOUT":          "5s",
+		"CORS_ORIGINS":              "https://farmish.gh",
+		"DATABASE_URL":              "postgresql://u:p@db:5432/farmish",
+		"DB_MAX_CONNS":              "25",
+		"DB_STATEMENT_TIMEOUT":      "2s",
+		"FIREBASE_PROJECT_ID":       "farmish-prod",
+		"FIREBASE_CREDENTIALS_JSON": `{"type":"service_account","project_id":"farmish-prod"}`,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -65,8 +70,8 @@ func TestFromLookup_Invalid(t *testing.T) {
 		env  map[string]string
 		want []string
 	}{
-		{"missing required", map[string]string{}, []string{"APP_ENV is required", "CORS_ORIGINS is required", "DATABASE_URL is required"}},
-		{"bad db url", map[string]string{"APP_ENV": "test", "CORS_ORIGINS": "https://a.gh", "DATABASE_URL": "mysql://x"}, []string{"DATABASE_URL must start with"}},
+		{"missing required", map[string]string{}, []string{"APP_ENV is required", "CORS_ORIGINS is required", "DATABASE_URL is required", "FIREBASE_PROJECT_ID is required"}},
+		{"bad db url", map[string]string{"APP_ENV": "test", "CORS_ORIGINS": "https://a.gh", "DATABASE_URL": "mysql://x", "FIREBASE_PROJECT_ID": "p"}, []string{"DATABASE_URL must start with"}},
 		{"bad max conns", map[string]string{"APP_ENV": "test", "CORS_ORIGINS": "https://a.gh", "DATABASE_URL": "postgres://x", "DB_MAX_CONNS": "0"}, []string{"DB_MAX_CONNS must be"}},
 		{"bad statement timeout", map[string]string{"APP_ENV": "test", "CORS_ORIGINS": "https://a.gh", "DATABASE_URL": "postgres://x", "DB_STATEMENT_TIMEOUT": "soon"}, []string{"DB_STATEMENT_TIMEOUT must be"}},
 		{"bad env", map[string]string{"APP_ENV": "prod", "CORS_ORIGINS": "https://a.gh"}, []string{"APP_ENV must be one of"}},
@@ -86,6 +91,75 @@ func TestFromLookup_Invalid(t *testing.T) {
 				if !strings.Contains(err.Error(), w) {
 					t.Errorf("error %q does not contain %q", err, w)
 				}
+			}
+		})
+	}
+}
+
+func base(extra map[string]string) map[string]string {
+	m := map[string]string{
+		"APP_ENV":             "development",
+		"CORS_ORIGINS":        "https://farmish.gh",
+		"DATABASE_URL":        "postgres://x",
+		"FIREBASE_PROJECT_ID": "farmish-dev",
+	}
+	for k, v := range extra {
+		m[k] = v
+	}
+	return m
+}
+
+const saJSON = `{"type":"service_account","project_id":"farmish-dev","private_key":"-----BEGIN PRIVATE KEY-----\nsecret\n"}`
+
+func TestFirebase_CredentialsInlineAndFile(t *testing.T) {
+	cfg, err := FromLookup(lookup(base(map[string]string{"FIREBASE_CREDENTIALS_JSON": saJSON})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(cfg.Firebase.Credentials) != saJSON {
+		t.Error("inline credentials not loaded")
+	}
+
+	path := filepath.Join(t.TempDir(), "sa.json")
+	if err := os.WriteFile(path, []byte(saJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = FromLookup(lookup(base(map[string]string{"FIREBASE_CREDENTIALS_JSON": path})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(cfg.Firebase.Credentials) != saJSON {
+		t.Error("credentials file not loaded")
+	}
+
+	// Credentials and the emulator are optional in development.
+	cfg, err = FromLookup(lookup(base(map[string]string{"FIREBASE_AUTH_EMULATOR_HOST": "127.0.0.1:9099"})))
+	if err != nil || cfg.Firebase.Credentials != nil || cfg.Firebase.EmulatorHost != "127.0.0.1:9099" {
+		t.Errorf("dev without credentials: cfg %+v, err %v", cfg.Firebase, err)
+	}
+}
+
+func TestFirebase_Invalid(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{"emulator in production", map[string]string{"APP_ENV": "production", "FIREBASE_AUTH_EMULATOR_HOST": "x:9099", "FIREBASE_CREDENTIALS_JSON": saJSON}, "FIREBASE_AUTH_EMULATOR_HOST must not be set"},
+		{"emulator in staging", map[string]string{"APP_ENV": "staging", "FIREBASE_AUTH_EMULATOR_HOST": "x:9099", "FIREBASE_CREDENTIALS_JSON": saJSON}, "FIREBASE_AUTH_EMULATOR_HOST must not be set"},
+		{"no credentials in production", map[string]string{"APP_ENV": "production"}, "FIREBASE_CREDENTIALS_JSON is required"},
+		{"missing file", map[string]string{"FIREBASE_CREDENTIALS_JSON": "/nonexistent/sa.json"}, "cannot read file"},
+		{"not a service account", map[string]string{"FIREBASE_CREDENTIALS_JSON": `{"type":"authorized_user"}`}, "not a service-account"},
+		{"wrong project", map[string]string{"FIREBASE_PROJECT_ID": "other", "FIREBASE_CREDENTIALS_JSON": saJSON}, `is for project "farmish-dev"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := FromLookup(lookup(base(tt.env)))
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err = %v, want %q", err, tt.want)
+			}
+			if strings.Contains(err.Error(), "secret") {
+				t.Error("error leaks credential content")
 			}
 		})
 	}

@@ -13,6 +13,8 @@ import (
 const (
 	CodeBadRequest       = "bad_request"
 	CodeValidationFailed = "validation_failed"
+	CodeUnauthorized     = "unauthorized"
+	CodeForbidden        = "forbidden"
 	CodeNotFound         = "not_found"
 	CodeMethodNotAllowed = "method_not_allowed"
 	CodeInternal         = "internal_error"

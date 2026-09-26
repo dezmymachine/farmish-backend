@@ -16,13 +16,15 @@ ENV_FILE  ?= $(if $(wildcard .env),.env,.env.example)
 LOAD_ENV  := set -a && . ./$(ENV_FILE) && set +a
 # Admin connection to the compose Postgres; dbtest creates a throwaway DB per test.
 TEST_DATABASE_URL ?= postgres://farmish:farmish@127.0.0.1:$(or $(FARMISH_PG_PORT),54320)/farmish?sslmode=disable
+# Firebase Auth emulator from docker-compose; authtest creates users in it.
+TEST_AUTH_EMULATOR_HOST ?= 127.0.0.1:$(or $(FARMISH_AUTH_EMULATOR_PORT),9099)
 REDOCLY   := docker run --rm -u $$(id -u):$$(id -g) -v $(CURDIR):/spec -w /spec redocly/cli:$(REDOCLY_VERSION)
 SQLC      := docker run --rm -u $$(id -u):$$(id -g) -v $(CURDIR):/src -w /src sqlc/sqlc:$(SQLC_VERSION)
 
 .DEFAULT_GOAL := help
 .PHONY: help run build test lint fmt fmt-check tidy tidy-check vuln docker-build smoke ci tools \
         db-up db-down db-reset migrate-up migrate-down migrate-version migrate-new sqlc sqlc-check \
-        generate generate-check api-lint
+        generate generate-check api-lint auth-up grant-admin revoke-admin
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n",$$1,$$2}'
@@ -33,8 +35,10 @@ run: ## Run the API locally (loads $(ENV_FILE))
 build: ## Build a static binary to bin/api
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BIN_DIR)/api ./cmd/api
 
-test: db-up ## Run all tests (incl. DB tests) with the race detector
-	TEST_DATABASE_URL='$(TEST_DATABASE_URL)' DBTEST_REQUIRED=1 go test -race -count=1 ./...
+test: db-up auth-up ## Run all tests (incl. DB + Auth emulator tests) with the race detector
+	TEST_DATABASE_URL='$(TEST_DATABASE_URL)' DBTEST_REQUIRED=1 \
+	FIREBASE_AUTH_EMULATOR_HOST='$(TEST_AUTH_EMULATOR_HOST)' AUTHTEST_REQUIRED=1 \
+	go test -race -count=1 ./...
 
 lint: $(GOLANGCI) ## Run go vet and golangci-lint
 	go vet ./...
@@ -58,11 +62,14 @@ vuln: $(GOVULN) ## Scan dependencies and stdlib for known vulnerabilities
 docker-build: ## Build the Docker image ($(IMAGE))
 	docker build -t $(IMAGE) .
 
-smoke: docker-build db-up ## Run the image against compose Postgres; check probes + SIGTERM
+smoke: docker-build db-up auth-up ## Run the image against compose Postgres; check probes + SIGTERM
 	./scripts/smoke.sh $(IMAGE)
 
 db-up: ## Start compose Postgres and wait until healthy
 	docker compose up -d --wait postgres
+
+auth-up: ## Start the Firebase Auth emulator (127.0.0.1:9099) and wait until healthy
+	docker compose up -d --wait --build firebase-auth
 
 db-down: ## Stop compose services (data kept)
 	docker compose down
@@ -81,6 +88,12 @@ migrate-version: ## Print the current migration version
 
 migrate-new: ## Create the next migration pair: make migrate-new name=create_users
 	@./scripts/migrate-new.sh "$(name)"
+
+grant-admin: ## Make a user admin: make grant-admin EMAIL=you@x.com (or FUID=<firebase uid>)
+	@$(LOAD_ENV) && go run ./cmd/admin grant-admin $(if $(EMAIL),--email '$(EMAIL)') $(if $(FUID),--uid '$(FUID)')
+
+revoke-admin: ## Remove admin: make revoke-admin EMAIL=you@x.com (or FUID=<firebase uid>)
+	@$(LOAD_ENV) && go run ./cmd/admin revoke-admin $(if $(EMAIL),--email '$(EMAIL)') $(if $(FUID),--uid '$(FUID)')
 
 sqlc: ## Generate internal/db from db/queries + migrations
 	$(SQLC) generate

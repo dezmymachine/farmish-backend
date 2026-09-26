@@ -38,12 +38,15 @@ Never edit it or import from it.
 ## Commands
 
 - `make db-up` / `db-down` / `db-reset`: compose Postgres 16 on `127.0.0.1:54320`. `db-reset` deletes the data
+- `make auth-up`: Firebase Auth emulator on `127.0.0.1:9099` (project `demo-farmish`). `.env.example` points at it by default
 - `make run`: runs the API on `:8080`, loading `.env` if present, else `.env.example`. Needs `make db-up` and `make migrate-up`
 - `make build`: static binary at `bin/api`
-- `make test`: starts compose Postgres, then `go test -race -count=1 ./...` with DB tests required
-  - single test: `TEST_DATABASE_URL='postgres://farmish:farmish@127.0.0.1:54320/farmish?sslmode=disable' go test -race -run TestName ./internal/...`
-  - without `TEST_DATABASE_URL`, DB tests skip
+- `make test`: starts compose Postgres + the Auth emulator, then `go test -race -count=1 ./...` with DB and auth tests required
+  - single test: `TEST_DATABASE_URL='postgres://farmish:farmish@127.0.0.1:54320/farmish?sslmode=disable' FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 go test -race -run TestName ./internal/...`
+  - without `TEST_DATABASE_URL` / `FIREBASE_AUTH_EMULATOR_HOST`, DB / auth tests skip
 - `make migrate-up`, `make migrate-down N=1|all`, `make migrate-version`: run `cmd/migrate` against `DATABASE_URL`
+- `make grant-admin EMAIL=…` / `make revoke-admin EMAIL=…` (or `FUID=<firebase uid>`): sets `users.role` and mirrors the Firebase claim. The user must have signed in once
+- `scripts/dev-token.sh <email> <password>`: prints an ID token for curl (emulator, or a real project with `FIREBASE_WEB_API_KEY`)
 - `make migrate-new name=snake_case`: creates the next `migrations/NNNNNN_name.{up,down}.sql` pair
 - `make generate`: regenerates `internal/http/api/api.gen.go` from `api/openapi.yaml` (oapi-codegen, pinned). Never hand-edit it
 - `make api-lint`: Redocly lint of the spec (pinned Docker image, rules in `redocly.yaml`)
@@ -56,7 +59,16 @@ Never edit it or import from it.
 
 GitHub Actions is off for now (account billing lock). Never claim a phase is done without a green `make ci`.
 
-**Adding an endpoint:** edit `api/openapi.yaml` (camelCase JSON/query, `$ref` the shared `Error`/`Money`/`PageMeta`, declare 4xx responses), run `make generate`, then implement the new method on `handlers.Server`. Requests are validated against the spec automatically. Build errors with `apierror` (stable snake_case codes). Never return `err.Error()` to clients.
+**Adding an endpoint:** edit `api/openapi.yaml` (camelCase JSON/query, `$ref` the shared `Error`/`Money`/`PageMeta`, declare 4xx responses), run `make generate`, then implement the new method on `handlers.Server`. Requests are validated against the spec automatically.
+
+**Auth is declared in the spec, not in code:**
+- operations require a Firebase ID token by default
+- `security: []` makes one public
+- `x-farmish-role: admin` makes it admin-only
+
+In handlers, get the caller with `users.FromContext(ctx)`. Never take a user ID from the request. Build errors with `apierror` (stable snake_case codes). Never return `err.Error()` to clients.
+
+Auth tests use `authtest.EmailUser(t)` / `authtest.PhoneUser(t)` (real emulator accounts + tokens) and `authtest.UnsignedToken(claims)` for crafted bad tokens.
 
 DB tests use `dbtest.Pool(t)` (fresh migrated database per test) or `dbtest.EmptyURL(t)` (unmigrated). Both are in `internal/database/dbtest`.
 

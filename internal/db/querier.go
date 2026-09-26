@@ -6,11 +6,23 @@ package db
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 type Querier interface {
+	GetUserByFirebaseUID(ctx context.Context, firebaseUid string) (User, error)
+	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	// Returns no row if a concurrent request created the user first.
+	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
 	// Installed Postgres extensions; used by tests to assert migration 000001.
 	ListExtensions(ctx context.Context) ([]string, error)
+	// Several accounts may share an email (no account linking in v1).
+	ListUsersByEmail(ctx context.Context, email *string) ([]User, error)
+	SetUserRole(ctx context.Context, arg SetUserRoleParams) (User, error)
+	// Mirror Firebase-owned identity fields; only writes when something changed.
+	SyncUserIdentity(ctx context.Context, arg SyncUserIdentityParams) (User, error)
+	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) (User, error)
 }
 
 var _ Querier = (*Queries)(nil)
