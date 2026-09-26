@@ -7,11 +7,11 @@ import (
 
 func TestSlugify(t *testing.T) {
 	for in, want := range map[string]string{
-		"Flowers & Ornamentals": "flowers-ornamentals",
-		"Sheep & Goats":         "sheep-goats",
-		"Café":                  "cafe",
-		"Tractors":              "tractors",
-		"  Hello World  ":       "hello-world",
+		"Flowers & Ornamentals":   "flowers-ornamentals",
+		"Sheep & Goats":           "sheep-goats",
+		"Café":                    "cafe",
+		"Tractors":                "tractors",
+		"  Hello World  ":         "hello-world",
 		"--Dried & Smoked Fish--": "dried-smoked-fish",
 		"Sefwi-Bibiani":           "sefwi-bibiani",
 	} {

@@ -121,7 +121,7 @@ var SeedCategories = []SeedCategory{
 	},
 	{
 		Name: "Irrigation Equipment", Slug: "irrigation", Icon: "💧", Group: "equipment",
-		Children:   []string{},
+		Children: []string{},
 		Attributes: []SeedAttribute{
 			{Key: "irrigation_type", Label: "Irrigation Type", Type: "select", Options: []string{"Drip", "Sprinkler", "Flood", "Center Pivot", "Micro-sprinkler"}},
 			{Key: "powered_by", Label: "Powered By", Type: "select", Options: []string{"Electric", "Solar", "Manual", "Engine"}},

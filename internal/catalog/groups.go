@@ -16,8 +16,10 @@ var Groups = map[string]GroupInfo{
 	},
 	"quality": {
 		ItemStates: []string{"grade_a", "grade_b", "organic", "premium", "standard"},
-		Units: []string{"kg", "grams", "metric_ton", "pounds", "bags_50kg", "bags_25kg",
-			"pieces", "units", "crates", "baskets", "bundles", "dozen", "pack", "box"},
+		Units: []string{
+			"kg", "grams", "metric_ton", "pounds", "bags_50kg", "bags_25kg",
+			"pieces", "units", "crates", "baskets", "bundles", "dozen", "pack", "box",
+		},
 	},
 	"livestock": {
 		ItemStates: []string{"young", "adult", "mature", "breeding_stock"},

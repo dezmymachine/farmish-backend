@@ -107,10 +107,10 @@ type AttributeInput struct {
 // AttributePatch is the admin patch model. A nil Options keeps the column;
 // a non-nil (even empty) Options replaces it.
 type AttributePatch struct {
-	Label     *string
-	Type      *string
-	Options   []string
+	Label      *string
+	Type       *string
+	Options    []string
 	HasOptions bool
-	Required  *bool
-	SortOrder *int32
+	Required   *bool
+	SortOrder  *int32
 }
