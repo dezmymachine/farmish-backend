@@ -557,6 +557,93 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /v1/listings:
+    get:
+      tags: [listings]
+      operationId: searchListings
+      summary: Search and browse listings
+      description: |
+        Active, unexpired listings, promoted ones first (DOMAIN §6) and then
+        by the requested sort. Anonymous callers are allowed; the response
+        never contains a seller's contact details. Cacheable for 30 seconds,
+        and a matching `If-None-Match` returns 304 with no body.
+      security: []
+      parameters:
+        - name: q
+          in: query
+          description: Free text, matched against the title and description.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+        - name: category
+          in: query
+          description: Category slug. A parent includes all its children.
+          schema:
+            type: string
+            maxLength: 80
+        - name: region
+          in: query
+          schema:
+            $ref: "#/components/schemas/GhanaRegion"
+        - name: district
+          in: query
+          schema:
+            type: string
+            maxLength: 80
+        - name: minPrice
+          in: query
+          description: Lowest price, in pesewas.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: maxPrice
+          in: query
+          description: Highest price, in pesewas.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: itemState
+          in: query
+          schema:
+            type: string
+            maxLength: 40
+        - name: sort
+          in: query
+          description: |
+            `relevance` needs `q`; without it the sort falls back to `newest`.
+          schema:
+            type: string
+            enum: [relevance, newest, price_asc, price_desc]
+            default: newest
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - name: If-None-Match
+          in: header
+          description: |
+            A validator from an earlier response. When it still matches, the
+            server answers 304 with no body.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A page of listings.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/Cache-Control"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListingSearchResult"
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
     post:
       tags: [listings]
       operationId: createListing
@@ -588,6 +675,79 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /v1/listings/{slug}:
+    get:
+      tags: [listings]
+      operationId: getPublicListing
+      summary: Get one listing for a buyer
+      description: |
+        The public listing page: the summary plus the detail fields and the
+        safe seller projection. A listing that is not active, or is expired,
+        is a 404 so a stale link never shows a dead page. No phone, email or
+        other contact detail appears here: the contact endpoint is the only
+        way to see a seller's number, and only when the seller opted in.
+
+        A view is counted asynchronously (`listings.count_view`), so this
+        stays a cheap read. Cacheable for 60 seconds.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ListingSlug"
+        - name: If-None-Match
+          in: header
+          description: |
+            A validator from an earlier response. When it still matches, the
+            server answers 304 with no body.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The listing.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/Cache-Control"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListingDetail"
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /v1/listings/{id}/contact:
+    post:
+      tags: [listings]
+      operationId: revealListingContact
+      summary: Show a seller's contact details
+      description: |
+        Returns only the fields the seller opted into: `phone` when
+        `showPhone` is set, `whatsapp` when `showWhatsapp` is. A seller who
+        opted out of both gets `{}`. Asking about your own listing is a 403,
+        and a listing that is not browsable is a 404. Every reveal is counted
+        in the listing's `contactCount`.
+      x-farmish-rate-limit: sensitive
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      responses:
+        "200":
+          description: The opted-in contact details; absent fields are omitted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListingContact"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
   /v1/me/listings:
     get:
       tags: [listings]
@@ -637,7 +797,6 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
-  /v1/listings/{id}:
     patch:
       tags: [listings]
       operationId: updateListing
@@ -693,7 +852,7 @@ paths:
           $ref: "#/components/responses/Conflict"
         "429":
           $ref: "#/components/responses/TooManyRequests"
-  /v1/listings/{id}/publish:
+  /v1/me/listings/{id}/publish:
     post:
       tags: [listings]
       operationId: publishListing
@@ -720,7 +879,7 @@ paths:
           $ref: "#/components/responses/Conflict"
         "429":
           $ref: "#/components/responses/TooManyRequests"
-  /v1/listings/{id}/renew:
+  /v1/me/listings/{id}/renew:
     post:
       tags: [listings]
       operationId: renewListing
@@ -745,7 +904,7 @@ paths:
           $ref: "#/components/responses/Conflict"
         "429":
           $ref: "#/components/responses/TooManyRequests"
-  /v1/listings/{id}/mark-sold:
+  /v1/me/listings/{id}/mark-sold:
     post:
       tags: [listings]
       operationId: markListingSold
@@ -770,7 +929,7 @@ paths:
           $ref: "#/components/responses/Conflict"
         "429":
           $ref: "#/components/responses/TooManyRequests"
-  /v1/listings/{id}/archive:
+  /v1/me/listings/{id}/archive:
     post:
       tags: [listings]
       operationId: archiveListing
@@ -795,6 +954,7 @@ paths:
           $ref: "#/components/responses/Conflict"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -810,6 +970,15 @@ components:
       schema:
         type: string
         format: uuid
+    ListingSlug:
+      name: slug
+      in: path
+      required: true
+      description: The listing's public slug.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 200
     Page:
       name: page
       in: query
@@ -860,6 +1029,15 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    NotModified:
+      description: |
+        The client's `If-None-Match` still matches, so the cached copy stands.
+        Sent with no body.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/Cache-Control"
+        ETag:
+          $ref: "#/components/headers/ETag"
     TooManyRequests:
       description: Rate limit exceeded. Retry after `Retry-After` seconds.
       headers:
@@ -890,6 +1068,14 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
   headers:
+    Cache-Control:
+      description: How long a shared cache may reuse the response.
+      schema:
+        type: string
+    ETag:
+      description: A weak validator over the exact response body.
+      schema:
+        type: string
     X-RateLimit-Limit:
       description: Burst capacity of the limit that applied.
       schema:
@@ -1072,6 +1258,203 @@ components:
           format: date-time
         rejectionReason:
           type: string
+    GhanaRegion:
+      type: string
+      description: One of Ghana's 16 regions.
+      enum: [Ahafo, Ashanti, Bono, Bono East, Central, Eastern, Greater Accra, North East, Northern, Oti, Savannah, Upper East, Upper West, Volta, Western, Western North]
+    ListingCategoryRef:
+      type: object
+      required: [slug, name]
+      properties:
+        slug:
+          type: string
+        name:
+          type: string
+    ListingSellerRef:
+      type: object
+      description: Just enough seller to render a result row.
+      required: [name, verified]
+      properties:
+        name:
+          type: string
+          description: The seller's business name.
+        verified:
+          type: boolean
+    ListingPromotion:
+      type: object
+      description: A running promotion. Only the tier is public; the rank is internal.
+      required: [tier]
+      properties:
+        tier:
+          type: string
+          enum: [top, vip, diamond, enterprise]
+    ListingSummary:
+      type: object
+      description: One row of public search or browse.
+      required: [id, slug, title, price, unit, region, district, itemState, category, promoted, seller, publishedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        title:
+          type: string
+        price:
+          $ref: "#/components/schemas/Money"
+        unit:
+          type: string
+          description: The selling unit, e.g. `kg`, `bags`, `heads`.
+        region:
+          $ref: "#/components/schemas/GhanaRegion"
+        district:
+          type: string
+        itemState:
+          type: string
+          description: The item's condition or grade, e.g. `grade_a`, `used`.
+        category:
+          $ref: "#/components/schemas/ListingCategoryRef"
+        coverImageUrl:
+          type: string
+          description: The first image, if the seller added one.
+        promoted:
+          oneOf:
+            - $ref: "#/components/schemas/ListingPromotion"
+            - type: "null"
+          description: Null when the listing is not promoted.
+        seller:
+          $ref: "#/components/schemas/ListingSellerRef"
+        publishedAt:
+          type: string
+          format: date-time
+    ListingImage:
+      type: object
+      required: [url, order]
+      properties:
+        url:
+          type: string
+        order:
+          type: integer
+          format: int32
+          minimum: 0
+    ListingAttribute:
+      type: object
+      required: [key, label, value]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+          description: The category's display label for this attribute.
+        value:
+          type: string
+    ListingDeliveryOptions:
+      type: object
+      required: [pickup, sellerDelivery]
+      properties:
+        pickup:
+          type: boolean
+        sellerDelivery:
+          type: boolean
+        fee:
+          oneOf:
+            - $ref: "#/components/schemas/Money"
+            - type: "null"
+          description: The seller's delivery fee, when they offer delivery.
+    ListingDetail:
+      type: object
+      description: |
+        The public listing page. It repeats the `ListingSummary` fields
+        because `seller` is the full safe projection here, then adds the
+        detail a buyer needs. It never carries a phone number, an email
+        address or any other contact detail: those come from the contact
+        endpoint, and only when the seller opted in.
+      required: [id, slug, title, price, unit, region, district, itemState, category, promoted, seller, publishedAt, description, quantityAvailable, minOrderQty, isNegotiable, deliveryOptions, images, attributes, expiresAt, favoriteCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        title:
+          type: string
+        price:
+          $ref: "#/components/schemas/Money"
+        unit:
+          type: string
+        region:
+          $ref: "#/components/schemas/GhanaRegion"
+        district:
+          type: string
+        itemState:
+          type: string
+        category:
+          $ref: "#/components/schemas/ListingCategoryRef"
+        coverImageUrl:
+          type: string
+        promoted:
+          oneOf:
+            - $ref: "#/components/schemas/ListingPromotion"
+            - type: "null"
+        seller:
+          $ref: "#/components/schemas/PublicSeller"
+        publishedAt:
+          type: string
+          format: date-time
+        description:
+          type: string
+        quantityAvailable:
+          type: integer
+          format: int32
+          minimum: 0
+        minOrderQty:
+          type: integer
+          format: int32
+          minimum: 1
+        isNegotiable:
+          type: boolean
+        area:
+          type: string
+          description: The seller's area or landmark, when given.
+        deliveryOptions:
+          $ref: "#/components/schemas/ListingDeliveryOptions"
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/ListingImage"
+        attributes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ListingAttribute"
+        expiresAt:
+          type: string
+          format: date-time
+        favoriteCount:
+          type: integer
+          format: int32
+          minimum: 0
+    ListingSearchResult:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ListingSummary"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
+    ListingContact:
+      type: object
+      description: |
+        Only the fields the seller opted into. Both are omitted when the
+        seller shares neither, which is an empty object rather than an error.
+      properties:
+        phone:
+          type: string
+          description: E.164, present only when `showPhone` is set.
+        whatsapp:
+          type: string
+          description: E.164, present only when `showWhatsapp` is set.
     PublicSeller:
       type: object
       description: Safe seller projection for anonymous callers.

@@ -2,11 +2,13 @@
 package httpapi
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/dezmymachine/farmish-backend/internal/auth"
 	"github.com/dezmymachine/farmish-backend/internal/config"
@@ -14,6 +16,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/http/apierror"
 	"github.com/dezmymachine/farmish-backend/internal/http/handlers"
 	"github.com/dezmymachine/farmish-backend/internal/http/middleware"
+	"github.com/dezmymachine/farmish-backend/internal/listings"
 	"github.com/dezmymachine/farmish-backend/internal/ratelimit"
 	"github.com/dezmymachine/farmish-backend/internal/turnstile"
 	"github.com/dezmymachine/farmish-backend/pkg/logger"
@@ -21,14 +24,21 @@ import (
 
 // Deps are the dependencies handlers need.
 type Deps struct {
-	DB        handlers.Pinger
-	Verifier  auth.Verifier
-	Users     UserService
-	Sellers   handlers.SellerStore
-	Catalog   handlers.CatalogStore
-	Media     handlers.MediaStore
-	Listings  handlers.ListingStore
-	Turnstile turnstile.Verifier
+	DB       handlers.Pinger
+	Verifier auth.Verifier
+	Users    UserService
+	Sellers  handlers.SellerStore
+	Catalog  handlers.CatalogStore
+	Media    handlers.MediaStore
+	Listings handlers.ListingStore
+	// PublicListings is the public browse surface of the same service.
+	PublicListings handlers.PublicListingStore
+	Turnstile      turnstile.Verifier
+	// Views enqueues listing view counts; nil turns counting off.
+	Views listings.ViewCounter
+	// ViewerHash turns a caller's address into a one-way id for view
+	// counting; nil turns counting off.
+	ViewerHash func(ctx context.Context, ip string) uuid.UUID
 	// IPLimiter backs the per-IP flood limit. It stays in-process on purpose:
 	// free, instant, and a flood can't burn the metered Redis quota.
 	// Defaults to ratelimit.Memory.
@@ -116,7 +126,12 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 		validate,
 	)
 
-	api.RegisterHandlersWithOptions(r, strictServer(handlers.Server{DB: deps.DB, Users: deps.Users, Sellers: deps.Sellers, Catalog: deps.Catalog, Media: deps.Media, Listings: deps.Listings}), api.GinServerOptions{
+	server := handlers.Server{
+		DB: deps.DB, Users: deps.Users, Sellers: deps.Sellers, Catalog: deps.Catalog,
+		Media: deps.Media, Listings: deps.Listings, PublicListings: deps.PublicListings,
+		Views: deps.Views, ViewerHash: deps.ViewerHash, Log: log,
+	}
+	api.RegisterHandlersWithOptions(r, strictServer(server), api.GinServerOptions{
 		ErrorHandler: func(c *gin.Context, err error, _ int) { requestError(c, err) },
 	})
 	return r, nil

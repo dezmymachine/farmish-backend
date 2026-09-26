@@ -43,10 +43,11 @@ func listingRouterWithLimits(t *testing.T, limits *middleware.RateLimits) (*gin.
 	}
 	store := mediatest.R2(t)
 	sellersSvc := sellers.New(pool, nil, nil)
+	listingsSvc := listings.New(pool, catalog.New(pool), media.New(pool, store), sellersSvc)
 	deps := Deps{
 		DB: fakePinger{}, Verifier: fb, Users: users.New(pool),
 		Sellers: sellersSvc, Media: media.New(pool, store),
-		Listings: listings.New(pool, catalog.New(pool), media.New(pool, store), sellersSvc),
+		Listings: listingsSvc, PublicListings: listingsSvc,
 	}
 	if limits != nil {
 		deps.RateLimits = limits
@@ -198,7 +199,7 @@ func TestListings_ContractValid(t *testing.T) {
 		t.Fatalf("list = %+v, %v", list, err)
 	}
 
-	req = jsonRequest(http.MethodPatch, "/v1/listings/"+created.Id.String(), tok,
+	req = jsonRequest(http.MethodPatch, "/v1/me/listings/"+created.Id.String(), tok,
 		`{"price": {"amount": 900000, "currency": "GHS"}}`)
 	w = serve(t, r, req)
 	if w.Code != http.StatusOK {
@@ -246,7 +247,7 @@ func TestListings_Lifecycle(t *testing.T) {
 		{"/archive", http.StatusConflict, apierror.CodeInvalidTransition},
 		{"/publish", http.StatusConflict, apierror.CodeInvalidTransition},
 	} {
-		req := jsonRequest(http.MethodPost, "/v1/listings/"+id.String()+step.path, tok, "")
+		req := jsonRequest(http.MethodPost, "/v1/me/listings/"+id.String()+step.path, tok, "")
 		w := serve(t, r, req)
 		if w.Code != step.want {
 			t.Fatalf("%s: %d %s", step.path, w.Code, w.Body.String())
@@ -259,13 +260,13 @@ func TestListings_Lifecycle(t *testing.T) {
 
 	// A draft can be deleted; a sold listing cannot.
 	draft := createListing(t, r, tok)
-	req = plainRequest(http.MethodDelete, "/v1/listings/"+draft.String(), tok)
+	req = plainRequest(http.MethodDelete, "/v1/me/listings/"+draft.String(), tok)
 	w = serve(t, r, req)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("delete draft: %d %s", w.Code, w.Body.String())
 	}
 	assertContract(t, req, w)
-	req = plainRequest(http.MethodDelete, "/v1/listings/"+id.String(), tok)
+	req = plainRequest(http.MethodDelete, "/v1/me/listings/"+id.String(), tok)
 	w = serve(t, r, req)
 	if w.Code != http.StatusConflict {
 		t.Fatalf("delete sold: %d %s", w.Code, w.Body.String())
@@ -283,10 +284,10 @@ func TestListings_OwnershipAndProfileGuards(t *testing.T) {
 	// Another seller is forbidden on every mutation and on the read.
 	for _, req := range []*http.Request{
 		jsonRequest(http.MethodGet, "/v1/me/listings/"+id.String(), theirs, ""),
-		jsonRequest(http.MethodPatch, "/v1/listings/"+id.String(), theirs, `{"title":"Hijacked Heifer"}`),
-		jsonRequest(http.MethodPost, "/v1/listings/"+id.String()+"/publish", theirs, ""),
-		jsonRequest(http.MethodPost, "/v1/listings/"+id.String()+"/archive", theirs, ""),
-		plainRequest(http.MethodDelete, "/v1/listings/"+id.String(), theirs),
+		jsonRequest(http.MethodPatch, "/v1/me/listings/"+id.String(), theirs, `{"title":"Hijacked Heifer"}`),
+		jsonRequest(http.MethodPost, "/v1/me/listings/"+id.String()+"/publish", theirs, ""),
+		jsonRequest(http.MethodPost, "/v1/me/listings/"+id.String()+"/archive", theirs, ""),
+		plainRequest(http.MethodDelete, "/v1/me/listings/"+id.String(), theirs),
 	} {
 		w := serve(t, r, req)
 		if w.Code != http.StatusForbidden {
@@ -341,7 +342,7 @@ func TestListings_SuspendedIsFrozen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req = jsonRequest(http.MethodPatch, "/v1/listings/"+listing.Id.String(), tok,
+	req = jsonRequest(http.MethodPatch, "/v1/me/listings/"+listing.Id.String(), tok,
 		`{"title": "New Title Here"}`)
 	w = serve(t, r, req)
 	if w.Code != http.StatusConflict {
@@ -350,7 +351,7 @@ func TestListings_SuspendedIsFrozen(t *testing.T) {
 	assertErrorEnvelope(t, w.Body.Bytes(), apierror.CodeListingSuspended)
 	assertContract(t, req, w)
 
-	req = jsonRequest(http.MethodPost, "/v1/listings/"+listing.Id.String()+"/archive", tok, "")
+	req = jsonRequest(http.MethodPost, "/v1/me/listings/"+listing.Id.String()+"/archive", tok, "")
 	w = serve(t, r, req)
 	if w.Code != http.StatusConflict {
 		t.Fatalf("archive suspended: %d %s", w.Code, w.Body.String())
@@ -414,7 +415,7 @@ func TestListings_ValidationErrors(t *testing.T) {
 	assertContract(t, req, w)
 
 	// An empty patch is rejected by the spec (minProperties: 1).
-	req = jsonRequest(http.MethodPatch, "/v1/listings/"+uuid.NewString(), tok, `{}`)
+	req = jsonRequest(http.MethodPatch, "/v1/me/listings/"+uuid.NewString(), tok, `{}`)
 	if w := serve(t, r, req); w.Code != http.StatusBadRequest {
 		t.Errorf("empty patch: %d", w.Code)
 	}

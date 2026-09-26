@@ -95,3 +95,64 @@ func statusOf(t *testing.T, f *fixture, id uuid.UUID) string {
 	}
 	return s
 }
+
+// TestCountView_Job runs a view count through River, and checks the dedupe
+// that keeps one viewer from inflating a listing's counter.
+func TestCountView_Job(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	view := f.published(t, f.seller)
+	other := f.published(t, f.seller)
+
+	log := slog.New(slog.DiscardHandler)
+	reg := jobs.NewRegistry()
+	listings.RegisterCountView(reg, f.svc)
+	client, err := jobs.NewClient(f.pool, reg, log, jobs.Options{
+		Work: true, FetchPollInterval: 50 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, cancel := client.Subscribe(river.EventKindJobCompleted)
+	defer cancel()
+	if err := client.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := jobs.Stop(client, 5*time.Second, 2*time.Second, log); err != nil {
+			t.Errorf("stop: %v", err)
+		}
+	})
+
+	counter := listings.NewViewCounter(client)
+	viewer := uuid.New()
+	// The same viewer twice inside the window counts once.
+	for range 2 {
+		if err := counter.CountView(ctx, view.ID, viewer); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A different viewer for the same listing is a separate count.
+	if err := counter.CountView(ctx, view.ID, uuid.New()); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, events, "listings.count_view", 30*time.Second)
+	waitFor(t, events, "listings.count_view", 30*time.Second)
+
+	if got := viewCount(t, f, view.ID); got != 2 {
+		t.Errorf("view_count = %d, want 2 (one per viewer in the window)", got)
+	}
+	if got := viewCount(t, f, other.ID); got != 0 {
+		t.Errorf("other listing view_count = %d, want 0", got)
+	}
+}
+
+func viewCount(t *testing.T, f *fixture, id uuid.UUID) int32 {
+	t.Helper()
+	var n int32
+	if err := f.pool.QueryRow(context.Background(),
+		`SELECT view_count FROM listings WHERE id = $1`, id).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}

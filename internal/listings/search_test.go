@@ -567,8 +567,9 @@ func TestPublicDetail(t *testing.T) {
 	if d.Images[0].URL == "" || d.Images[0].Order != 0 || d.Images[1].Order != 1 {
 		t.Errorf("images = %+v", d.Images)
 	}
-	if d.CoverKey == nil || *d.CoverKey == "" {
-		t.Error("coverKey = nil, want the first image key")
+	// The cover is the first image, exposed as a public URL, never a storage key.
+	if d.CoverURL == nil || *d.CoverURL != d.Images[0].URL {
+		t.Errorf("coverURL = %v, want the first image url %q", d.CoverURL, d.Images[0].URL)
 	}
 	// Attribute values carry the category's display label, not the raw key.
 	if len(d.Attributes) != 2 {

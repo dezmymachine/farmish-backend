@@ -76,7 +76,7 @@ type PublicSummary struct {
 	District     string
 	ItemState    string
 	Category     CategoryRef
-	CoverKey     *string
+	CoverURL     *string
 	Seller       SellerRef
 	Promo        *PromoRef
 	PublishedAt  time.Time
@@ -221,7 +221,7 @@ func (s *Service) Search(ctx context.Context, in SearchInput) (SearchResult, err
 			ID: r.ID, Slug: r.Slug, Title: r.Title, PricePesewas: r.PricePesewas,
 			Unit: r.Unit, Region: r.Region, District: r.District, ItemState: r.ItemState,
 			Category:    CategoryRef{Slug: r.CategorySlug, Name: r.CategoryName},
-			CoverKey:    optStr(r.CoverKey),
+			CoverURL:    optURL(s.media.PublicURL(r.CoverKey)),
 			Seller:      SellerRef{Name: r.SellerName, Verified: r.SellerVerified},
 			PublishedAt: derefTime(r.PublishedAt),
 		}
@@ -281,11 +281,13 @@ func (s *Service) PublicDetail(ctx context.Context, slug string) (PublicDetail, 
 		},
 	}
 	for _, img := range images {
-		detail.Images = append(detail.Images, DetailImage{
+		image := DetailImage{
 			MediaID: img.MediaID, URL: s.media.PublicURL(img.Key), Order: img.SortOrder,
-		})
+		}
+		detail.Images = append(detail.Images, image)
+		// The first image is the cover, and its URL is already public.
 		if len(detail.Images) == 1 {
-			detail.CoverKey = &img.Key
+			detail.CoverURL = optURL(image.URL)
 		}
 	}
 	values, err := listAttributeValues(ctx, q, row.ID)
@@ -388,12 +390,12 @@ func (s *Service) attributeLabels(ctx context.Context, categoryID uuid.UUID, val
 	return labels, nil
 }
 
-// optStr and derefTime flatten sqlc's nullable scalars for the public view.
-func optStr(s string) *string {
-	if s == "" {
+// optURL keeps a cover image only when storage can actually serve it.
+func optURL(url string) *string {
+	if url == "" {
 		return nil
 	}
-	return &s
+	return &url
 }
 
 func derefTime(t *time.Time) time.Time {

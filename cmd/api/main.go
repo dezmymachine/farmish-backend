@@ -21,6 +21,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/crypto"
 	"github.com/dezmymachine/farmish-backend/internal/database"
 	httpapi "github.com/dezmymachine/farmish-backend/internal/http"
+	"github.com/dezmymachine/farmish-backend/internal/http/handlers"
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
 	"github.com/dezmymachine/farmish-backend/internal/listings"
 	"github.com/dezmymachine/farmish-backend/internal/media"
@@ -87,6 +88,7 @@ func registry(log *slog.Logger, mediaSvc *media.Service, listingsSvc *listings.S
 		media.RegisterCleanupOrphans(r, mediaSvc, log)
 	}
 	listings.RegisterExpireDue(r, listingsSvc, log)
+	listings.RegisterCountView(r, listingsSvc)
 	return r
 }
 
@@ -193,13 +195,18 @@ func run() error {
 		}
 		defer closeShared()
 		router, err = httpapi.NewRouter(cfg, log, httpapi.Deps{
-			DB:            pool,
-			Verifier:      firebase,
-			Users:         usersSvc,
-			Sellers:       sellersSvc,
-			Catalog:       catalog.New(pool),
-			Media:         mediaSvc,
-			Listings:      listingsSvc,
+			DB:             pool,
+			Verifier:       firebase,
+			Users:          usersSvc,
+			Sellers:        sellersSvc,
+			Catalog:        catalog.New(pool),
+			Media:          mediaSvc,
+			Listings:       listingsSvc,
+			PublicListings: listingsSvc,
+			// View counting is best effort: with a job queue but no worker
+			// process (api-only run mode) the views simply queue up.
+			Views:         listings.NewViewCounter(jobClient),
+			ViewerHash:    handlers.NewViewerHasher(cfg.DataEncryptionKey),
 			Turnstile:     turnstile.New(cfg.TurnstileSecret),
 			IPLimiter:     ipLimiter,
 			SharedLimiter: shared,

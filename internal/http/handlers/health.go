@@ -10,6 +10,7 @@ import (
 
 	"github.com/dezmymachine/farmish-backend/internal/http/api"
 	"github.com/dezmymachine/farmish-backend/internal/http/apierror"
+	"github.com/dezmymachine/farmish-backend/internal/listings"
 	"github.com/dezmymachine/farmish-backend/internal/users"
 	"github.com/dezmymachine/farmish-backend/pkg/logger"
 )
@@ -36,6 +37,18 @@ type Server struct {
 	Catalog  CatalogStore
 	Media    MediaStore
 	Listings ListingStore
+	// PublicListings is the public read side of the same service. It is a
+	// separate field so the seller write surface and the public browse
+	// surface stay separate contracts.
+	PublicListings PublicListingStore
+	// Views enqueues the listing view count. Nil disables counting, which
+	// keeps the read path working without a job queue.
+	Views listings.ViewCounter
+	// ViewerHash turns a caller's address into a stable, one-way id for view
+	// counting. Nil disables counting, since an unhashed address must never
+	// reach the job queue.
+	ViewerHash func(ctx context.Context, ip string) uuid.UUID
+	Log        *slog.Logger
 }
 
 var _ api.StrictServerInterface = Server{}

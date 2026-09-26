@@ -90,6 +90,11 @@ func (s *Service) CreateUpload(ctx context.Context, ownerID uuid.UUID, purpose, 
 // PublicURL is where an attached object is served from. It is the way the
 // listing view turns a media key into an image URL.
 func (s *Service) PublicURL(key string) string {
+	// Storage is optional locally, and a nil *Service can sit in a non-nil
+	// interface: a public read must degrade to no URL, not panic.
+	if s == nil {
+		return ""
+	}
 	if p, ok := s.storage.(publicURLer); ok {
 		return p.PublicURL(key)
 	}
