@@ -10,9 +10,9 @@ This is the canonical instruction file for AI coding agents (Muse Spark, Claude,
 
 ## Current state (update this section when a phase completes)
 
-- **Done:** Phases 0–13b (skeleton, Postgres 18 + migrations + sqlc, OpenAPI 3.1 contract + codegen + validation, Firebase auth + users, River jobs, rate limiting + Turnstile, phone hardening + step-up re-auth, profiles & seller onboarding, catalog, media uploads on R2, listings CRUD, search & browse, payments core with Paystack and webhooks, ledger foundation), plus Upstash Redis for shared rate limits (ADR-0012).
-- **Next:** **Phase 14** (`docs/phases/phase-14.md`) (Promotions; depends on 12 and 13b — done).
-- **Owner decisions** are recorded in `docs/DOMAIN.md` §2–3 (ADR-0013), the Phase 12 path and view-hash decisions in ADR-0018/0019, and the Phase 13a webhook decisions in ADR-0020/0021.
+- **Done:** Phases 0–14 (skeleton, Postgres 18 + migrations + sqlc, OpenAPI 3.1 contract + codegen + validation, Firebase auth + users, River jobs, rate limiting + Turnstile, phone hardening + step-up re-auth, profiles & seller onboarding, catalog, media uploads on R2, listings CRUD, search & browse, payments core with Paystack and webhooks, ledger foundation, promotions), plus Upstash Redis for shared rate limits (ADR-0012).
+- **Next:** **Phase 15a** (`docs/phases/phase-15a.md`) (Checkout foundations: pricing, delivery and orders schema; depends on 12 and 13b — done).
+- **Owner decisions** are recorded in `docs/DOMAIN.md` §2–3 (ADR-0013), the Phase 12 path and view-hash decisions in ADR-0018/0019, the Phase 13a webhook decisions in ADR-0020/0021, and the Phase 14 promotion-snapshot and renewal-shape decisions in ADR-0022/0023.
 
 ## What this is
 
