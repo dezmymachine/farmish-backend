@@ -67,6 +67,13 @@ func WithPurposeHandler(purpose string, h PurposeHandler) Option {
 	return func(s *Service) { s.purposes[purpose] = h }
 }
 
+// RegisterPurpose adds a purpose handler after construction. cmd/api uses it
+// when a handler depends on the payments service itself; call it before the
+// server or workers start.
+func (s *Service) RegisterPurpose(purpose string, h PurposeHandler) {
+	s.purposes[purpose] = h
+}
+
 // WithJobClient makes the service enqueue payments.succeeded when a payment
 // settles. Without it, a successful payment has no follow-up work queued.
 func WithJobClient(client *jobs.Client) Option {

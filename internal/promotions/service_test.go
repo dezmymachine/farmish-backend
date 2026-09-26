@@ -339,6 +339,33 @@ func TestApply_ValidationOwnershipAndState(t *testing.T) {
 	mustCredits(t, f, f.seller, 55)
 }
 
+func TestApplications_IncludesInactiveHistory(t *testing.T) {
+	f := newFixture(t)
+	view := newActiveListing(t, f.pool, f.listings, f.store, f.seller, "Historical Heifer")
+	f.grant(t, f.seller, "history-grant", 5500, 5610, 110, 55)
+	applied, err := f.svc.Apply(context.Background(), f.seller, promotions.ApplyInput{ListingID: view.ID, Tier: promotions.TierTop})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.listings.Archive(context.Background(), f.seller, view.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	applications, err := f.svc.Applications(context.Background(), f.seller, view.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(applications) != 1 || applications[0] != applied {
+		t.Errorf("applications = %+v, want [%+v]", applications, applied)
+	}
+	if _, err := f.svc.Applications(context.Background(), f.other, view.ID); !errors.Is(err, listings.ErrForbidden) {
+		t.Errorf("another seller err = %v, want listings.ErrForbidden", err)
+	}
+	if _, err := f.svc.Applications(context.Background(), f.seller, uuid.New()); !errors.Is(err, listings.ErrNotFound) {
+		t.Errorf("unknown listing err = %v, want listings.ErrNotFound", err)
+	}
+}
+
 func TestApply_InsufficientCredits(t *testing.T) {
 	f := newFixture(t)
 	view := newActiveListing(t, f.pool, f.listings, f.store, f.seller, "Unfunded Heifer")

@@ -397,6 +397,14 @@ func (s *Service) publishTx(ctx context.Context, q *db.Queries, row db.Listing, 
 	return err
 }
 
+// RequireOwner locks the caller's listing inside tx and checks the seller,
+// without judging whether it can currently be promoted. Promotion history is
+// available for an inactive listing the caller still owns.
+func (s *Service) RequireOwner(ctx context.Context, tx pgx.Tx, sellerID, id uuid.UUID) error {
+	_, err := ownedListing(ctx, db.New(tx), sellerID, id)
+	return err
+}
+
 // RequireAdvertisable locks the caller's listing inside tx and refuses one
 // that cannot be promoted. Unknown listings and other sellers' listings keep
 // their existing 404/403 errors; anything that is not active and unexpired is

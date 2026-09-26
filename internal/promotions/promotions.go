@@ -81,10 +81,11 @@ type PaymentInitializer interface {
 	Initialize(ctx context.Context, in payments.CreateInput) (payments.Payment, error)
 }
 
-// ListingChecker locks a listing inside the caller's transaction and refuses
-// one the caller may not promote. The production listings.Service implements
+// ListingChecker locks a listing inside the caller's transaction and checks
+// what the caller may do with it. The production listings.Service implements
 // it; tests use a fake.
 type ListingChecker interface {
+	RequireOwner(ctx context.Context, tx pgx.Tx, sellerID, id uuid.UUID) error
 	RequireAdvertisable(ctx context.Context, tx pgx.Tx, sellerID, id uuid.UUID, now time.Time) error
 }
 

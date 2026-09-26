@@ -23,9 +23,11 @@ import (
 	httpapi "github.com/dezmymachine/farmish-backend/internal/http"
 	"github.com/dezmymachine/farmish-backend/internal/http/handlers"
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
+	"github.com/dezmymachine/farmish-backend/internal/ledger"
 	"github.com/dezmymachine/farmish-backend/internal/listings"
 	"github.com/dezmymachine/farmish-backend/internal/media"
 	"github.com/dezmymachine/farmish-backend/internal/payments"
+	"github.com/dezmymachine/farmish-backend/internal/promotions"
 	"github.com/dezmymachine/farmish-backend/internal/ratelimit"
 	"github.com/dezmymachine/farmish-backend/internal/redisx"
 	"github.com/dezmymachine/farmish-backend/internal/sellers"
@@ -162,11 +164,12 @@ func run() error {
 	usersSvc := users.New(pool)
 	sellersSvc := sellers.New(pool, crypter, firebase)
 	listingsSvc := listings.New(pool, catalog.New(pool), mediaSvc, sellersSvc)
-	// Phase 13a registers no purpose handler: 'promotion' arrives in Phase 14
-	// and 'checkout' in Phase 15b. Until then a settled payment has no
-	// follow-up work, and payments.succeeded logs that rather than failing.
 	paymentsSvc := payments.New(pool, payments.NewPaystackClient(cfg.Paystack.SecretKey, cfg.Paystack.BaseURL),
 		log, cfg.Paystack.FeeBps, cfg.Paystack.CallbackURL)
+	promotionsSvc := promotions.New(pool, paymentsSvc, listingsSvc, ledger.New())
+	// A settled promotion payment grants credits through the same purpose-handler
+	// mechanism Phase 13a defined. Register it before any worker can run.
+	paymentsSvc.RegisterPurpose(payments.PurposePromotion, promotionsSvc.HandlePromotionPaid)
 
 	jobClient, err := jobs.NewClient(pool, registry(log, mediaSvc, listingsSvc, paymentsSvc), log, jobs.Options{
 		Work:       cfg.RunMode.WorksJobs(),
@@ -222,6 +225,7 @@ func run() error {
 			Views:         listings.NewViewCounter(jobClient),
 			ViewerHash:    handlers.NewViewerHasher(cfg.DataEncryptionKey),
 			Payments:      paymentsSvc,
+			Promotions:    promotionsSvc,
 			Turnstile:     turnstile.New(cfg.TurnstileSecret),
 			IPLimiter:     ipLimiter,
 			SharedLimiter: shared,

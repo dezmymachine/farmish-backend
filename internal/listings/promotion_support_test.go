@@ -43,6 +43,20 @@ func TestRequireAdvertisable(t *testing.T) {
 	if err := check(f.seller, active.ID, time.Now()); err != nil {
 		t.Errorf("active listing: %v", err)
 	}
+	owner := func(sellerID, id uuid.UUID) error {
+		return database.InTx(ctx, f.pool, func(tx pgx.Tx) error {
+			return f.svc.RequireOwner(ctx, tx, sellerID, id)
+		})
+	}
+	if err := owner(f.seller, active.ID); err != nil {
+		t.Errorf("owned listing: %v", err)
+	}
+	if err := owner(f.seller, uuid.New()); !errors.Is(err, listings.ErrNotFound) {
+		t.Errorf("unknown listing owner err = %v, want ErrNotFound", err)
+	}
+	if err := owner(f.other, active.ID); !errors.Is(err, listings.ErrForbidden) {
+		t.Errorf("another seller owner err = %v, want ErrForbidden", err)
+	}
 	if err := check(f.seller, uuid.New(), time.Now()); !errors.Is(err, listings.ErrNotFound) {
 		t.Errorf("unknown listing err = %v, want ErrNotFound", err)
 	}

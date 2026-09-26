@@ -237,15 +237,15 @@ func (s *Service) Apply(ctx context.Context, sellerID uuid.UUID, in ApplyInput) 
 }
 
 // Applications returns one listing's promotion history, newest window first,
-// after checking that the caller owns the listing.
+// after checking that the caller owns the listing. History remains available
+// after the listing stops being promotable.
 func (s *Service) Applications(ctx context.Context, sellerID, listingID uuid.UUID) ([]Application, error) {
 	if sellerID == uuid.Nil || listingID == uuid.Nil {
 		return nil, fmt.Errorf("promotion history requires a seller and listing")
 	}
-	now := s.Now()
 	var applications []Application
 	err := database.InTx(ctx, s.pool, func(tx pgx.Tx) error {
-		if err := s.listings.RequireAdvertisable(ctx, tx, sellerID, listingID, now); err != nil {
+		if err := s.listings.RequireOwner(ctx, tx, sellerID, listingID); err != nil {
 			return err
 		}
 		rows, err := db.New(tx).ListListingPromotions(ctx, listingID)

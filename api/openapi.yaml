@@ -603,6 +603,137 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "502":
           $ref: "#/components/responses/PaymentProviderError"
+  /v1/promotions/configs:
+    get:
+      tags: [promotions]
+      operationId: listPromotionConfigs
+      summary: List promotion packages
+      description: |
+        The four active packages, in display order. Public and cacheable for
+        five minutes.
+      security: []
+      responses:
+        "200":
+          description: The active promotion packages.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/Cache-Control"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromotionConfigList"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/promotions/purchases:
+    post:
+      tags: [promotions]
+      operationId: purchasePromotion
+      summary: Buy a promotion package
+      description: |
+        Any authenticated buyer may purchase. The tier price is grossed up
+        server-side, and the tier's current credit count is snapshotted with
+        the payment. Applying the package to a listing is a separate call and
+        requires owning an active listing.
+      x-farmish-rate-limit: sensitive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchasePromotionRequest"
+      responses:
+        "201":
+          description: The created payment and where to complete it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromotionPurchase"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "502":
+          $ref: "#/components/responses/PaymentProviderError"
+  /v1/me/promotion-credits:
+    get:
+      tags: [promotions]
+      operationId: getMyPromotionCredits
+      summary: Get my promotion credit balance
+      description: The caller's CRD balance as a positive display number.
+      responses:
+        "200":
+          description: The balance.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromotionBalance"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/promotions/applications:
+    post:
+      tags: [promotions]
+      operationId: applyPromotion
+      summary: Promote one of my listings
+      description: |
+        Spends the requested tier's credits and inserts a promotion window.
+        The same tier queues behind the current window. A higher tier replaces
+        it immediately and forfeits the remaining time. A lower tier while a
+        higher tier is active is rejected.
+      x-farmish-rate-limit: sensitive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplyPromotionRequest"
+      responses:
+        "201":
+          description: The created promotion window.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromotionApplication"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/me/listings/{id}/promotions:
+    get:
+      tags: [promotions]
+      operationId: listMyListingPromotions
+      summary: List one of my listings' promotions
+      description: The listing's promotion history, newest effective window first.
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      responses:
+        "200":
+          description: The promotion history.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromotionApplicationList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /v1/media/upload-url:
     post:
       tags: [media]
@@ -2176,6 +2307,127 @@ components:
         failureReason:
           type: string
           description: Why the payment did not succeed, when it did not.
+    PromotionTier:
+      type: string
+      description: A promotion package.
+      enum: [top, vip, diamond, enterprise]
+    PromotionConfig:
+      type: object
+      description: One promotion package as buyers see it.
+      required: [tier, name, price, credits, durationDays, featured, description, features]
+      properties:
+        tier:
+          $ref: "#/components/schemas/PromotionTier"
+        name:
+          type: string
+        price:
+          $ref: "#/components/schemas/Money"
+          description: Package price in pesewas, before the processing fee.
+        credits:
+          type: integer
+          format: int32
+          minimum: 1
+        durationDays:
+          type: integer
+          format: int32
+          minimum: 1
+        featured:
+          type: boolean
+        description:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+    PromotionConfigList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PromotionConfig"
+    PurchasePromotionRequest:
+      type: object
+      additionalProperties: false
+      required: [tier]
+      properties:
+        tier:
+          $ref: "#/components/schemas/PromotionTier"
+    PromotionPurchase:
+      type: object
+      description: A newly created promotion payment and where to complete it.
+      required: [reference, authorizationUrl, price, processingFee, charge, credits]
+      properties:
+        reference:
+          type: string
+        authorizationUrl:
+          type: string
+          format: uri
+        price:
+          $ref: "#/components/schemas/Money"
+        processingFee:
+          $ref: "#/components/schemas/Money"
+        charge:
+          $ref: "#/components/schemas/Money"
+        credits:
+          type: integer
+          format: int32
+          minimum: 1
+    PromotionBalance:
+      type: object
+      description: A CRD balance as a positive display number.
+      required: [balance]
+      properties:
+        balance:
+          type: integer
+          format: int32
+          minimum: 0
+    ApplyPromotionRequest:
+      type: object
+      additionalProperties: false
+      required: [listingId, tier]
+      properties:
+        listingId:
+          type: string
+          format: uuid
+        tier:
+          $ref: "#/components/schemas/PromotionTier"
+    PromotionApplication:
+      type: object
+      description: |
+        One promotion window. A same-tier application queues behind the current
+        window; replacement reports whether the old window had time remaining.
+      required: [id, listingId, tier, startsAt, endsAt, creditsSpent]
+      properties:
+        id:
+          type: string
+          format: uuid
+        listingId:
+          type: string
+          format: uuid
+        tier:
+          $ref: "#/components/schemas/PromotionTier"
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        creditsSpent:
+          type: integer
+          format: int32
+          minimum: 0
+        replacedRemaining:
+          type: boolean
+    PromotionApplicationList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PromotionApplication"
     Money:
       type: object
       description: An amount of money in the smallest currency unit (pesewas).

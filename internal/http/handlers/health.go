@@ -44,6 +44,8 @@ type Server struct {
 	// Payments settles provider webhooks and serves payment status. It is nil
 	// when Paystack is not configured, and the two operations then answer 503.
 	Payments PaymentStore
+	// Promotions sells packages, reports balances and applies promotions.
+	Promotions PromotionStore
 	// Views enqueues the listing view count. Nil disables counting, which
 	// keeps the read path working without a job queue.
 	Views listings.ViewCounter
