@@ -37,6 +37,9 @@ type Catalog interface {
 	// IsLeaf reports whether a category has no children (a listing needs a
 	// leaf, or a parent without children such as irrigation).
 	IsLeaf(ctx context.Context, id uuid.UUID) (bool, error)
+	// IDsForFilter expands a search filter on a category slug to the ids to
+	// match: a parent includes its children, a child is itself (DOMAIN §9).
+	IDsForFilter(ctx context.Context, slug string) ([]uuid.UUID, error)
 }
 
 // Media is the part of media.Service listings attaches images through.

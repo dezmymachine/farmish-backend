@@ -99,6 +99,17 @@ func (s *Service) Resolved(ctx context.Context, id uuid.UUID) (Detail, error) {
 	return s.detailFor(ctx, q, fromRow(row))
 }
 
+// IDsForFilter expands a search filter on a category slug: a parent includes
+// all its children (DOMAIN §9), a child is itself. An unknown slug returns an
+// empty list, which matches nothing (instead of every listing).
+func (s *Service) IDsForFilter(ctx context.Context, slug string) ([]uuid.UUID, error) {
+	rows, err := db.New(s.pool).ListCategoryAndChildIDs(ctx, slug)
+	if err != nil {
+		return nil, fmt.Errorf("expand category filter: %w", err)
+	}
+	return rows, nil
+}
+
 // IsLeaf reports whether a listing may use this category: a child, or a
 // parent with no children (e.g. irrigation).
 func (s *Service) IsLeaf(ctx context.Context, id uuid.UUID) (bool, error) {
