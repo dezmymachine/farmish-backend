@@ -22,6 +22,14 @@ type Querier interface {
 	CountSearchListings(ctx context.Context, arg CountSearchListingsParams) (int64, error)
 	CountSellerListings(ctx context.Context, arg CountSellerListingsParams) (int64, error)
 	CountSellerProfilesByStatus(ctx context.Context, verificationStatus string) (int64, error)
+	// Creates an account, or returns no row when code already exists. Dynamic
+	// seller and promotion-credit accounts use this path; the caller selects the
+	// existing row after losing the race.
+	CreateLedgerAccount(ctx context.Context, arg CreateLedgerAccountParams) (LedgerAccount, error)
+	CreateLedgerEntry(ctx context.Context, arg CreateLedgerEntryParams) (LedgerEntry, error)
+	// Creates a ledger transaction, or returns no row when (kind, reference) was
+	// already posted. That missing row is the caller's idempotency signal.
+	CreateLedgerTransaction(ctx context.Context, arg CreateLedgerTransactionParams) (LedgerTransaction, error)
 	DeleteAttribute(ctx context.Context, arg DeleteAttributeParams) (uuid.UUID, error)
 	DeleteListing(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	DeleteListingAttributes(ctx context.Context, listingID uuid.UUID) error
@@ -32,6 +40,8 @@ type Querier interface {
 	GetCategoryAttribute(ctx context.Context, arg GetCategoryAttributeParams) (CategoryAttribute, error)
 	GetCategoryByID(ctx context.Context, id uuid.UUID) (Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (Category, error)
+	// An account row by its unique code.
+	GetLedgerAccountByCode(ctx context.Context, code string) (LedgerAccount, error)
 	GetListingByID(ctx context.Context, id uuid.UUID) (Listing, error)
 	GetListingByIDForUpdate(ctx context.Context, id uuid.UUID) (Listing, error)
 	GetListingBySlug(ctx context.Context, slug string) (Listing, error)
@@ -128,6 +138,9 @@ type Querier interface {
 	// webhook racing the verify fallback) is a no-op that returns no row.
 	SettlePaymentSuccess(ctx context.Context, arg SettlePaymentSuccessParams) (Payment, error)
 	SlugExists(ctx context.Context, slug string) (bool, error)
+	// The account balance is derived from its entries. A code with no entries has
+	// a zero balance, so this always returns a row for an existing account.
+	SumLedgerAccountBalance(ctx context.Context, code string) (int64, error)
 	// Mirror Firebase-owned identity fields; only writes when something changed.
 	SyncUserIdentity(ctx context.Context, arg SyncUserIdentityParams) (User, error)
 	// Scoped to the category: an attribute of another category reads as missing.

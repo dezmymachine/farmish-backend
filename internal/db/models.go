@@ -97,6 +97,32 @@ type CategoryAttribute struct {
 	UpdatedAt  time.Time
 }
 
+type LedgerAccount struct {
+	ID        int64
+	Code      string
+	Type      string
+	Currency  string
+	OwnerID   pgtype.UUID
+	CreatedAt time.Time
+}
+
+type LedgerEntry struct {
+	ID            int64
+	TransactionID int64
+	AccountID     int64
+	Amount        int64
+	Currency      string
+	OrderID       pgtype.UUID
+	CreatedAt     time.Time
+}
+
+type LedgerTransaction struct {
+	ID        int64
+	Kind      string
+	Reference string
+	CreatedAt time.Time
+}
+
 type Listing struct {
 	ID                       uuid.UUID
 	SellerID                 uuid.UUID
