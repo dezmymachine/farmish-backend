@@ -13,13 +13,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/dezmymachine/farmish-backend/internal/auth"
 	"github.com/dezmymachine/farmish-backend/internal/catalog"
 	"github.com/dezmymachine/farmish-backend/internal/config"
 	"github.com/dezmymachine/farmish-backend/internal/crypto"
 	"github.com/dezmymachine/farmish-backend/internal/database"
 	httpapi "github.com/dezmymachine/farmish-backend/internal/http"
-	"github.com/dezmymachine/farmish-backend/internal/http/handlers"
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
 	"github.com/dezmymachine/farmish-backend/internal/media"
 	"github.com/dezmymachine/farmish-backend/internal/ratelimit"
@@ -76,11 +77,30 @@ func sharedLimiter(ctx context.Context, cfg config.Config, log *slog.Logger) (ra
 }
 
 // registry lists every job this service knows. Each phase registers its
-// workers and periodic jobs here.
-func registry(log *slog.Logger) *jobs.Registry {
+// workers and periodic jobs here. The orphan sweep is registered only when
+// media storage is configured (it is required when deployed).
+func registry(log *slog.Logger, mediaSvc *media.Service) *jobs.Registry {
 	r := jobs.NewRegistry()
 	jobs.Register(r, &jobs.NoopWorker{Log: log})
+	if mediaSvc != nil {
+		media.RegisterCleanupOrphans(r, mediaSvc, log)
+	}
 	return r
+}
+
+// mediaService builds the media service when storage is configured. Locally
+// R2_* is optional, so this may be nil (the API still serves everything
+// else; the upload endpoint and the sweep need storage).
+func mediaService(pool *pgxpool.Pool, cfg config.Config, log *slog.Logger) (*media.Service, error) {
+	if !cfg.R2.Configured() {
+		log.Warn("media storage is not configured: POST /v1/media/upload-url and the orphan sweep are disabled")
+		return nil, nil
+	}
+	storage, err := media.NewR2(cfg.R2)
+	if err != nil {
+		return nil, err
+	}
+	return media.New(pool, storage), nil
 }
 
 func main() {
@@ -113,7 +133,14 @@ func run() error {
 	}()
 	log.Info("database connected", "max_conns", cfg.DB.MaxConns)
 
-	jobClient, err := jobs.NewClient(pool, registry(log), log, jobs.Options{
+	// Media storage is needed by the job workers (the orphan sweep) as well
+	// as the API, so it is built once, before either.
+	mediaSvc, err := mediaService(pool, cfg, log)
+	if err != nil {
+		return err
+	}
+
+	jobClient, err := jobs.NewClient(pool, registry(log, mediaSvc), log, jobs.Options{
 		Work:       cfg.RunMode.WorksJobs(),
 		MaxWorkers: cfg.JobsMaxWorkers,
 	})
@@ -159,25 +186,13 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		// Media storage is required when deployed; locally the API still
-		// serves everything else without it.
-		var mediaStore handlers.MediaStore
-		if cfg.R2.Configured() {
-			storage, err := media.NewR2(cfg.R2)
-			if err != nil {
-				return err
-			}
-			mediaStore = media.New(pool, storage)
-		} else {
-			log.Warn("media storage is not configured: POST /v1/media/upload-url will fail")
-		}
 		router, err = httpapi.NewRouter(cfg, log, httpapi.Deps{
 			DB:            pool,
 			Verifier:      firebase,
 			Users:         users.New(pool),
 			Sellers:       sellers.New(pool, crypter, firebase),
 			Catalog:       catalog.New(pool),
-			Media:         mediaStore,
+			Media:         mediaSvc,
 			Turnstile:     turnstile.New(cfg.TurnstileSecret),
 			IPLimiter:     ipLimiter,
 			SharedLimiter: shared,
