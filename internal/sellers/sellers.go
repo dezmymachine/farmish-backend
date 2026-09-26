@@ -20,10 +20,10 @@ const (
 
 // IDTypes stored in seller_profiles.id_type (DOMAIN §11).
 const (
-	IDGhanaCard       = "ghana_card"
-	IDPassport        = "passport"
-	IDVotersID        = "voters_id"
-	IDDriversLicense  = "drivers_license"
+	IDGhanaCard      = "ghana_card"
+	IDPassport       = "passport"
+	IDVotersID       = "voters_id"
+	IDDriversLicense = "drivers_license"
 )
 
 // Verification decisions accepted by the admin endpoint.

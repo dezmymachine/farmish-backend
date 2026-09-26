@@ -24,6 +24,7 @@ type Deps struct {
 	DB        handlers.Pinger
 	Verifier  auth.Verifier
 	Users     UserService
+	Sellers   handlers.SellerStore
 	Turnstile turnstile.Verifier
 	// IPLimiter backs the per-IP flood limit. It stays in-process on purpose:
 	// free, instant, and a flood can't burn the metered Redis quota.
@@ -112,7 +113,7 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 		validate,
 	)
 
-	api.RegisterHandlersWithOptions(r, strictServer(handlers.Server{DB: deps.DB, Users: deps.Users}), api.GinServerOptions{
+	api.RegisterHandlersWithOptions(r, strictServer(handlers.Server{DB: deps.DB, Users: deps.Users, Sellers: deps.Sellers}), api.GinServerOptions{
 		ErrorHandler: func(c *gin.Context, err error, _ int) { requestError(c, err) },
 	})
 	return r, nil

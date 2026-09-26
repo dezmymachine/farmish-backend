@@ -17,12 +17,12 @@ func lookup(m map[string]string) func(string) (string, bool) {
 
 func TestFromLookup_Defaults(t *testing.T) {
 	cfg, err := FromLookup(lookup(map[string]string{
-		"APP_ENV":              "development",
-		"CORS_ORIGINS":         "http://localhost:3000, https://farmish.gh/",
-		"DATABASE_URL":         "postgres://u:p@localhost:5432/farmish",
-		"FIREBASE_PROJECT_ID":  "farmish-dev",
-		"TURNSTILE_SECRET":     "1x0000000000000000000000000000000AA",
-		"DATA_ENCRYPTION_KEY":  DevDataEncryptionKey,
+		"APP_ENV":             "development",
+		"CORS_ORIGINS":        "http://localhost:3000, https://farmish.gh/",
+		"DATABASE_URL":        "postgres://u:p@localhost:5432/farmish",
+		"FIREBASE_PROJECT_ID": "farmish-dev",
+		"TURNSTILE_SECRET":    "1x0000000000000000000000000000000AA",
+		"DATA_ENCRYPTION_KEY": DevDataEncryptionKey,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -109,10 +109,10 @@ func TestFromLookup_Invalid(t *testing.T) {
 
 func base(extra map[string]string) map[string]string {
 	m := map[string]string{
-		"APP_ENV":              "development",
-		"CORS_ORIGINS":         "https://farmish.gh",
-		"DATABASE_URL":         "postgres://x",
-		"FIREBASE_PROJECT_ID":  "farmish-dev",
+		"APP_ENV":             "development",
+		"CORS_ORIGINS":        "https://farmish.gh",
+		"DATABASE_URL":        "postgres://x",
+		"FIREBASE_PROJECT_ID": "farmish-dev",
 		"TURNSTILE_SECRET":    "1x0000000000000000000000000000000AA",
 		"DATA_ENCRYPTION_KEY": DevDataEncryptionKey,
 	}

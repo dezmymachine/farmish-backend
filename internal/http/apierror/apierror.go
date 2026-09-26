@@ -11,17 +11,18 @@ import (
 
 // Stable error codes. Clients may switch on these; never rename one.
 const (
-	CodeBadRequest       = "bad_request"
-	CodeValidationFailed = "validation_failed"
-	CodeUnauthorized     = "unauthorized"
-	CodeReauthRequired   = "reauth_required"
-	CodeForbidden        = "forbidden"
-	CodeNotFound         = "not_found"
-	CodeMethodNotAllowed = "method_not_allowed"
-	CodeRateLimited      = "rate_limited"
-	CodeTurnstileFailed  = "turnstile_failed"
-	CodeInternal         = "internal_error"
-	CodeUnavailable      = "unavailable"
+	CodeBadRequest        = "bad_request"
+	CodeValidationFailed  = "validation_failed"
+	CodeInvalidTransition = "invalid_transition"
+	CodeUnauthorized      = "unauthorized"
+	CodeReauthRequired    = "reauth_required"
+	CodeForbidden         = "forbidden"
+	CodeNotFound          = "not_found"
+	CodeMethodNotAllowed  = "method_not_allowed"
+	CodeRateLimited       = "rate_limited"
+	CodeTurnstileFailed   = "turnstile_failed"
+	CodeInternal          = "internal_error"
+	CodeUnavailable       = "unavailable"
 )
 
 // New returns an envelope with code and message. Strict handlers use it to

@@ -226,12 +226,12 @@ func TestUpsertMine_Validation(t *testing.T) {
 	shortID := withID(validInput(), "ghana_card", "ab")
 
 	for name, in := range map[string]sellers.ProfileInput{
-		"bad region":        bad,
+		"bad region":              bad,
 		"idType without idNumber": onlyType,
 		"idNumber without idType": onlyNumber,
-		"bad whatsapp":      badPhone,
-		"bad idType":        badIDType,
-		"short idNumber":    shortID,
+		"bad whatsapp":            badPhone,
+		"bad idType":              badIDType,
+		"short idNumber":          shortID,
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := s.UpsertMine(ctx, u.ID, in)

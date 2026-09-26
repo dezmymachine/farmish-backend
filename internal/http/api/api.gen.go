@@ -18,6 +18,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gin-gonic/gin"
+	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -111,6 +112,228 @@ const (
 func (e MoneyCurrency) Valid() bool {
 	switch e {
 	case MoneyCurrencyGHS:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SellerProfileIdType.
+const (
+	SellerProfileIdTypeDriversLicense SellerProfileIdType = "drivers_license"
+	SellerProfileIdTypeGhanaCard      SellerProfileIdType = "ghana_card"
+	SellerProfileIdTypePassport       SellerProfileIdType = "passport"
+	SellerProfileIdTypeVotersId       SellerProfileIdType = "voters_id"
+)
+
+// Valid indicates whether the value is a known member of the SellerProfileIdType enum.
+func (e SellerProfileIdType) Valid() bool {
+	switch e {
+	case SellerProfileIdTypeDriversLicense:
+		return true
+	case SellerProfileIdTypeGhanaCard:
+		return true
+	case SellerProfileIdTypePassport:
+		return true
+	case SellerProfileIdTypeVotersId:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SellerProfileVerificationStatus.
+const (
+	SellerProfileVerificationStatusPending    SellerProfileVerificationStatus = "pending"
+	SellerProfileVerificationStatusRejected   SellerProfileVerificationStatus = "rejected"
+	SellerProfileVerificationStatusUnverified SellerProfileVerificationStatus = "unverified"
+	SellerProfileVerificationStatusVerified   SellerProfileVerificationStatus = "verified"
+)
+
+// Valid indicates whether the value is a known member of the SellerProfileVerificationStatus enum.
+func (e SellerProfileVerificationStatus) Valid() bool {
+	switch e {
+	case SellerProfileVerificationStatusPending:
+		return true
+	case SellerProfileVerificationStatusRejected:
+		return true
+	case SellerProfileVerificationStatusUnverified:
+		return true
+	case SellerProfileVerificationStatusVerified:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SellerProfileAdminIdType.
+const (
+	SellerProfileAdminIdTypeDriversLicense SellerProfileAdminIdType = "drivers_license"
+	SellerProfileAdminIdTypeGhanaCard      SellerProfileAdminIdType = "ghana_card"
+	SellerProfileAdminIdTypePassport       SellerProfileAdminIdType = "passport"
+	SellerProfileAdminIdTypeVotersId       SellerProfileAdminIdType = "voters_id"
+)
+
+// Valid indicates whether the value is a known member of the SellerProfileAdminIdType enum.
+func (e SellerProfileAdminIdType) Valid() bool {
+	switch e {
+	case SellerProfileAdminIdTypeDriversLicense:
+		return true
+	case SellerProfileAdminIdTypeGhanaCard:
+		return true
+	case SellerProfileAdminIdTypePassport:
+		return true
+	case SellerProfileAdminIdTypeVotersId:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SellerProfileAdminVerificationStatus.
+const (
+	SellerProfileAdminVerificationStatusPending    SellerProfileAdminVerificationStatus = "pending"
+	SellerProfileAdminVerificationStatusRejected   SellerProfileAdminVerificationStatus = "rejected"
+	SellerProfileAdminVerificationStatusUnverified SellerProfileAdminVerificationStatus = "unverified"
+	SellerProfileAdminVerificationStatusVerified   SellerProfileAdminVerificationStatus = "verified"
+)
+
+// Valid indicates whether the value is a known member of the SellerProfileAdminVerificationStatus enum.
+func (e SellerProfileAdminVerificationStatus) Valid() bool {
+	switch e {
+	case SellerProfileAdminVerificationStatusPending:
+		return true
+	case SellerProfileAdminVerificationStatusRejected:
+		return true
+	case SellerProfileAdminVerificationStatusUnverified:
+		return true
+	case SellerProfileAdminVerificationStatusVerified:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SellerProfileInputIdType.
+const (
+	SellerProfileInputIdTypeDriversLicense SellerProfileInputIdType = "drivers_license"
+	SellerProfileInputIdTypeGhanaCard      SellerProfileInputIdType = "ghana_card"
+	SellerProfileInputIdTypePassport       SellerProfileInputIdType = "passport"
+	SellerProfileInputIdTypeVotersId       SellerProfileInputIdType = "voters_id"
+)
+
+// Valid indicates whether the value is a known member of the SellerProfileInputIdType enum.
+func (e SellerProfileInputIdType) Valid() bool {
+	switch e {
+	case SellerProfileInputIdTypeDriversLicense:
+		return true
+	case SellerProfileInputIdTypeGhanaCard:
+		return true
+	case SellerProfileInputIdTypePassport:
+		return true
+	case SellerProfileInputIdTypeVotersId:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SellerProfileInputRegion.
+const (
+	SellerProfileInputRegionAhafo        SellerProfileInputRegion = "Ahafo"
+	SellerProfileInputRegionAshanti      SellerProfileInputRegion = "Ashanti"
+	SellerProfileInputRegionBono         SellerProfileInputRegion = "Bono"
+	SellerProfileInputRegionBonoEast     SellerProfileInputRegion = "Bono East"
+	SellerProfileInputRegionCentral      SellerProfileInputRegion = "Central"
+	SellerProfileInputRegionEastern      SellerProfileInputRegion = "Eastern"
+	SellerProfileInputRegionGreaterAccra SellerProfileInputRegion = "Greater Accra"
+	SellerProfileInputRegionNorthEast    SellerProfileInputRegion = "North East"
+	SellerProfileInputRegionNorthern     SellerProfileInputRegion = "Northern"
+	SellerProfileInputRegionOti          SellerProfileInputRegion = "Oti"
+	SellerProfileInputRegionSavannah     SellerProfileInputRegion = "Savannah"
+	SellerProfileInputRegionUpperEast    SellerProfileInputRegion = "Upper East"
+	SellerProfileInputRegionUpperWest    SellerProfileInputRegion = "Upper West"
+	SellerProfileInputRegionVolta        SellerProfileInputRegion = "Volta"
+	SellerProfileInputRegionWestern      SellerProfileInputRegion = "Western"
+	SellerProfileInputRegionWesternNorth SellerProfileInputRegion = "Western North"
+)
+
+// Valid indicates whether the value is a known member of the SellerProfileInputRegion enum.
+func (e SellerProfileInputRegion) Valid() bool {
+	switch e {
+	case SellerProfileInputRegionAhafo:
+		return true
+	case SellerProfileInputRegionAshanti:
+		return true
+	case SellerProfileInputRegionBono:
+		return true
+	case SellerProfileInputRegionBonoEast:
+		return true
+	case SellerProfileInputRegionCentral:
+		return true
+	case SellerProfileInputRegionEastern:
+		return true
+	case SellerProfileInputRegionGreaterAccra:
+		return true
+	case SellerProfileInputRegionNorthEast:
+		return true
+	case SellerProfileInputRegionNorthern:
+		return true
+	case SellerProfileInputRegionOti:
+		return true
+	case SellerProfileInputRegionSavannah:
+		return true
+	case SellerProfileInputRegionUpperEast:
+		return true
+	case SellerProfileInputRegionUpperWest:
+		return true
+	case SellerProfileInputRegionVolta:
+		return true
+	case SellerProfileInputRegionWestern:
+		return true
+	case SellerProfileInputRegionWesternNorth:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerifySellerRequestDecision.
+const (
+	VerifySellerRequestDecisionApprove VerifySellerRequestDecision = "approve"
+	VerifySellerRequestDecisionReject  VerifySellerRequestDecision = "reject"
+)
+
+// Valid indicates whether the value is a known member of the VerifySellerRequestDecision enum.
+func (e VerifySellerRequestDecision) Valid() bool {
+	switch e {
+	case VerifySellerRequestDecisionApprove:
+		return true
+	case VerifySellerRequestDecisionReject:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAdminSellersParamsStatus.
+const (
+	ListAdminSellersParamsStatusPending    ListAdminSellersParamsStatus = "pending"
+	ListAdminSellersParamsStatusRejected   ListAdminSellersParamsStatus = "rejected"
+	ListAdminSellersParamsStatusUnverified ListAdminSellersParamsStatus = "unverified"
+	ListAdminSellersParamsStatusVerified   ListAdminSellersParamsStatus = "verified"
+)
+
+// Valid indicates whether the value is a known member of the ListAdminSellersParamsStatus enum.
+func (e ListAdminSellersParamsStatus) Valid() bool {
+	switch e {
+	case ListAdminSellersParamsStatusPending:
+		return true
+	case ListAdminSellersParamsStatusRejected:
+		return true
+	case ListAdminSellersParamsStatusUnverified:
+		return true
+	case ListAdminSellersParamsStatusVerified:
 		return true
 	default:
 		return false
@@ -214,11 +437,118 @@ type PageMeta struct {
 	Total int64 `json:"total"`
 }
 
+// PublicSeller Safe seller projection for anonymous callers.
+type PublicSeller struct {
+	Bio          *string `json:"bio,omitempty"`
+	BusinessName string  `json:"businessName"`
+	District     string  `json:"district"`
+
+	// MemberSince When the seller's user account was created.
+	MemberSince time.Time          `json:"memberSince"`
+	Region      string             `json:"region"`
+	UserId      openapi_types.UUID `json:"userId"`
+
+	// Verified True when the seller is verified.
+	Verified bool `json:"verified"`
+}
+
+// SellerProfile The owner's view of their seller profile. Never contains the ID number, only its last 4.
+type SellerProfile struct {
+	Bio          *string `json:"bio,omitempty"`
+	BusinessName string  `json:"businessName"`
+	District     string  `json:"district"`
+
+	// IdNumberLast4 Masked ID number (last 4) for the owner and admins.
+	IdNumberLast4      *string                         `json:"idNumberLast4,omitempty"`
+	IdType             *SellerProfileIdType            `json:"idType,omitempty"`
+	Region             string                          `json:"region"`
+	RejectionReason    *string                         `json:"rejectionReason,omitempty"`
+	ReviewedAt         *time.Time                      `json:"reviewedAt,omitempty"`
+	ShowPhone          bool                            `json:"showPhone"`
+	ShowWhatsapp       bool                            `json:"showWhatsapp"`
+	SubmittedAt        *time.Time                      `json:"submittedAt,omitempty"`
+	VerificationStatus SellerProfileVerificationStatus `json:"verificationStatus"`
+
+	// Whatsapp E.164 number, present when the seller set one.
+	Whatsapp *string `json:"whatsapp,omitempty"`
+}
+
+// SellerProfileIdType defines model for SellerProfile.IdType.
+type SellerProfileIdType string
+
+// SellerProfileVerificationStatus defines model for SellerProfile.VerificationStatus.
+type SellerProfileVerificationStatus string
+
+// SellerProfileAdmin The admin review view, with the owner's contact fields.
+type SellerProfileAdmin struct {
+	Bio                *string                              `json:"bio,omitempty"`
+	BusinessName       string                               `json:"businessName"`
+	DisplayName        *string                              `json:"displayName,omitempty"`
+	District           string                               `json:"district"`
+	Email              *string                              `json:"email,omitempty"`
+	IdNumberLast4      *string                              `json:"idNumberLast4,omitempty"`
+	IdType             *SellerProfileAdminIdType            `json:"idType,omitempty"`
+	Phone              *string                              `json:"phone,omitempty"`
+	Region             string                               `json:"region"`
+	RejectionReason    *string                              `json:"rejectionReason,omitempty"`
+	ReviewedAt         *time.Time                           `json:"reviewedAt,omitempty"`
+	ShowPhone          bool                                 `json:"showPhone"`
+	ShowWhatsapp       bool                                 `json:"showWhatsapp"`
+	SubmittedAt        *time.Time                           `json:"submittedAt,omitempty"`
+	UserId             openapi_types.UUID                   `json:"userId"`
+	VerificationStatus SellerProfileAdminVerificationStatus `json:"verificationStatus"`
+	Whatsapp           *string                              `json:"whatsapp,omitempty"`
+}
+
+// SellerProfileAdminIdType defines model for SellerProfileAdmin.IdType.
+type SellerProfileAdminIdType string
+
+// SellerProfileAdminVerificationStatus defines model for SellerProfileAdmin.VerificationStatus.
+type SellerProfileAdminVerificationStatus string
+
+// SellerProfileAdminList defines model for SellerProfileAdminList.
+type SellerProfileAdminList struct {
+	Items []SellerProfileAdmin `json:"items"`
+	Meta  PageMeta             `json:"meta"`
+}
+
+// SellerProfileInput Create-or-edit model for the caller's seller profile. idType and idNumber must be given together.
+type SellerProfileInput struct {
+	Bio          *string                   `json:"bio,omitempty"`
+	BusinessName string                    `json:"businessName"`
+	District     string                    `json:"district"`
+	IdNumber     *string                   `json:"idNumber,omitempty"`
+	IdType       *SellerProfileInputIdType `json:"idType,omitempty"`
+	Region       SellerProfileInputRegion  `json:"region"`
+	ShowPhone    *bool                     `json:"showPhone,omitempty"`
+	ShowWhatsapp *bool                     `json:"showWhatsapp,omitempty"`
+
+	// Whatsapp Raw input; normalised server-side to E.164 (+233 followed by 9 digits).
+	Whatsapp *string `json:"whatsapp,omitempty"`
+}
+
+// SellerProfileInputIdType defines model for SellerProfileInput.IdType.
+type SellerProfileInputIdType string
+
+// SellerProfileInputRegion defines model for SellerProfileInput.Region.
+type SellerProfileInputRegion string
+
 // UpdateMeRequest defines model for UpdateMeRequest.
 type UpdateMeRequest struct {
 	// DisplayName Leading/trailing whitespace is trimmed; must contain a non-space character.
 	DisplayName string `json:"displayName"`
 }
+
+// VerifySellerRequest defines model for VerifySellerRequest.
+type VerifySellerRequest struct {
+	Decision VerifySellerRequestDecision `json:"decision"`
+
+	// Reason Required when rejecting (1-500 characters).
+	Reason *string `json:"reason,omitempty"`
+}
+
+// VerifySellerRequestDecision defines model for VerifySellerRequest.Decision.
+type VerifySellerRequestDecision string
 
 // Limit defines model for Limit.
 type Limit = int32
@@ -228,6 +558,9 @@ type Page = int32
 
 // BadRequest The single error envelope used by every endpoint.
 type BadRequest = Error
+
+// Conflict The single error envelope used by every endpoint.
+type Conflict = Error
 
 // Forbidden The single error envelope used by every endpoint.
 type Forbidden = Error
@@ -247,8 +580,28 @@ type Unauthorized = Error
 // Unavailable The single error envelope used by every endpoint.
 type Unavailable = Error
 
+// ListAdminSellersParams defines parameters for ListAdminSellers.
+type ListAdminSellersParams struct {
+	Status ListAdminSellersParamsStatus `form:"status" json:"status"`
+
+	// Page 1-based page number.
+	Page *Page `form:"page,omitempty" json:"page,omitempty"`
+
+	// Limit Page size.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListAdminSellersParamsStatus defines parameters for ListAdminSellers.
+type ListAdminSellersParamsStatus string
+
+// VerifySellerJSONRequestBody defines body for VerifySeller for application/json ContentType.
+type VerifySellerJSONRequestBody = VerifySellerRequest
+
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UpdateMeRequest
+
+// UpdateMySellerProfileJSONRequestBody defines body for UpdateMySellerProfile for application/json ContentType.
+type UpdateMySellerProfileJSONRequestBody = SellerProfileInput
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -258,12 +611,27 @@ type ServerInterface interface {
 	// GetReadyz Readiness probe
 	// (GET /readyz)
 	GetReadyz(c *gin.Context)
+	// ListAdminSellers List seller profiles by verification status
+	// (GET /v1/admin/sellers)
+	ListAdminSellers(c *gin.Context, params ListAdminSellersParams)
+	// VerifySeller Approve or reject a seller
+	// (POST /v1/admin/sellers/{userId}/verification)
+	VerifySeller(c *gin.Context, userId openapi_types.UUID)
 	// GetMe Get my account
 	// (GET /v1/me)
 	GetMe(c *gin.Context)
 	// UpdateMe Update my account
 	// (PATCH /v1/me)
 	UpdateMe(c *gin.Context)
+	// GetMySellerProfile Get my seller profile
+	// (GET /v1/me/seller-profile)
+	GetMySellerProfile(c *gin.Context)
+	// UpdateMySellerProfile Create or edit my seller profile
+	// (PUT /v1/me/seller-profile)
+	UpdateMySellerProfile(c *gin.Context)
+	// GetPublicSeller Get a seller's public profile
+	// (GET /v1/sellers/{userId})
+	GetPublicSeller(c *gin.Context, userId openapi_types.UUID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -301,6 +669,74 @@ func (siw *ServerInterfaceWrapper) GetReadyz(c *gin.Context) {
 	siw.Handler.GetReadyz(c)
 }
 
+// ListAdminSellers operation middleware
+func (siw *ServerInterfaceWrapper) ListAdminSellers(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAdminSellersParams
+
+	// ------------- Required query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "status", c.Request.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter status: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", c.Request.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: "int32"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter page: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", c.Request.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: "int32"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter limit: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ListAdminSellers(c, params)
+}
+
+// VerifySeller operation middleware
+func (siw *ServerInterfaceWrapper) VerifySeller(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "userId" -------------
+	var userId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", c.Param("userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter userId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.VerifySeller(c, userId)
+}
+
 // GetMe operation middleware
 func (siw *ServerInterfaceWrapper) GetMe(c *gin.Context) {
 
@@ -325,6 +761,57 @@ func (siw *ServerInterfaceWrapper) UpdateMe(c *gin.Context) {
 	}
 
 	siw.Handler.UpdateMe(c)
+}
+
+// GetMySellerProfile operation middleware
+func (siw *ServerInterfaceWrapper) GetMySellerProfile(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetMySellerProfile(c)
+}
+
+// UpdateMySellerProfile operation middleware
+func (siw *ServerInterfaceWrapper) UpdateMySellerProfile(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.UpdateMySellerProfile(c)
+}
+
+// GetPublicSeller operation middleware
+func (siw *ServerInterfaceWrapper) GetPublicSeller(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "userId" -------------
+	var userId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", c.Param("userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter userId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetPublicSeller(c, userId)
 }
 
 // GinServerOptions provides options for the Gin server.
@@ -358,9 +845,16 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.GET(options.BaseURL+"/readyz", wrapper.GetReadyz)
 	router.GET(options.BaseURL+"/v1/me", wrapper.GetMe)
 	router.PATCH(options.BaseURL+"/v1/me", wrapper.UpdateMe)
+	router.GET(options.BaseURL+"/v1/me/seller-profile", wrapper.GetMySellerProfile)
+	router.PUT(options.BaseURL+"/v1/me/seller-profile", wrapper.UpdateMySellerProfile)
+	router.GET(options.BaseURL+"/v1/sellers/:userId", wrapper.GetPublicSeller)
+	router.GET(options.BaseURL+"/v1/admin/sellers", wrapper.ListAdminSellers)
+	router.POST(options.BaseURL+"/v1/admin/sellers/:userId/verification", wrapper.VerifySeller)
 }
 
 type BadRequestJSONResponse Error
+
+type ConflictJSONResponse Error
 
 type ForbiddenJSONResponse Error
 
@@ -436,6 +930,215 @@ func (response GetReadyz503JSONResponse) VisitGetReadyzResponse(w http.ResponseW
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAdminSellersRequestObject struct {
+	Params ListAdminSellersParams
+}
+
+type ListAdminSellersResponseObject interface {
+	VisitListAdminSellersResponse(w http.ResponseWriter) error
+}
+
+type ListAdminSellers200JSONResponse SellerProfileAdminList
+
+func (response ListAdminSellers200JSONResponse) VisitListAdminSellersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAdminSellers400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListAdminSellers400JSONResponse) VisitListAdminSellersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAdminSellers401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListAdminSellers401JSONResponse) VisitListAdminSellersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAdminSellers403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListAdminSellers403JSONResponse) VisitListAdminSellersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAdminSellers429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response ListAdminSellers429JSONResponse) VisitListAdminSellersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifySellerRequestObject struct {
+	UserId openapi_types.UUID `json:"userId"`
+	Body   *VerifySellerJSONRequestBody
+}
+
+type VerifySellerResponseObject interface {
+	VisitVerifySellerResponse(w http.ResponseWriter) error
+}
+
+type VerifySeller200JSONResponse SellerProfileAdmin
+
+func (response VerifySeller200JSONResponse) VisitVerifySellerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifySeller400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response VerifySeller400JSONResponse) VisitVerifySellerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifySeller401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response VerifySeller401JSONResponse) VisitVerifySellerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifySeller403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response VerifySeller403JSONResponse) VisitVerifySellerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifySeller404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response VerifySeller404JSONResponse) VisitVerifySellerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifySeller409JSONResponse struct{ ConflictJSONResponse }
+
+func (response VerifySeller409JSONResponse) VisitVerifySellerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type VerifySeller429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response VerifySeller429JSONResponse) VisitVerifySellerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -577,6 +1280,233 @@ func (response UpdateMe429JSONResponse) VisitUpdateMeResponse(w http.ResponseWri
 	return err
 }
 
+type GetMySellerProfileRequestObject struct {
+}
+
+type GetMySellerProfileResponseObject interface {
+	VisitGetMySellerProfileResponse(w http.ResponseWriter) error
+}
+
+type GetMySellerProfile200JSONResponse SellerProfile
+
+func (response GetMySellerProfile200JSONResponse) VisitGetMySellerProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMySellerProfile401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetMySellerProfile401JSONResponse) VisitGetMySellerProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMySellerProfile404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetMySellerProfile404JSONResponse) VisitGetMySellerProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMySellerProfile429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response GetMySellerProfile429JSONResponse) VisitGetMySellerProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMySellerProfileRequestObject struct {
+	Body *UpdateMySellerProfileJSONRequestBody
+}
+
+type UpdateMySellerProfileResponseObject interface {
+	VisitUpdateMySellerProfileResponse(w http.ResponseWriter) error
+}
+
+type UpdateMySellerProfile200JSONResponse SellerProfile
+
+func (response UpdateMySellerProfile200JSONResponse) VisitUpdateMySellerProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMySellerProfile400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpdateMySellerProfile400JSONResponse) VisitUpdateMySellerProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMySellerProfile401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateMySellerProfile401JSONResponse) VisitUpdateMySellerProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMySellerProfile429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response UpdateMySellerProfile429JSONResponse) VisitUpdateMySellerProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicSellerRequestObject struct {
+	UserId openapi_types.UUID `json:"userId"`
+}
+
+type GetPublicSellerResponseObject interface {
+	VisitGetPublicSellerResponse(w http.ResponseWriter) error
+}
+
+type GetPublicSeller200JSONResponse PublicSeller
+
+func (response GetPublicSeller200JSONResponse) VisitGetPublicSellerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicSeller400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response GetPublicSeller400JSONResponse) VisitGetPublicSellerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicSeller404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetPublicSeller404JSONResponse) VisitGetPublicSellerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPublicSeller429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response GetPublicSeller429JSONResponse) VisitGetPublicSellerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// GetHealthz Liveness probe
@@ -585,12 +1515,27 @@ type StrictServerInterface interface {
 	// GetReadyz Readiness probe
 	// (GET /readyz)
 	GetReadyz(ctx context.Context, request GetReadyzRequestObject) (GetReadyzResponseObject, error)
+	// ListAdminSellers List seller profiles by verification status
+	// (GET /v1/admin/sellers)
+	ListAdminSellers(ctx context.Context, request ListAdminSellersRequestObject) (ListAdminSellersResponseObject, error)
+	// VerifySeller Approve or reject a seller
+	// (POST /v1/admin/sellers/{userId}/verification)
+	VerifySeller(ctx context.Context, request VerifySellerRequestObject) (VerifySellerResponseObject, error)
 	// GetMe Get my account
 	// (GET /v1/me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
 	// UpdateMe Update my account
 	// (PATCH /v1/me)
 	UpdateMe(ctx context.Context, request UpdateMeRequestObject) (UpdateMeResponseObject, error)
+	// GetMySellerProfile Get my seller profile
+	// (GET /v1/me/seller-profile)
+	GetMySellerProfile(ctx context.Context, request GetMySellerProfileRequestObject) (GetMySellerProfileResponseObject, error)
+	// UpdateMySellerProfile Create or edit my seller profile
+	// (PUT /v1/me/seller-profile)
+	UpdateMySellerProfile(ctx context.Context, request UpdateMySellerProfileRequestObject) (UpdateMySellerProfileResponseObject, error)
+	// GetPublicSeller Get a seller's public profile
+	// (GET /v1/sellers/{userId})
+	GetPublicSeller(ctx context.Context, request GetPublicSellerRequestObject) (GetPublicSellerResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx *gin.Context, request any) (any, error)
@@ -698,6 +1643,65 @@ func (sh *strictHandler) GetReadyz(ctx *gin.Context) {
 	}
 }
 
+// ListAdminSellers operation middleware
+func (sh *strictHandler) ListAdminSellers(ctx *gin.Context, params ListAdminSellersParams) {
+	var request ListAdminSellersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAdminSellers(ctx, request.(ListAdminSellersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAdminSellers")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(ListAdminSellersResponseObject); ok {
+		if err := validResponse.VisitListAdminSellersResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// VerifySeller operation middleware
+func (sh *strictHandler) VerifySeller(ctx *gin.Context, userId openapi_types.UUID) {
+	var request VerifySellerRequestObject
+
+	request.UserId = userId
+
+	var body VerifySellerJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.VerifySeller(ctx, request.(VerifySellerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "VerifySeller")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(VerifySellerResponseObject); ok {
+		if err := validResponse.VisitVerifySellerResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetMe operation middleware
 func (sh *strictHandler) GetMe(ctx *gin.Context) {
 	var request GetMeRequestObject
@@ -753,62 +1757,166 @@ func (sh *strictHandler) UpdateMe(ctx *gin.Context) {
 	}
 }
 
+// GetMySellerProfile operation middleware
+func (sh *strictHandler) GetMySellerProfile(ctx *gin.Context) {
+	var request GetMySellerProfileRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMySellerProfile(ctx, request.(GetMySellerProfileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMySellerProfile")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetMySellerProfileResponseObject); ok {
+		if err := validResponse.VisitGetMySellerProfileResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateMySellerProfile operation middleware
+func (sh *strictHandler) UpdateMySellerProfile(ctx *gin.Context) {
+	var request UpdateMySellerProfileRequestObject
+
+	var body UpdateMySellerProfileJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateMySellerProfile(ctx, request.(UpdateMySellerProfileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateMySellerProfile")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(UpdateMySellerProfileResponseObject); ok {
+		if err := validResponse.VisitUpdateMySellerProfileResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPublicSeller operation middleware
+func (sh *strictHandler) GetPublicSeller(ctx *gin.Context, userId openapi_types.UUID) {
+	var request GetPublicSellerRequestObject
+
+	request.UserId = userId
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPublicSeller(ctx, request.(GetPublicSellerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPublicSeller")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetPublicSellerResponseObject); ok {
+		if err := validResponse.VisitGetPublicSellerResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

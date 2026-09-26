@@ -30,8 +30,9 @@ type UserStore interface {
 
 // Server implements every operation in api/openapi.yaml.
 type Server struct {
-	DB    Pinger
-	Users UserStore
+	DB      Pinger
+	Users   UserStore
+	Sellers SellerStore
 }
 
 var _ api.StrictServerInterface = Server{}

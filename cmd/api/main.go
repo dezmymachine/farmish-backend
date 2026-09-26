@@ -15,11 +15,13 @@ import (
 
 	"github.com/dezmymachine/farmish-backend/internal/auth"
 	"github.com/dezmymachine/farmish-backend/internal/config"
+	"github.com/dezmymachine/farmish-backend/internal/crypto"
 	"github.com/dezmymachine/farmish-backend/internal/database"
 	httpapi "github.com/dezmymachine/farmish-backend/internal/http"
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
 	"github.com/dezmymachine/farmish-backend/internal/ratelimit"
 	"github.com/dezmymachine/farmish-backend/internal/redisx"
+	"github.com/dezmymachine/farmish-backend/internal/sellers"
 	"github.com/dezmymachine/farmish-backend/internal/turnstile"
 	"github.com/dezmymachine/farmish-backend/internal/users"
 	"github.com/dezmymachine/farmish-backend/pkg/logger"
@@ -150,10 +152,15 @@ func run() error {
 			return err
 		}
 		defer closeShared()
+		crypter, err := crypto.New(cfg.DataEncryptionKey)
+		if err != nil {
+			return err
+		}
 		router, err = httpapi.NewRouter(cfg, log, httpapi.Deps{
 			DB:            pool,
 			Verifier:      firebase,
 			Users:         users.New(pool),
+			Sellers:       sellers.New(pool, crypter, firebase),
 			Turnstile:     turnstile.New(cfg.TurnstileSecret),
 			IPLimiter:     ipLimiter,
 			SharedLimiter: shared,

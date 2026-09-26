@@ -50,6 +50,8 @@ tags:
     description: Liveness and readiness probes.
   - name: me
     description: The signed-in user's own account.
+  - name: sellers
+    description: Seller profiles and verification.
 paths:
   /healthz:
     get:
@@ -124,6 +126,153 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /v1/me/seller-profile:
+    get:
+      tags: [sellers]
+      operationId: getMySellerProfile
+      summary: Get my seller profile
+      description: Returns the signed-in user's seller profile, or 404 when they never created one.
+      responses:
+        "200":
+          description: The caller's seller profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SellerProfile"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    put:
+      tags: [sellers]
+      operationId: updateMySellerProfile
+      summary: Create or edit my seller profile
+      description: |
+        Creates the profile on first call, edits it afterwards. Submitting
+        or changing idType/idNumber encrypts the number, stores its last 4
+        and (re)submits the profile for verification. Editing other fields
+        never changes the verification status.
+      x-farmish-rate-limit: sensitive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SellerProfileInput"
+      responses:
+        "200":
+          description: The saved seller profile. Never contains the ID number.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SellerProfile"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/sellers/{userId}:
+    get:
+      tags: [sellers]
+      operationId: getPublicSeller
+      summary: Get a seller's public profile
+      description: Safe projection only, without contact, identity or account fields.
+      security: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The seller's public profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicSeller"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/sellers:
+    get:
+      tags: [sellers]
+      operationId: listAdminSellers
+      summary: List seller profiles by verification status
+      description: Admin review queue, oldest submission first.
+      x-farmish-role: admin
+      parameters:
+        - name: status
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [unverified, pending, verified, rejected]
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: A page of seller profiles with owner contact fields.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SellerProfileAdminList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/sellers/{userId}/verification:
+    post:
+      tags: [sellers]
+      operationId: verifySeller
+      summary: Approve or reject a seller
+      description: |
+        Decides a pending profile. Approve verifies it; reject needs a
+        reason. Anything not pending gets 409.
+      x-farmish-role: admin
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifySellerRequest"
+      responses:
+        "200":
+          description: The decided profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SellerProfileAdmin"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 components:
   securitySchemes:
     bearerAuth:
@@ -172,6 +321,12 @@ components:
             $ref: "#/components/schemas/Error"
     NotFound:
       description: The resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: The resource is in a state that forbids this action.
       content:
         application/json:
           schema:
@@ -314,6 +469,167 @@ components:
           maxLength: 80
           pattern: '\S'
           description: Leading/trailing whitespace is trimmed; must contain a non-space character.
+    SellerProfileInput:
+      type: object
+      description: Create-or-edit model for the caller's seller profile. idType and idNumber must be given together.
+      additionalProperties: false
+      required: [businessName, region, district]
+      properties:
+        businessName:
+          type: string
+          minLength: 2
+          maxLength: 120
+        region:
+          type: string
+          enum: [Ahafo, Ashanti, Bono, Bono East, Central, Eastern, Greater Accra, North East, Northern, Oti, Savannah, Upper East, Upper West, Volta, Western, Western North]
+        district:
+          type: string
+          minLength: 2
+          maxLength: 80
+        bio:
+          type: string
+          maxLength: 1000
+        showPhone:
+          type: boolean
+        showWhatsapp:
+          type: boolean
+        whatsapp:
+          type: string
+          description: Raw input; normalised server-side to E.164 (+233 followed by 9 digits).
+        idType:
+          type: string
+          enum: [ghana_card, passport, voters_id, drivers_license]
+        idNumber:
+          type: string
+          minLength: 4
+          maxLength: 30
+          pattern: '^[A-Za-z0-9-]+$'
+    SellerProfile:
+      type: object
+      description: The owner's view of their seller profile. Never contains the ID number, only its last 4.
+      required: [businessName, region, district, showPhone, showWhatsapp, verificationStatus]
+      properties:
+        businessName:
+          type: string
+        region:
+          type: string
+        district:
+          type: string
+        bio:
+          type: string
+        showPhone:
+          type: boolean
+        showWhatsapp:
+          type: boolean
+        whatsapp:
+          type: string
+          description: E.164 number, present when the seller set one.
+        verificationStatus:
+          type: string
+          enum: [unverified, pending, verified, rejected]
+        idType:
+          type: string
+          enum: [ghana_card, passport, voters_id, drivers_license]
+        idNumberLast4:
+          type: string
+          description: Masked ID number (last 4) for the owner and admins.
+        submittedAt:
+          type: string
+          format: date-time
+        reviewedAt:
+          type: string
+          format: date-time
+        rejectionReason:
+          type: string
+    PublicSeller:
+      type: object
+      description: Safe seller projection for anonymous callers.
+      required: [userId, businessName, region, district, verified, memberSince]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        businessName:
+          type: string
+        region:
+          type: string
+        district:
+          type: string
+        bio:
+          type: string
+        verified:
+          type: boolean
+          description: True when the seller is verified.
+        memberSince:
+          type: string
+          format: date-time
+          description: When the seller's user account was created.
+    SellerProfileAdmin:
+      type: object
+      description: The admin review view, with the owner's contact fields.
+      required: [userId, businessName, region, district, showPhone, showWhatsapp, verificationStatus]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        businessName:
+          type: string
+        region:
+          type: string
+        district:
+          type: string
+        bio:
+          type: string
+        showPhone:
+          type: boolean
+        showWhatsapp:
+          type: boolean
+        whatsapp:
+          type: string
+        verificationStatus:
+          type: string
+          enum: [unverified, pending, verified, rejected]
+        idType:
+          type: string
+          enum: [ghana_card, passport, voters_id, drivers_license]
+        idNumberLast4:
+          type: string
+        submittedAt:
+          type: string
+          format: date-time
+        reviewedAt:
+          type: string
+          format: date-time
+        rejectionReason:
+          type: string
+    SellerProfileAdminList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SellerProfileAdmin"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
+    VerifySellerRequest:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [approve, reject]
+        reason:
+          type: string
+          maxLength: 500
+          description: Required when rejecting (1-500 characters).
     Money:
       type: object
       description: An amount of money in the smallest currency unit (pesewas).
