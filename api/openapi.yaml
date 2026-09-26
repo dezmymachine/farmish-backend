@@ -56,6 +56,8 @@ tags:
     description: Categories, attributes and Ghana locations.
   - name: media
     description: Presigned uploads to object storage.
+  - name: listings
+    description: Seller listings. Public browsing is Phase 12.
 paths:
   /healthz:
     get:
@@ -554,6 +556,245 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /v1/listings:
+    post:
+      tags: [listings]
+      operationId: createListing
+      summary: Create a listing
+      description: |
+        Creates a listing for the signed-in seller, who must have a seller
+        profile (403 `seller_profile_required` otherwise). With
+        `publish: true` the listing goes live in the same request and must be
+        complete (at least one image, every required attribute).
+      x-farmish-rate-limit: sensitive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateListingRequest"
+      responses:
+        "201":
+          description: The created listing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SellerListing"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/me/listings:
+    get:
+      tags: [listings]
+      operationId: listMyListings
+      summary: List my listings
+      description: The signed-in seller's listings, newest first.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, active, sold, expired, archived, suspended]
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: A page of listing summaries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SellerListingSummaryList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/me/listings/{id}:
+    get:
+      tags: [listings]
+      operationId: getMyListing
+      summary: Get one of my listings
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      responses:
+        "200":
+          description: The listing, with images and attribute values.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SellerListing"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/listings/{id}:
+    patch:
+      tags: [listings]
+      operationId: updateListing
+      summary: Edit one of my listings
+      description: |
+        Every field is optional; omitted fields keep their value. The merged
+        result is validated as a whole, and changing the category re-validates
+        the attributes. A suspended listing cannot be edited (409).
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateListingRequest"
+      responses:
+        "200":
+          description: The updated listing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SellerListing"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    delete:
+      tags: [listings]
+      operationId: deleteListing
+      summary: Delete a draft listing
+      description: Drafts only; archive anything else so its history survives (409).
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      responses:
+        "204":
+          description: The draft is gone.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/listings/{id}/publish:
+    post:
+      tags: [listings]
+      operationId: publishListing
+      summary: Publish a listing
+      description: Draft, archived or expired becomes active for 30 days. Needs an image and every required attribute.
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      responses:
+        "200":
+          description: The published listing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SellerListing"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/listings/{id}/renew:
+    post:
+      tags: [listings]
+      operationId: renewListing
+      summary: Renew a listing
+      description: Active or expired becomes active again for another 30 days.
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      responses:
+        "200":
+          description: The renewed listing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SellerListing"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/listings/{id}/mark-sold:
+    post:
+      tags: [listings]
+      operationId: markListingSold
+      summary: Mark a listing as sold
+      description: Active listings only (409 otherwise).
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      responses:
+        "200":
+          description: The sold listing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SellerListing"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/listings/{id}/archive:
+    post:
+      tags: [listings]
+      operationId: archiveListing
+      summary: Archive a listing
+      description: Active or expired listings are hidden. Publish or renew brings it back.
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      responses:
+        "200":
+          description: The archived listing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SellerListing"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 components:
   securitySchemes:
     bearerAuth:
@@ -562,6 +803,13 @@ components:
       bearerFormat: JWT
       description: Firebase ID token.
   parameters:
+    ListingId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     Page:
       name: page
       in: query
@@ -679,9 +927,11 @@ components:
             Stable snake_case error code: `bad_request`, `validation_failed`,
             `unauthorized`, `reauth_required`, `forbidden`, `not_found`,
             `method_not_allowed`, `rate_limited`, `turnstile_failed`,
-            `internal_error`, `unavailable`. `reauth_required` means the
-            sign-in is too old for a step-up operation: sign the user in
-            again and retry.
+            `invalid_transition`, `seller_profile_required`,
+            `listing_suspended`, `internal_error`, `unavailable`.
+            `reauth_required` means the sign-in is too old for a step-up
+            operation; `invalid_transition` and `listing_suspended` are
+            state conflicts (409).
           examples: [validation_failed]
         message:
           type: string
@@ -1147,6 +1397,286 @@ components:
         publicUrl:
           type: string
           description: Where the object is served from once uploaded.
+    ListingDelivery:
+      type: object
+      description: Delivery options. At least one must be true; a seller-delivery fee is required exactly when sellerDelivery is on.
+      additionalProperties: false
+      required: [pickup, sellerDelivery]
+      properties:
+        pickup:
+          type: boolean
+        sellerDelivery:
+          type: boolean
+        sellerDeliveryFee:
+          $ref: "#/components/schemas/Money"
+    CreateListingRequest:
+      type: object
+      additionalProperties: false
+      required: [categorySlug, title, description, price, unit, quantityAvailable, itemState, region, district, deliveryOptions]
+      properties:
+        categorySlug:
+          type: string
+        title:
+          type: string
+          minLength: 5
+          maxLength: 100
+        description:
+          type: string
+          minLength: 20
+          maxLength: 5000
+        price:
+          $ref: "#/components/schemas/Money"
+          description: Price per unit, in pesewas. Currency must be GHS.
+        unit:
+          type: string
+          description: Must be one of the category's units.
+        quantityAvailable:
+          type: integer
+          format: int32
+          minimum: 0
+        minOrderQty:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 1
+        isNegotiable:
+          type: boolean
+          default: true
+        itemState:
+          type: string
+          description: Must be one of the category's item states.
+        region:
+          type: string
+          enum: [Ahafo, Ashanti, Bono, Bono East, Central, Eastern, Greater Accra, North East, Northern, Oti, Savannah, Upper East, Upper West, Volta, Western, Western North]
+        district:
+          type: string
+          minLength: 2
+          maxLength: 80
+        area:
+          type: string
+          maxLength: 120
+        deliveryOptions:
+          $ref: "#/components/schemas/ListingDelivery"
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+          description: Attribute values keyed by the category's attribute keys.
+        imageMediaIds:
+          type: array
+          maxItems: 10
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+          description: Media ids from POST /v1/media/upload-url, in display order.
+        publish:
+          type: boolean
+          default: false
+          description: Publish immediately (the listing must then be complete).
+    UpdateListingRequest:
+      type: object
+      description: Every field is optional; omitted fields keep their value.
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        categorySlug:
+          type: string
+        title:
+          type: string
+          minLength: 5
+          maxLength: 100
+        description:
+          type: string
+          minLength: 20
+          maxLength: 5000
+        price:
+          $ref: "#/components/schemas/Money"
+        unit:
+          type: string
+        quantityAvailable:
+          type: integer
+          format: int32
+          minimum: 0
+        minOrderQty:
+          type: integer
+          format: int32
+          minimum: 1
+        isNegotiable:
+          type: boolean
+        itemState:
+          type: string
+        region:
+          type: string
+          enum: [Ahafo, Ashanti, Bono, Bono East, Central, Eastern, Greater Accra, North East, Northern, Oti, Savannah, Upper East, Upper West, Volta, Western, Western North]
+        district:
+          type: string
+          minLength: 2
+          maxLength: 80
+        area:
+          type: string
+          maxLength: 120
+        deliveryOptions:
+          $ref: "#/components/schemas/ListingDelivery"
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+        imageMediaIds:
+          type: array
+          maxItems: 10
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+    SellerListingImage:
+      type: object
+      required: [mediaId, url, sortOrder]
+      properties:
+        mediaId:
+          type: string
+          format: uuid
+        url:
+          type: string
+        sortOrder:
+          type: integer
+          format: int32
+    SellerListingAttribute:
+      type: object
+      required: [key, value]
+      properties:
+        key:
+          type: string
+        value:
+          type: string
+        type:
+          type: string
+          enum: [text, number, boolean, select, date]
+        required:
+          type: boolean
+    SellerListing:
+      type: object
+      description: The owner's view of a listing. Never exposes the seller's contact details.
+      required: [id, categorySlug, title, slug, description, price, unit, quantityAvailable, minOrderQty, isNegotiable, itemState, status, region, district, offersPickup, offersSellerDelivery, images, attributes, viewCount, favoriteCount, contactCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        categorySlug:
+          type: string
+        title:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        price:
+          $ref: "#/components/schemas/Money"
+        unit:
+          type: string
+        quantityAvailable:
+          type: integer
+          format: int32
+        minOrderQty:
+          type: integer
+          format: int32
+        isNegotiable:
+          type: boolean
+        itemState:
+          type: string
+        status:
+          type: string
+          enum: [draft, active, sold, expired, archived, suspended]
+        region:
+          type: string
+        district:
+          type: string
+        area:
+          type: string
+        offersPickup:
+          type: boolean
+        offersSellerDelivery:
+          type: boolean
+        sellerDeliveryFee:
+          $ref: "#/components/schemas/Money"
+        publishedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/SellerListingImage"
+        attributes:
+          type: array
+          items:
+            $ref: "#/components/schemas/SellerListingAttribute"
+        viewCount:
+          type: integer
+          format: int32
+        favoriteCount:
+          type: integer
+          format: int32
+        contactCount:
+          type: integer
+          format: int32
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    SellerListingSummary:
+      type: object
+      required: [id, title, slug, categorySlug, price, quantityAvailable, status, imageCount, viewCount, favoriteCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        categorySlug:
+          type: string
+        price:
+          $ref: "#/components/schemas/Money"
+        quantityAvailable:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum: [draft, active, sold, expired, archived, suspended]
+        imageCount:
+          type: integer
+          format: int32
+        viewCount:
+          type: integer
+          format: int32
+        favoriteCount:
+          type: integer
+          format: int32
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    SellerListingSummaryList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SellerListingSummary"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
     Money:
       type: object
       description: An amount of money in the smallest currency unit (pesewas).

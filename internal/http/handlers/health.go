@@ -30,11 +30,12 @@ type UserStore interface {
 
 // Server implements every operation in api/openapi.yaml.
 type Server struct {
-	DB      Pinger
-	Users   UserStore
-	Sellers SellerStore
-	Catalog CatalogStore
-	Media   MediaStore
+	DB       Pinger
+	Users    UserStore
+	Sellers  SellerStore
+	Catalog  CatalogStore
+	Media    MediaStore
+	Listings ListingStore
 }
 
 var _ api.StrictServerInterface = Server{}

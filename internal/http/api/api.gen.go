@@ -130,6 +130,66 @@ func (e CreateCategoryRequestListingGroup) Valid() bool {
 	}
 }
 
+// Defines values for CreateListingRequestRegion.
+const (
+	CreateListingRequestRegionAhafo        CreateListingRequestRegion = "Ahafo"
+	CreateListingRequestRegionAshanti      CreateListingRequestRegion = "Ashanti"
+	CreateListingRequestRegionBono         CreateListingRequestRegion = "Bono"
+	CreateListingRequestRegionBonoEast     CreateListingRequestRegion = "Bono East"
+	CreateListingRequestRegionCentral      CreateListingRequestRegion = "Central"
+	CreateListingRequestRegionEastern      CreateListingRequestRegion = "Eastern"
+	CreateListingRequestRegionGreaterAccra CreateListingRequestRegion = "Greater Accra"
+	CreateListingRequestRegionNorthEast    CreateListingRequestRegion = "North East"
+	CreateListingRequestRegionNorthern     CreateListingRequestRegion = "Northern"
+	CreateListingRequestRegionOti          CreateListingRequestRegion = "Oti"
+	CreateListingRequestRegionSavannah     CreateListingRequestRegion = "Savannah"
+	CreateListingRequestRegionUpperEast    CreateListingRequestRegion = "Upper East"
+	CreateListingRequestRegionUpperWest    CreateListingRequestRegion = "Upper West"
+	CreateListingRequestRegionVolta        CreateListingRequestRegion = "Volta"
+	CreateListingRequestRegionWestern      CreateListingRequestRegion = "Western"
+	CreateListingRequestRegionWesternNorth CreateListingRequestRegion = "Western North"
+)
+
+// Valid indicates whether the value is a known member of the CreateListingRequestRegion enum.
+func (e CreateListingRequestRegion) Valid() bool {
+	switch e {
+	case CreateListingRequestRegionAhafo:
+		return true
+	case CreateListingRequestRegionAshanti:
+		return true
+	case CreateListingRequestRegionBono:
+		return true
+	case CreateListingRequestRegionBonoEast:
+		return true
+	case CreateListingRequestRegionCentral:
+		return true
+	case CreateListingRequestRegionEastern:
+		return true
+	case CreateListingRequestRegionGreaterAccra:
+		return true
+	case CreateListingRequestRegionNorthEast:
+		return true
+	case CreateListingRequestRegionNorthern:
+		return true
+	case CreateListingRequestRegionOti:
+		return true
+	case CreateListingRequestRegionSavannah:
+		return true
+	case CreateListingRequestRegionUpperEast:
+		return true
+	case CreateListingRequestRegionUpperWest:
+		return true
+	case CreateListingRequestRegionVolta:
+		return true
+	case CreateListingRequestRegionWestern:
+		return true
+	case CreateListingRequestRegionWesternNorth:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CreateUploadUrlRequestContentType.
 const (
 	CreateUploadUrlRequestContentTypeImagejpeg CreateUploadUrlRequestContentType = "image/jpeg"
@@ -271,6 +331,93 @@ const (
 func (e MoneyCurrency) Valid() bool {
 	switch e {
 	case MoneyCurrencyGHS:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SellerListingStatus.
+const (
+	SellerListingStatusActive    SellerListingStatus = "active"
+	SellerListingStatusArchived  SellerListingStatus = "archived"
+	SellerListingStatusDraft     SellerListingStatus = "draft"
+	SellerListingStatusExpired   SellerListingStatus = "expired"
+	SellerListingStatusSold      SellerListingStatus = "sold"
+	SellerListingStatusSuspended SellerListingStatus = "suspended"
+)
+
+// Valid indicates whether the value is a known member of the SellerListingStatus enum.
+func (e SellerListingStatus) Valid() bool {
+	switch e {
+	case SellerListingStatusActive:
+		return true
+	case SellerListingStatusArchived:
+		return true
+	case SellerListingStatusDraft:
+		return true
+	case SellerListingStatusExpired:
+		return true
+	case SellerListingStatusSold:
+		return true
+	case SellerListingStatusSuspended:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SellerListingAttributeType.
+const (
+	SellerListingAttributeTypeBoolean SellerListingAttributeType = "boolean"
+	SellerListingAttributeTypeDate    SellerListingAttributeType = "date"
+	SellerListingAttributeTypeNumber  SellerListingAttributeType = "number"
+	SellerListingAttributeTypeSelect  SellerListingAttributeType = "select"
+	SellerListingAttributeTypeText    SellerListingAttributeType = "text"
+)
+
+// Valid indicates whether the value is a known member of the SellerListingAttributeType enum.
+func (e SellerListingAttributeType) Valid() bool {
+	switch e {
+	case SellerListingAttributeTypeBoolean:
+		return true
+	case SellerListingAttributeTypeDate:
+		return true
+	case SellerListingAttributeTypeNumber:
+		return true
+	case SellerListingAttributeTypeSelect:
+		return true
+	case SellerListingAttributeTypeText:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SellerListingSummaryStatus.
+const (
+	SellerListingSummaryStatusActive    SellerListingSummaryStatus = "active"
+	SellerListingSummaryStatusArchived  SellerListingSummaryStatus = "archived"
+	SellerListingSummaryStatusDraft     SellerListingSummaryStatus = "draft"
+	SellerListingSummaryStatusExpired   SellerListingSummaryStatus = "expired"
+	SellerListingSummaryStatusSold      SellerListingSummaryStatus = "sold"
+	SellerListingSummaryStatusSuspended SellerListingSummaryStatus = "suspended"
+)
+
+// Valid indicates whether the value is a known member of the SellerListingSummaryStatus enum.
+func (e SellerListingSummaryStatus) Valid() bool {
+	switch e {
+	case SellerListingSummaryStatusActive:
+		return true
+	case SellerListingSummaryStatusArchived:
+		return true
+	case SellerListingSummaryStatusDraft:
+		return true
+	case SellerListingSummaryStatusExpired:
+		return true
+	case SellerListingSummaryStatusSold:
+		return true
+	case SellerListingSummaryStatusSuspended:
 		return true
 	default:
 		return false
@@ -484,6 +631,66 @@ func (e UpdateAttributeRequestType) Valid() bool {
 	}
 }
 
+// Defines values for UpdateListingRequestRegion.
+const (
+	UpdateListingRequestRegionAhafo        UpdateListingRequestRegion = "Ahafo"
+	UpdateListingRequestRegionAshanti      UpdateListingRequestRegion = "Ashanti"
+	UpdateListingRequestRegionBono         UpdateListingRequestRegion = "Bono"
+	UpdateListingRequestRegionBonoEast     UpdateListingRequestRegion = "Bono East"
+	UpdateListingRequestRegionCentral      UpdateListingRequestRegion = "Central"
+	UpdateListingRequestRegionEastern      UpdateListingRequestRegion = "Eastern"
+	UpdateListingRequestRegionGreaterAccra UpdateListingRequestRegion = "Greater Accra"
+	UpdateListingRequestRegionNorthEast    UpdateListingRequestRegion = "North East"
+	UpdateListingRequestRegionNorthern     UpdateListingRequestRegion = "Northern"
+	UpdateListingRequestRegionOti          UpdateListingRequestRegion = "Oti"
+	UpdateListingRequestRegionSavannah     UpdateListingRequestRegion = "Savannah"
+	UpdateListingRequestRegionUpperEast    UpdateListingRequestRegion = "Upper East"
+	UpdateListingRequestRegionUpperWest    UpdateListingRequestRegion = "Upper West"
+	UpdateListingRequestRegionVolta        UpdateListingRequestRegion = "Volta"
+	UpdateListingRequestRegionWestern      UpdateListingRequestRegion = "Western"
+	UpdateListingRequestRegionWesternNorth UpdateListingRequestRegion = "Western North"
+)
+
+// Valid indicates whether the value is a known member of the UpdateListingRequestRegion enum.
+func (e UpdateListingRequestRegion) Valid() bool {
+	switch e {
+	case UpdateListingRequestRegionAhafo:
+		return true
+	case UpdateListingRequestRegionAshanti:
+		return true
+	case UpdateListingRequestRegionBono:
+		return true
+	case UpdateListingRequestRegionBonoEast:
+		return true
+	case UpdateListingRequestRegionCentral:
+		return true
+	case UpdateListingRequestRegionEastern:
+		return true
+	case UpdateListingRequestRegionGreaterAccra:
+		return true
+	case UpdateListingRequestRegionNorthEast:
+		return true
+	case UpdateListingRequestRegionNorthern:
+		return true
+	case UpdateListingRequestRegionOti:
+		return true
+	case UpdateListingRequestRegionSavannah:
+		return true
+	case UpdateListingRequestRegionUpperEast:
+		return true
+	case UpdateListingRequestRegionUpperWest:
+		return true
+	case UpdateListingRequestRegionVolta:
+		return true
+	case UpdateListingRequestRegionWestern:
+		return true
+	case UpdateListingRequestRegionWesternNorth:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for VerifySellerRequestDecision.
 const (
 	VerifySellerRequestDecisionApprove VerifySellerRequestDecision = "approve"
@@ -520,6 +727,36 @@ func (e ListAdminSellersParamsStatus) Valid() bool {
 	case ListAdminSellersParamsStatusUnverified:
 		return true
 	case ListAdminSellersParamsStatusVerified:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListMyListingsParamsStatus.
+const (
+	ListMyListingsParamsStatusActive    ListMyListingsParamsStatus = "active"
+	ListMyListingsParamsStatusArchived  ListMyListingsParamsStatus = "archived"
+	ListMyListingsParamsStatusDraft     ListMyListingsParamsStatus = "draft"
+	ListMyListingsParamsStatusExpired   ListMyListingsParamsStatus = "expired"
+	ListMyListingsParamsStatusSold      ListMyListingsParamsStatus = "sold"
+	ListMyListingsParamsStatusSuspended ListMyListingsParamsStatus = "suspended"
+)
+
+// Valid indicates whether the value is a known member of the ListMyListingsParamsStatus enum.
+func (e ListMyListingsParamsStatus) Valid() bool {
+	switch e {
+	case ListMyListingsParamsStatusActive:
+		return true
+	case ListMyListingsParamsStatusArchived:
+		return true
+	case ListMyListingsParamsStatusDraft:
+		return true
+	case ListMyListingsParamsStatusExpired:
+		return true
+	case ListMyListingsParamsStatusSold:
+		return true
+	case ListMyListingsParamsStatusSuspended:
 		return true
 	default:
 		return false
@@ -600,6 +837,43 @@ type CreateCategoryRequest struct {
 // CreateCategoryRequestListingGroup defines model for CreateCategoryRequest.ListingGroup.
 type CreateCategoryRequestListingGroup string
 
+// CreateListingRequest defines model for CreateListingRequest.
+type CreateListingRequest struct {
+	Area *string `json:"area,omitempty"`
+
+	// Attributes Attribute values keyed by the category's attribute keys.
+	Attributes   *map[string]string `json:"attributes,omitempty"`
+	CategorySlug string             `json:"categorySlug"`
+
+	// DeliveryOptions Delivery options. At least one must be true; a seller-delivery fee is required exactly when sellerDelivery is on.
+	DeliveryOptions ListingDelivery `json:"deliveryOptions"`
+	Description     string          `json:"description"`
+	District        string          `json:"district"`
+
+	// ImageMediaIds Media ids from POST /v1/media/upload-url, in display order.
+	ImageMediaIds *[]openapi_types.UUID `json:"imageMediaIds,omitempty"`
+	IsNegotiable  *bool                 `json:"isNegotiable,omitempty"`
+
+	// ItemState Must be one of the category's item states.
+	ItemState   string `json:"itemState"`
+	MinOrderQty *int32 `json:"minOrderQty,omitempty"`
+
+	// Price Price per unit, in pesewas. Currency must be GHS.
+	Price Money `json:"price"`
+
+	// Publish Publish immediately (the listing must then be complete).
+	Publish           *bool                      `json:"publish,omitempty"`
+	QuantityAvailable int32                      `json:"quantityAvailable"`
+	Region            CreateListingRequestRegion `json:"region"`
+	Title             string                     `json:"title"`
+
+	// Unit Must be one of the category's units.
+	Unit string `json:"unit"`
+}
+
+// CreateListingRequestRegion defines model for CreateListingRequest.Region.
+type CreateListingRequestRegion string
+
 // CreateUploadUrlRequest defines model for CreateUploadUrlRequest.
 type CreateUploadUrlRequest struct {
 	ContentType CreateUploadUrlRequestContentType `json:"contentType"`
@@ -625,9 +899,11 @@ type ErrorBody struct {
 	// Code Stable snake_case error code: `bad_request`, `validation_failed`,
 	// `unauthorized`, `reauth_required`, `forbidden`, `not_found`,
 	// `method_not_allowed`, `rate_limited`, `turnstile_failed`,
-	// `internal_error`, `unavailable`. `reauth_required` means the
-	// sign-in is too old for a step-up operation: sign the user in
-	// again and retry.
+	// `invalid_transition`, `seller_profile_required`,
+	// `listing_suspended`, `internal_error`, `unavailable`.
+	// `reauth_required` means the sign-in is too old for a step-up
+	// operation; `invalid_transition` and `listing_suspended` are
+	// state conflicts (409).
 	//
 	//
 	// Examples: validation_failed
@@ -664,6 +940,15 @@ type HealthStatus struct {
 
 // HealthStatusStatus defines model for HealthStatus.Status.
 type HealthStatusStatus string
+
+// ListingDelivery Delivery options. At least one must be true; a seller-delivery fee is required exactly when sellerDelivery is on.
+type ListingDelivery struct {
+	Pickup         bool `json:"pickup"`
+	SellerDelivery bool `json:"sellerDelivery"`
+
+	// SellerDeliveryFee An amount of money in the smallest currency unit (pesewas).
+	SellerDeliveryFee *Money `json:"sellerDeliveryFee,omitempty"`
+}
 
 // Locations defines model for Locations.
 type Locations struct {
@@ -759,6 +1044,90 @@ type PublicSeller struct {
 type RegionDistricts struct {
 	Districts []string `json:"districts"`
 	Name      string   `json:"name"`
+}
+
+// SellerListing The owner's view of a listing. Never exposes the seller's contact details.
+type SellerListing struct {
+	Area                 *string                  `json:"area,omitempty"`
+	Attributes           []SellerListingAttribute `json:"attributes"`
+	CategorySlug         string                   `json:"categorySlug"`
+	ContactCount         int32                    `json:"contactCount"`
+	CreatedAt            time.Time                `json:"createdAt"`
+	Description          string                   `json:"description"`
+	District             string                   `json:"district"`
+	ExpiresAt            *time.Time               `json:"expiresAt,omitempty"`
+	FavoriteCount        int32                    `json:"favoriteCount"`
+	Id                   openapi_types.UUID       `json:"id"`
+	Images               []SellerListingImage     `json:"images"`
+	IsNegotiable         bool                     `json:"isNegotiable"`
+	ItemState            string                   `json:"itemState"`
+	MinOrderQty          int32                    `json:"minOrderQty"`
+	OffersPickup         bool                     `json:"offersPickup"`
+	OffersSellerDelivery bool                     `json:"offersSellerDelivery"`
+
+	// Price An amount of money in the smallest currency unit (pesewas).
+	Price             Money      `json:"price"`
+	PublishedAt       *time.Time `json:"publishedAt,omitempty"`
+	QuantityAvailable int32      `json:"quantityAvailable"`
+	Region            string     `json:"region"`
+
+	// SellerDeliveryFee An amount of money in the smallest currency unit (pesewas).
+	SellerDeliveryFee *Money              `json:"sellerDeliveryFee,omitempty"`
+	Slug              string              `json:"slug"`
+	Status            SellerListingStatus `json:"status"`
+	Title             string              `json:"title"`
+	Unit              string              `json:"unit"`
+	UpdatedAt         time.Time           `json:"updatedAt"`
+	ViewCount         int32               `json:"viewCount"`
+}
+
+// SellerListingStatus defines model for SellerListing.Status.
+type SellerListingStatus string
+
+// SellerListingAttribute defines model for SellerListingAttribute.
+type SellerListingAttribute struct {
+	Key      string                      `json:"key"`
+	Required *bool                       `json:"required,omitempty"`
+	Type     *SellerListingAttributeType `json:"type,omitempty"`
+	Value    string                      `json:"value"`
+}
+
+// SellerListingAttributeType defines model for SellerListingAttribute.Type.
+type SellerListingAttributeType string
+
+// SellerListingImage defines model for SellerListingImage.
+type SellerListingImage struct {
+	MediaId   openapi_types.UUID `json:"mediaId"`
+	SortOrder int32              `json:"sortOrder"`
+	Url       string             `json:"url"`
+}
+
+// SellerListingSummary defines model for SellerListingSummary.
+type SellerListingSummary struct {
+	CategorySlug  string             `json:"categorySlug"`
+	CreatedAt     time.Time          `json:"createdAt"`
+	ExpiresAt     *time.Time         `json:"expiresAt,omitempty"`
+	FavoriteCount int32              `json:"favoriteCount"`
+	Id            openapi_types.UUID `json:"id"`
+	ImageCount    int32              `json:"imageCount"`
+
+	// Price An amount of money in the smallest currency unit (pesewas).
+	Price             Money                      `json:"price"`
+	QuantityAvailable int32                      `json:"quantityAvailable"`
+	Slug              string                     `json:"slug"`
+	Status            SellerListingSummaryStatus `json:"status"`
+	Title             string                     `json:"title"`
+	UpdatedAt         time.Time                  `json:"updatedAt"`
+	ViewCount         int32                      `json:"viewCount"`
+}
+
+// SellerListingSummaryStatus defines model for SellerListingSummary.Status.
+type SellerListingSummaryStatus string
+
+// SellerListingSummaryList defines model for SellerListingSummaryList.
+type SellerListingSummaryList struct {
+	Items []SellerListingSummary `json:"items"`
+	Meta  PageMeta               `json:"meta"`
 }
 
 // SellerProfile The owner's view of their seller profile. Never contains the ID number, only its last 4.
@@ -862,6 +1231,32 @@ type UpdateCategoryRequest struct {
 	SortOrder *int32  `json:"sortOrder,omitempty"`
 }
 
+// UpdateListingRequest Every field is optional; omitted fields keep their value.
+type UpdateListingRequest struct {
+	Area         *string            `json:"area,omitempty"`
+	Attributes   *map[string]string `json:"attributes,omitempty"`
+	CategorySlug *string            `json:"categorySlug,omitempty"`
+
+	// DeliveryOptions Delivery options. At least one must be true; a seller-delivery fee is required exactly when sellerDelivery is on.
+	DeliveryOptions *ListingDelivery      `json:"deliveryOptions,omitempty"`
+	Description     *string               `json:"description,omitempty"`
+	District        *string               `json:"district,omitempty"`
+	ImageMediaIds   *[]openapi_types.UUID `json:"imageMediaIds,omitempty"`
+	IsNegotiable    *bool                 `json:"isNegotiable,omitempty"`
+	ItemState       *string               `json:"itemState,omitempty"`
+	MinOrderQty     *int32                `json:"minOrderQty,omitempty"`
+
+	// Price An amount of money in the smallest currency unit (pesewas).
+	Price             *Money                      `json:"price,omitempty"`
+	QuantityAvailable *int32                      `json:"quantityAvailable,omitempty"`
+	Region            *UpdateListingRequestRegion `json:"region,omitempty"`
+	Title             *string                     `json:"title,omitempty"`
+	Unit              *string                     `json:"unit,omitempty"`
+}
+
+// UpdateListingRequestRegion defines model for UpdateListingRequest.Region.
+type UpdateListingRequestRegion string
+
 // UpdateMeRequest defines model for UpdateMeRequest.
 type UpdateMeRequest struct {
 	// DisplayName Leading/trailing whitespace is trimmed; must contain a non-space character.
@@ -881,6 +1276,9 @@ type VerifySellerRequestDecision string
 
 // Limit defines model for Limit.
 type Limit = int32
+
+// ListingId defines model for ListingId.
+type ListingId = openapi_types.UUID
 
 // Page defines model for Page.
 type Page = int32
@@ -923,6 +1321,20 @@ type ListAdminSellersParams struct {
 // ListAdminSellersParamsStatus defines parameters for ListAdminSellers.
 type ListAdminSellersParamsStatus string
 
+// ListMyListingsParams defines parameters for ListMyListings.
+type ListMyListingsParams struct {
+	Status *ListMyListingsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Page 1-based page number.
+	Page *Page `form:"page,omitempty" json:"page,omitempty"`
+
+	// Limit Page size.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListMyListingsParamsStatus defines parameters for ListMyListings.
+type ListMyListingsParamsStatus string
+
 // CreateCategoryJSONRequestBody defines body for CreateCategory for application/json ContentType.
 type CreateCategoryJSONRequestBody = CreateCategoryRequest
 
@@ -937,6 +1349,12 @@ type UpdateCategoryAttributeJSONRequestBody = UpdateAttributeRequest
 
 // VerifySellerJSONRequestBody defines body for VerifySeller for application/json ContentType.
 type VerifySellerJSONRequestBody = VerifySellerRequest
+
+// CreateListingJSONRequestBody defines body for CreateListing for application/json ContentType.
+type CreateListingJSONRequestBody = CreateListingRequest
+
+// UpdateListingJSONRequestBody defines body for UpdateListing for application/json ContentType.
+type UpdateListingJSONRequestBody = UpdateListingRequest
 
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UpdateMeRequest
@@ -982,6 +1400,27 @@ type ServerInterface interface {
 	// GetCategory Get one category
 	// (GET /v1/categories/{slug})
 	GetCategory(c *gin.Context, slug string)
+	// CreateListing Create a listing
+	// (POST /v1/listings)
+	CreateListing(c *gin.Context)
+	// DeleteListing Delete a draft listing
+	// (DELETE /v1/listings/{id})
+	DeleteListing(c *gin.Context, id ListingId)
+	// UpdateListing Edit one of my listings
+	// (PATCH /v1/listings/{id})
+	UpdateListing(c *gin.Context, id ListingId)
+	// ArchiveListing Archive a listing
+	// (POST /v1/listings/{id}/archive)
+	ArchiveListing(c *gin.Context, id ListingId)
+	// MarkListingSold Mark a listing as sold
+	// (POST /v1/listings/{id}/mark-sold)
+	MarkListingSold(c *gin.Context, id ListingId)
+	// PublishListing Publish a listing
+	// (POST /v1/listings/{id}/publish)
+	PublishListing(c *gin.Context, id ListingId)
+	// RenewListing Renew a listing
+	// (POST /v1/listings/{id}/renew)
+	RenewListing(c *gin.Context, id ListingId)
 	// GetLocations List Ghana regions with district suggestions
 	// (GET /v1/locations)
 	GetLocations(c *gin.Context)
@@ -991,6 +1430,12 @@ type ServerInterface interface {
 	// UpdateMe Update my account
 	// (PATCH /v1/me)
 	UpdateMe(c *gin.Context)
+	// ListMyListings List my listings
+	// (GET /v1/me/listings)
+	ListMyListings(c *gin.Context, params ListMyListingsParams)
+	// GetMyListing Get one of my listings
+	// (GET /v1/me/listings/{id})
+	GetMyListing(c *gin.Context, id ListingId)
 	// GetMySellerProfile Get my seller profile
 	// (GET /v1/me/seller-profile)
 	GetMySellerProfile(c *gin.Context)
@@ -1277,6 +1722,169 @@ func (siw *ServerInterfaceWrapper) GetCategory(c *gin.Context) {
 	siw.Handler.GetCategory(c, slug)
 }
 
+// CreateListing operation middleware
+func (siw *ServerInterfaceWrapper) CreateListing(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.CreateListing(c)
+}
+
+// DeleteListing operation middleware
+func (siw *ServerInterfaceWrapper) DeleteListing(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ListingId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.DeleteListing(c, id)
+}
+
+// UpdateListing operation middleware
+func (siw *ServerInterfaceWrapper) UpdateListing(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ListingId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.UpdateListing(c, id)
+}
+
+// ArchiveListing operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveListing(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ListingId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ArchiveListing(c, id)
+}
+
+// MarkListingSold operation middleware
+func (siw *ServerInterfaceWrapper) MarkListingSold(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ListingId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.MarkListingSold(c, id)
+}
+
+// PublishListing operation middleware
+func (siw *ServerInterfaceWrapper) PublishListing(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ListingId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.PublishListing(c, id)
+}
+
+// RenewListing operation middleware
+func (siw *ServerInterfaceWrapper) RenewListing(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ListingId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.RenewListing(c, id)
+}
+
 // GetLocations operation middleware
 func (siw *ServerInterfaceWrapper) GetLocations(c *gin.Context) {
 
@@ -1314,6 +1922,74 @@ func (siw *ServerInterfaceWrapper) UpdateMe(c *gin.Context) {
 	}
 
 	siw.Handler.UpdateMe(c)
+}
+
+// ListMyListings operation middleware
+func (siw *ServerInterfaceWrapper) ListMyListings(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListMyListingsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", c.Request.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter status: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", c.Request.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: "int32"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter page: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", c.Request.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: "int32"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter limit: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ListMyListings(c, params)
+}
+
+// GetMyListing operation middleware
+func (siw *ServerInterfaceWrapper) GetMyListing(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ListingId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetMyListing(c, id)
 }
 
 // GetMySellerProfile operation middleware
@@ -1425,6 +2101,15 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.DELETE(options.BaseURL+"/v1/admin/categories/:id/attributes/:attributeId", wrapper.DeleteCategoryAttribute)
 	router.PATCH(options.BaseURL+"/v1/admin/categories/:id/attributes/:attributeId", wrapper.UpdateCategoryAttribute)
 	router.POST(options.BaseURL+"/v1/media/upload-url", wrapper.CreateMediaUploadUrl)
+	router.POST(options.BaseURL+"/v1/listings", wrapper.CreateListing)
+	router.GET(options.BaseURL+"/v1/me/listings", wrapper.ListMyListings)
+	router.GET(options.BaseURL+"/v1/me/listings/:id", wrapper.GetMyListing)
+	router.DELETE(options.BaseURL+"/v1/listings/:id", wrapper.DeleteListing)
+	router.PATCH(options.BaseURL+"/v1/listings/:id", wrapper.UpdateListing)
+	router.POST(options.BaseURL+"/v1/listings/:id/publish", wrapper.PublishListing)
+	router.POST(options.BaseURL+"/v1/listings/:id/renew", wrapper.RenewListing)
+	router.POST(options.BaseURL+"/v1/listings/:id/mark-sold", wrapper.MarkListingSold)
+	router.POST(options.BaseURL+"/v1/listings/:id/archive", wrapper.ArchiveListing)
 }
 
 type BadRequestJSONResponse Error
@@ -2366,6 +3051,743 @@ func (response GetCategory429JSONResponse) VisitGetCategoryResponse(w http.Respo
 	return err
 }
 
+type CreateListingRequestObject struct {
+	Body *CreateListingJSONRequestBody
+}
+
+type CreateListingResponseObject interface {
+	VisitCreateListingResponse(w http.ResponseWriter) error
+}
+
+type CreateListing201JSONResponse SellerListing
+
+func (response CreateListing201JSONResponse) VisitCreateListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateListing400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CreateListing400JSONResponse) VisitCreateListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateListing401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateListing401JSONResponse) VisitCreateListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateListing403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateListing403JSONResponse) VisitCreateListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateListing429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response CreateListing429JSONResponse) VisitCreateListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteListingRequestObject struct {
+	Id ListingId `json:"id"`
+}
+
+type DeleteListingResponseObject interface {
+	VisitDeleteListingResponse(w http.ResponseWriter) error
+}
+
+type DeleteListing204Response struct {
+}
+
+func (response DeleteListing204Response) VisitDeleteListingResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteListing401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteListing401JSONResponse) VisitDeleteListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteListing403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteListing403JSONResponse) VisitDeleteListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteListing404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteListing404JSONResponse) VisitDeleteListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteListing409JSONResponse struct{ ConflictJSONResponse }
+
+func (response DeleteListing409JSONResponse) VisitDeleteListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteListing429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response DeleteListing429JSONResponse) VisitDeleteListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateListingRequestObject struct {
+	Id   ListingId `json:"id"`
+	Body *UpdateListingJSONRequestBody
+}
+
+type UpdateListingResponseObject interface {
+	VisitUpdateListingResponse(w http.ResponseWriter) error
+}
+
+type UpdateListing200JSONResponse SellerListing
+
+func (response UpdateListing200JSONResponse) VisitUpdateListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateListing400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpdateListing400JSONResponse) VisitUpdateListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateListing401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateListing401JSONResponse) VisitUpdateListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateListing403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateListing403JSONResponse) VisitUpdateListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateListing404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateListing404JSONResponse) VisitUpdateListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateListing409JSONResponse struct{ ConflictJSONResponse }
+
+func (response UpdateListing409JSONResponse) VisitUpdateListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateListing429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response UpdateListing429JSONResponse) VisitUpdateListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveListingRequestObject struct {
+	Id ListingId `json:"id"`
+}
+
+type ArchiveListingResponseObject interface {
+	VisitArchiveListingResponse(w http.ResponseWriter) error
+}
+
+type ArchiveListing200JSONResponse SellerListing
+
+func (response ArchiveListing200JSONResponse) VisitArchiveListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveListing401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ArchiveListing401JSONResponse) VisitArchiveListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveListing403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ArchiveListing403JSONResponse) VisitArchiveListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveListing404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ArchiveListing404JSONResponse) VisitArchiveListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveListing409JSONResponse struct{ ConflictJSONResponse }
+
+func (response ArchiveListing409JSONResponse) VisitArchiveListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveListing429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response ArchiveListing429JSONResponse) VisitArchiveListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkListingSoldRequestObject struct {
+	Id ListingId `json:"id"`
+}
+
+type MarkListingSoldResponseObject interface {
+	VisitMarkListingSoldResponse(w http.ResponseWriter) error
+}
+
+type MarkListingSold200JSONResponse SellerListing
+
+func (response MarkListingSold200JSONResponse) VisitMarkListingSoldResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkListingSold401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response MarkListingSold401JSONResponse) VisitMarkListingSoldResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkListingSold403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response MarkListingSold403JSONResponse) VisitMarkListingSoldResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkListingSold404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response MarkListingSold404JSONResponse) VisitMarkListingSoldResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkListingSold409JSONResponse struct{ ConflictJSONResponse }
+
+func (response MarkListingSold409JSONResponse) VisitMarkListingSoldResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkListingSold429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response MarkListingSold429JSONResponse) VisitMarkListingSoldResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PublishListingRequestObject struct {
+	Id ListingId `json:"id"`
+}
+
+type PublishListingResponseObject interface {
+	VisitPublishListingResponse(w http.ResponseWriter) error
+}
+
+type PublishListing200JSONResponse SellerListing
+
+func (response PublishListing200JSONResponse) VisitPublishListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PublishListing400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response PublishListing400JSONResponse) VisitPublishListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PublishListing401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response PublishListing401JSONResponse) VisitPublishListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PublishListing403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response PublishListing403JSONResponse) VisitPublishListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PublishListing404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response PublishListing404JSONResponse) VisitPublishListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PublishListing409JSONResponse struct{ ConflictJSONResponse }
+
+func (response PublishListing409JSONResponse) VisitPublishListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PublishListing429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response PublishListing429JSONResponse) VisitPublishListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenewListingRequestObject struct {
+	Id ListingId `json:"id"`
+}
+
+type RenewListingResponseObject interface {
+	VisitRenewListingResponse(w http.ResponseWriter) error
+}
+
+type RenewListing200JSONResponse SellerListing
+
+func (response RenewListing200JSONResponse) VisitRenewListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenewListing401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response RenewListing401JSONResponse) VisitRenewListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenewListing403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RenewListing403JSONResponse) VisitRenewListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenewListing404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response RenewListing404JSONResponse) VisitRenewListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenewListing409JSONResponse struct{ ConflictJSONResponse }
+
+func (response RenewListing409JSONResponse) VisitRenewListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenewListing429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response RenewListing429JSONResponse) VisitRenewListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetLocationsRequestObject struct {
 }
 
@@ -2537,6 +3959,172 @@ func (response UpdateMe401JSONResponse) VisitUpdateMeResponse(w http.ResponseWri
 type UpdateMe429JSONResponse struct{ TooManyRequestsJSONResponse }
 
 func (response UpdateMe429JSONResponse) VisitUpdateMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMyListingsRequestObject struct {
+	Params ListMyListingsParams
+}
+
+type ListMyListingsResponseObject interface {
+	VisitListMyListingsResponse(w http.ResponseWriter) error
+}
+
+type ListMyListings200JSONResponse SellerListingSummaryList
+
+func (response ListMyListings200JSONResponse) VisitListMyListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMyListings400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListMyListings400JSONResponse) VisitListMyListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMyListings401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListMyListings401JSONResponse) VisitListMyListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMyListings429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response ListMyListings429JSONResponse) VisitListMyListingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRateLimitLimit != nil {
+		w.Header().Set("X-RateLimit-Limit", fmt.Sprint(*response.Headers.XRateLimitLimit))
+	}
+	if response.Headers.XRateLimitRemaining != nil {
+		w.Header().Set("X-RateLimit-Remaining", fmt.Sprint(*response.Headers.XRateLimitRemaining))
+	}
+	if response.Headers.XRateLimitReset != nil {
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprint(*response.Headers.XRateLimitReset))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyListingRequestObject struct {
+	Id ListingId `json:"id"`
+}
+
+type GetMyListingResponseObject interface {
+	VisitGetMyListingResponse(w http.ResponseWriter) error
+}
+
+type GetMyListing200JSONResponse SellerListing
+
+func (response GetMyListing200JSONResponse) VisitGetMyListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyListing401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetMyListing401JSONResponse) VisitGetMyListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyListing403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetMyListing403JSONResponse) VisitGetMyListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyListing404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetMyListing404JSONResponse) VisitGetMyListingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyListing429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response GetMyListing429JSONResponse) VisitGetMyListingResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -2898,6 +4486,27 @@ type StrictServerInterface interface {
 	// GetCategory Get one category
 	// (GET /v1/categories/{slug})
 	GetCategory(ctx context.Context, request GetCategoryRequestObject) (GetCategoryResponseObject, error)
+	// CreateListing Create a listing
+	// (POST /v1/listings)
+	CreateListing(ctx context.Context, request CreateListingRequestObject) (CreateListingResponseObject, error)
+	// DeleteListing Delete a draft listing
+	// (DELETE /v1/listings/{id})
+	DeleteListing(ctx context.Context, request DeleteListingRequestObject) (DeleteListingResponseObject, error)
+	// UpdateListing Edit one of my listings
+	// (PATCH /v1/listings/{id})
+	UpdateListing(ctx context.Context, request UpdateListingRequestObject) (UpdateListingResponseObject, error)
+	// ArchiveListing Archive a listing
+	// (POST /v1/listings/{id}/archive)
+	ArchiveListing(ctx context.Context, request ArchiveListingRequestObject) (ArchiveListingResponseObject, error)
+	// MarkListingSold Mark a listing as sold
+	// (POST /v1/listings/{id}/mark-sold)
+	MarkListingSold(ctx context.Context, request MarkListingSoldRequestObject) (MarkListingSoldResponseObject, error)
+	// PublishListing Publish a listing
+	// (POST /v1/listings/{id}/publish)
+	PublishListing(ctx context.Context, request PublishListingRequestObject) (PublishListingResponseObject, error)
+	// RenewListing Renew a listing
+	// (POST /v1/listings/{id}/renew)
+	RenewListing(ctx context.Context, request RenewListingRequestObject) (RenewListingResponseObject, error)
 	// GetLocations List Ghana regions with district suggestions
 	// (GET /v1/locations)
 	GetLocations(ctx context.Context, request GetLocationsRequestObject) (GetLocationsResponseObject, error)
@@ -2907,6 +4516,12 @@ type StrictServerInterface interface {
 	// UpdateMe Update my account
 	// (PATCH /v1/me)
 	UpdateMe(ctx context.Context, request UpdateMeRequestObject) (UpdateMeResponseObject, error)
+	// ListMyListings List my listings
+	// (GET /v1/me/listings)
+	ListMyListings(ctx context.Context, request ListMyListingsRequestObject) (ListMyListingsResponseObject, error)
+	// GetMyListing Get one of my listings
+	// (GET /v1/me/listings/{id})
+	GetMyListing(ctx context.Context, request GetMyListingRequestObject) (GetMyListingResponseObject, error)
 	// GetMySellerProfile Get my seller profile
 	// (GET /v1/me/seller-profile)
 	GetMySellerProfile(ctx context.Context, request GetMySellerProfileRequestObject) (GetMySellerProfileResponseObject, error)
@@ -3293,6 +4908,200 @@ func (sh *strictHandler) GetCategory(ctx *gin.Context, slug string) {
 	}
 }
 
+// CreateListing operation middleware
+func (sh *strictHandler) CreateListing(ctx *gin.Context) {
+	var request CreateListingRequestObject
+
+	var body CreateListingJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateListing(ctx, request.(CreateListingRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateListing")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(CreateListingResponseObject); ok {
+		if err := validResponse.VisitCreateListingResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteListing operation middleware
+func (sh *strictHandler) DeleteListing(ctx *gin.Context, id ListingId) {
+	var request DeleteListingRequestObject
+
+	request.Id = id
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteListing(ctx, request.(DeleteListingRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteListing")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(DeleteListingResponseObject); ok {
+		if err := validResponse.VisitDeleteListingResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateListing operation middleware
+func (sh *strictHandler) UpdateListing(ctx *gin.Context, id ListingId) {
+	var request UpdateListingRequestObject
+
+	request.Id = id
+
+	var body UpdateListingJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateListing(ctx, request.(UpdateListingRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateListing")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(UpdateListingResponseObject); ok {
+		if err := validResponse.VisitUpdateListingResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ArchiveListing operation middleware
+func (sh *strictHandler) ArchiveListing(ctx *gin.Context, id ListingId) {
+	var request ArchiveListingRequestObject
+
+	request.Id = id
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.ArchiveListing(ctx, request.(ArchiveListingRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ArchiveListing")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(ArchiveListingResponseObject); ok {
+		if err := validResponse.VisitArchiveListingResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// MarkListingSold operation middleware
+func (sh *strictHandler) MarkListingSold(ctx *gin.Context, id ListingId) {
+	var request MarkListingSoldRequestObject
+
+	request.Id = id
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.MarkListingSold(ctx, request.(MarkListingSoldRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "MarkListingSold")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(MarkListingSoldResponseObject); ok {
+		if err := validResponse.VisitMarkListingSoldResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PublishListing operation middleware
+func (sh *strictHandler) PublishListing(ctx *gin.Context, id ListingId) {
+	var request PublishListingRequestObject
+
+	request.Id = id
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.PublishListing(ctx, request.(PublishListingRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PublishListing")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(PublishListingResponseObject); ok {
+		if err := validResponse.VisitPublishListingResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RenewListing operation middleware
+func (sh *strictHandler) RenewListing(ctx *gin.Context, id ListingId) {
+	var request RenewListingRequestObject
+
+	request.Id = id
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.RenewListing(ctx, request.(RenewListingRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RenewListing")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(RenewListingResponseObject); ok {
+		if err := validResponse.VisitRenewListingResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetLocations operation middleware
 func (sh *strictHandler) GetLocations(ctx *gin.Context) {
 	var request GetLocationsRequestObject
@@ -3365,6 +5174,58 @@ func (sh *strictHandler) UpdateMe(ctx *gin.Context) {
 		sh.options.HandlerErrorFunc(ctx, err)
 	} else if validResponse, ok := response.(UpdateMeResponseObject); ok {
 		if err := validResponse.VisitUpdateMeResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListMyListings operation middleware
+func (sh *strictHandler) ListMyListings(ctx *gin.Context, params ListMyListingsParams) {
+	var request ListMyListingsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.ListMyListings(ctx, request.(ListMyListingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListMyListings")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(ListMyListingsResponseObject); ok {
+		if err := validResponse.VisitListMyListingsResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMyListing operation middleware
+func (sh *strictHandler) GetMyListing(ctx *gin.Context, id ListingId) {
+	var request GetMyListingRequestObject
+
+	request.Id = id
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMyListing(ctx, request.(GetMyListingRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMyListing")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetMyListingResponseObject); ok {
+		if err := validResponse.VisitGetMyListingResponse(ctx.Writer); err != nil {
 			sh.options.ResponseErrorHandlerFunc(ctx, err)
 		}
 	} else if response != nil {
@@ -3489,109 +5350,135 @@ func (sh *strictHandler) GetPublicSeller(ctx *gin.Context, userId openapi_types.
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"0nV3/vvo5sPNfw8A",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

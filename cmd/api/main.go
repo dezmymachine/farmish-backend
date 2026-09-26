@@ -22,6 +22,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/database"
 	httpapi "github.com/dezmymachine/farmish-backend/internal/http"
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
+	"github.com/dezmymachine/farmish-backend/internal/listings"
 	"github.com/dezmymachine/farmish-backend/internal/media"
 	"github.com/dezmymachine/farmish-backend/internal/ratelimit"
 	"github.com/dezmymachine/farmish-backend/internal/redisx"
@@ -193,6 +194,7 @@ func run() error {
 			Sellers:       sellers.New(pool, crypter, firebase),
 			Catalog:       catalog.New(pool),
 			Media:         mediaSvc,
+			Listings:      listings.New(pool, catalog.New(pool), mediaSvc, sellers.New(pool, crypter, firebase)),
 			Turnstile:     turnstile.New(cfg.TurnstileSecret),
 			IPLimiter:     ipLimiter,
 			SharedLimiter: shared,
