@@ -43,7 +43,7 @@ func TestFromLookup_Defaults(t *testing.T) {
 }
 
 func TestFromLookup_Overrides(t *testing.T) {
-	cfg, err := FromLookup(lookup(map[string]string{
+	cfg, err := FromLookup(lookup(merge(map[string]string{
 		"APP_ENV":                   "production",
 		"PORT":                      "9000",
 		"LOG_LEVEL":                 "DEBUG",
@@ -58,7 +58,7 @@ func TestFromLookup_Overrides(t *testing.T) {
 		"DATA_ENCRYPTION_KEY":       "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
 		"TRUSTED_PROXIES":           "10.0.0.0/8, 100.64.0.1/10",
 		"TRUST_CLOUDFLARE":          "true",
-	}))
+	}, r2())))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -127,6 +127,27 @@ func base(extra map[string]string) map[string]string {
 }
 
 const saJSON = `{"type":"service_account","project_id":"farmish-dev","private_key":"-----BEGIN PRIVATE KEY-----\nsecret\n"}`
+
+// r2 fills the media env vars required when deployed, so tests about other
+// settings can set APP_ENV=production/staging.
+func r2() map[string]string {
+	return map[string]string{
+		"R2_ACCOUNT_ID": "acct", "R2_ACCESS_KEY_ID": "ak", "R2_SECRET_ACCESS_KEY": "sk",
+		"R2_BUCKET": "farmish", "R2_PUBLIC_BASE_URL": "https://media.farmish.gh",
+	}
+}
+
+// merge copies extra into a copy of base (nil values delete).
+func merge(base, extra map[string]string) map[string]string {
+	out := map[string]string{}
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range extra {
+		out[k] = v
+	}
+	return out
+}
 
 func TestFirebase_CredentialsInlineAndFile(t *testing.T) {
 	cfg, err := FromLookup(lookup(base(map[string]string{"FIREBASE_CREDENTIALS_JSON": saJSON})))
@@ -242,7 +263,7 @@ func TestConfig_DataEncryptionKey(t *testing.T) {
 		t.Fatalf("dev key in development: %v", err)
 	}
 	for _, env := range []string{"staging", "production"} {
-		extra := map[string]string{"APP_ENV": env, "FIREBASE_CREDENTIALS_JSON": saJSON, "TURNSTILE_SECRET": "0x4real"}
+		extra := merge(r2(), map[string]string{"APP_ENV": env, "FIREBASE_CREDENTIALS_JSON": saJSON, "TURNSTILE_SECRET": "0x4real"})
 		if _, err := FromLookup(lookup(base(extra))); err == nil ||
 			!strings.Contains(err.Error(), "dev key") {
 			t.Fatalf("%s with dev key: err = %v", env, err)
@@ -278,8 +299,10 @@ func TestConfig_R2(t *testing.T) {
 		t.Errorf("local S3: %+v", cfg.R2)
 	}
 	// Required when deployed.
-	prod := map[string]string{"APP_ENV": "production", "FIREBASE_CREDENTIALS_JSON": saJSON, "TURNSTILE_SECRET": "0x4real",
-		"DATA_ENCRYPTION_KEY": "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="}
+	prod := map[string]string{
+		"APP_ENV": "production", "FIREBASE_CREDENTIALS_JSON": saJSON, "TURNSTILE_SECRET": "0x4real",
+		"DATA_ENCRYPTION_KEY": "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
+	}
 	_, err = FromLookup(lookup(base(prod)))
 	if err == nil || !strings.Contains(err.Error(), "R2_BUCKET is required") {
 		t.Errorf("missing R2 in production: err = %v", err)
@@ -324,10 +347,11 @@ func TestRedisURL(t *testing.T) {
 	for _, ok := range []map[string]string{
 		{"REDIS_URL": "redis://127.0.0.1:63790"},
 		{"REDIS_URL": "rediss://default:tok@x.upstash.io:6379"},
-		{
-			"REDIS_URL": "rediss://default:tok@x.upstash.io:6379", "APP_ENV": "production", "FIREBASE_CREDENTIALS_JSON": saJSON,
-			"TURNSTILE_SECRET": "0x4real", "DATA_ENCRYPTION_KEY": "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
-		},
+		merge(r2(), map[string]string{
+			"REDIS_URL": "rediss://default:tok@x.upstash.io:6379", "APP_ENV": "production",
+			"FIREBASE_CREDENTIALS_JSON": saJSON, "TURNSTILE_SECRET": "0x4real",
+			"DATA_ENCRYPTION_KEY": "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
+		}),
 	} {
 		if _, err := FromLookup(lookup(base(ok))); err != nil {
 			t.Errorf("%v: %v", ok["REDIS_URL"], err)
@@ -335,10 +359,10 @@ func TestRedisURL(t *testing.T) {
 	}
 	for want, env := range map[string]map[string]string{
 		"must start with": {"REDIS_URL": "https://default:hunter2@x.upstash.io"},
-		"must use rediss": {
+		"must use rediss": merge(r2(), map[string]string{
 			"REDIS_URL": "redis://default:hunter2@x:6379", "APP_ENV": "production",
 			"FIREBASE_CREDENTIALS_JSON": saJSON, "TURNSTILE_SECRET": "0x4real",
-		},
+		}),
 	} {
 		_, err := FromLookup(lookup(base(env)))
 		if err == nil || !strings.Contains(err.Error(), want) {
