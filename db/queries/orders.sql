@@ -175,9 +175,9 @@ SELECT * FROM disputes WHERE order_id = $1 AND status = 'open';
 -- Orders whose seller has not accepted within the timeout window, in a
 -- deterministic order. SKIP LOCKED keeps concurrent sweeps from fighting.
 SELECT * FROM orders
-WHERE status = 'paid' AND paid_at <= $1
+WHERE status = 'paid' AND paid_at <= sqlc.arg('paid_before')::timestamptz
 ORDER BY paid_at
-LIMIT $2
+LIMIT sqlc.arg('limit')
 FOR UPDATE SKIP LOCKED;
 
 -- name: ListDueDeliveredOrders :many
@@ -185,9 +185,9 @@ FOR UPDATE SKIP LOCKED;
 -- The open-dispute exclusion lives in the sweep's per-order check under the
 -- row lock, so a dispute opened mid-sweep is still honoured.
 SELECT * FROM orders
-WHERE status = 'delivered' AND auto_complete_at <= $1
+WHERE status = 'delivered' AND auto_complete_at <= sqlc.arg('due_at')::timestamptz
 ORDER BY auto_complete_at
-LIMIT $2
+LIMIT sqlc.arg('limit')
 FOR UPDATE SKIP LOCKED;
 
 -- name: SetOrderAcceptedAt :exec
@@ -204,3 +204,7 @@ WHERE id = $1 AND status = 'delivered';
 
 -- name: SetOrderCompletedAt :exec
 UPDATE orders SET completed_at = $2 WHERE id = $1 AND status = 'completed';
+
+-- name: SetOrderTrackingRef :exec
+-- The seller sets it at ship time, optionally; an empty ref keeps the stored one.
+UPDATE orders SET tracking_ref = COALESCE($2, tracking_ref) WHERE id = $1;

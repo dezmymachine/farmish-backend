@@ -26,6 +26,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/media"
 	"github.com/dezmymachine/farmish-backend/internal/media/mediatest"
 	"github.com/dezmymachine/farmish-backend/internal/money"
+	"github.com/dezmymachine/farmish-backend/internal/notify"
 	"github.com/dezmymachine/farmish-backend/internal/orders"
 	"github.com/dezmymachine/farmish-backend/internal/payments"
 	"github.com/dezmymachine/farmish-backend/internal/payments/fake"
@@ -45,6 +46,7 @@ type fixture struct {
 	listings *listings.Service
 	payments *payments.Service
 	provider *fake.Provider
+	orders   *orders.Service
 	svc      *checkout.Service
 	sellerA  uuid.UUID
 	sellerB  uuid.UUID
@@ -88,13 +90,16 @@ func newFixture(t *testing.T) *fixture {
 	log := slog.New(slog.DiscardHandler)
 	f.provider = fake.New()
 	f.payments = payments.New(pool, f.provider, log, feeBps, "https://farmish.gh/payments/status")
-	f.svc = checkout.New(pool, f.payments, f.provider, delivery.Manual{}, ledger.New(), log, feeBps, 30*time.Minute)
+	f.orders = orders.NewService(pool, 48*time.Hour, 3*24*time.Hour)
+	f.svc = checkout.New(pool, f.payments, f.provider, delivery.Manual{}, ledger.New(), f.orders, log, feeBps, 30*time.Minute)
 	f.svc.Now = func() time.Time { return f.now }
 	f.payments.RegisterPurpose(payments.PurposeCheckout, f.svc.HandleCheckoutPaid)
 
 	reg := jobs.NewRegistry()
 	payments.RegisterSucceeded(reg, f.payments, log)
 	checkout.RegisterJobs(reg, f.svc, log)
+	orders.RegisterJobs(reg, f.orders, log)
+	notify.Register(reg, notify.NewWorker(notify.LogOnly{Log: log}, log, pool))
 	client, err := jobs.NewClient(pool, reg, log, jobs.Options{Work: true, FetchPollInterval: 50 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
@@ -107,6 +112,7 @@ func newFixture(t *testing.T) *fixture {
 	f.events = events
 	f.payments.AttachJobClient(client)
 	f.svc.AttachJobClient(client)
+	f.orders.AttachJobClient(client)
 	t.Cleanup(func() {
 		if err := jobs.Stop(client, 5*time.Second, 2*time.Second, log); err != nil {
 			t.Errorf("stop jobs: %v", err)
@@ -752,7 +758,7 @@ func TestOrders_AccessControl(t *testing.T) {
 	}
 	f.settle(t, created, 20)
 
-	ordersSvc := orders.NewReadService(f.pool)
+	ordersSvc := f.orders
 	rows, err := f.pool.Query(ctx,
 		`SELECT id FROM orders WHERE checkout_id = $1`, created.CheckoutID)
 	if err != nil {

@@ -49,6 +49,7 @@ type Service struct {
 	provider Provider
 	delivery delivery.Provider
 	ledger   *ledger.Ledger
+	orders   *orders.Service
 	jobs     *jobs.Client
 	log      *slog.Logger
 	feeBps   int
@@ -60,10 +61,10 @@ type Service struct {
 
 // New returns a checkout Service. jobs may be nil in tests that do not run the
 // refund-needed enqueue.
-func New(pool *pgxpool.Pool, ps *payments.Service, provider Provider, deliv delivery.Provider, books *ledger.Ledger, log *slog.Logger, feeBps int, expiry time.Duration) *Service {
+func New(pool *pgxpool.Pool, ps *payments.Service, provider Provider, deliv delivery.Provider, books *ledger.Ledger, state *orders.Service, log *slog.Logger, feeBps int, expiry time.Duration) *Service {
 	return &Service{
 		pool: pool, payments: ps, provider: provider, delivery: deliv,
-		ledger: books, log: log, feeBps: feeBps, expiry: expiry, Now: time.Now,
+		ledger: books, orders: state, log: log, feeBps: feeBps, expiry: expiry, Now: time.Now,
 	}
 }
 

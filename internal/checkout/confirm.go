@@ -77,28 +77,24 @@ func (s *Service) confirmExpired(ctx context.Context, tx pgx.Tx, q *db.Queries, 
 		// The stock is gone: the buyer gets their money back. The ledger
 		// still posts checkout_paid, because the money did arrive; the refund
 		// job (Phase 17a) will Dr escrow and Cr paystack_clearing.
-		now := s.Now()
 		ordersRows, err := q.ListOrdersByCheckout(ctx, checkout.ID)
 		if err != nil {
 			return fmt.Errorf("list orders: %w", err)
 		}
 		for _, order := range ordersRows {
-			_, _, err := orders.Transition(ctx, tx, order.ID, orders.StatusCancelled,
-				orders.ActorSystem, nil, refundNeededNote)
+			_, _, err := s.orders.Transition(ctx, tx, order.ID, orders.StatusCancelled,
+				orders.System(), refundNeededNote)
 			if errors.Is(err, orders.ErrInvalidTransition) {
 				continue // a concurrent transition already moved it
 			}
 			if err != nil {
 				return err
 			}
-			if err := orders.MarkCancelledAt(ctx, tx, order.ID, now); err != nil {
-				return err
-			}
-			if err := orders.SetEscrowState(ctx, tx, order.ID, orders.EscrowRefundPending); err != nil {
+			if err := s.orders.SetEscrowState(ctx, tx, order.ID, orders.EscrowRefundPending); err != nil {
 				return err
 			}
 			if s.jobs != nil {
-				if _, err := s.jobs.InsertTx(ctx, tx, RefundNeededArgs{
+				if _, err := s.jobs.InsertTx(ctx, tx, orders.RefundNeededArgs{
 					OrderID: order.ID, AmountPesewas: order.BasePesewas,
 				}, jobsUnique()); err != nil {
 					return fmt.Errorf("enqueue refund needed: %w", err)
@@ -144,24 +140,22 @@ func (s *Service) markOrdersPaid(ctx context.Context, tx pgx.Tx, q *db.Queries, 
 	if err != nil {
 		return fmt.Errorf("list orders: %w", err)
 	}
-	now := s.Now()
 	for _, order := range rows {
 		if order.Status != orders.StatusPendingPayment && order.Status != orders.StatusExpired {
 			continue
 		}
-		_, effects, err := orders.Transition(ctx, tx, order.ID, orders.StatusPaid, orders.ActorSystem, nil, "")
+		moved, effects, err := s.orders.Transition(ctx, tx, order.ID, orders.StatusPaid, orders.System(), "")
 		if errors.Is(err, orders.ErrInvalidTransition) {
 			continue // a concurrent path already confirmed this order
 		}
 		if err != nil {
 			return err
 		}
-		if err := orders.MarkPaidAt(ctx, tx, order.ID, now); err != nil {
+		if err := s.orders.MarkPaidAt(ctx, tx, order.ID); err != nil {
 			return err
 		}
-		if effects.NotifySeller {
-			// Phase 16: notify seller.
-			orders.NotifySeller(ctx, order.ID)
+		if err := s.orders.ApplyEffects(ctx, tx, moved, effects); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -230,11 +224,10 @@ func (s *Service) expireOrdersInTx(ctx context.Context, tx pgx.Tx, checkoutID uu
 		return fmt.Errorf("list orders: %w", err)
 	}
 	for _, order := range rows {
-		_, _, err := orders.Transition(ctx, tx, order.ID, orders.StatusExpired, orders.ActorSystem, nil, note)
-		if errors.Is(err, orders.ErrInvalidTransition) {
-			continue
-		}
-		if err != nil {
+		if _, _, err := s.orders.Transition(ctx, tx, order.ID, orders.StatusExpired, orders.System(), note); err != nil {
+			if errors.Is(err, orders.ErrInvalidTransition) {
+				continue
+			}
 			return err
 		}
 	}

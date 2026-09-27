@@ -1,6 +1,7 @@
 // Package orders owns the order state machine (DOMAIN §4) and the buyer and
-// seller order reads. Phase 15b implements only the transitions checkout needs;
-// Phase 16 builds the full actor-driven table.
+// seller order reads. Phase 16 completes the table; the actors are enforced
+// per move, and every transition returns the side effects the caller must
+// execute in the same transaction.
 package orders
 
 import (
@@ -24,6 +25,12 @@ const (
 	StatusExpired        = "expired"
 )
 
+// AllStatuses is every status, for the full-table test.
+var AllStatuses = []string{
+	StatusPendingPayment, StatusPaid, StatusAccepted, StatusShipped, StatusDelivered,
+	StatusCompleted, StatusCancelled, StatusDisputed, StatusRefunded, StatusExpired,
+}
+
 // Escrow states stored in orders.escrow_state.
 const (
 	EscrowNone              = "none"
@@ -34,7 +41,7 @@ const (
 	EscrowPartiallyRefunded = "partially_refunded"
 )
 
-// Actors that may drive a transition (order_events.actor_type).
+// Actor types (order_events.actor_type).
 const (
 	ActorBuyer  = "buyer"
 	ActorSeller = "seller"
@@ -42,15 +49,67 @@ const (
 	ActorSystem = "system"
 )
 
+// AllActorTypes is every actor type, for the full-table test.
+var AllActorTypes = []string{ActorBuyer, ActorSeller, ActorAdmin, ActorSystem}
+
 var (
-	// ErrNotFound means no order matches, or the caller has no business
-	// knowing it exists. Both cases read as 404.
+	// ErrNotFound means no order matches, or the caller is not a party to it.
+	// Both read as 404 so order ids cannot be probed.
 	ErrNotFound = errors.New("order not found")
-	// ErrInvalidTransition means the requested move is not in DOMAIN §4.
+	// ErrInvalidTransition means the move is not in DOMAIN §4.
 	ErrInvalidTransition = errors.New("invalid order status transition")
+	// ErrForbidden means the actor type may make this move in general, but
+	// this particular actor may not: a buyer calling a seller move on their
+	// own purchase, or a stranger on any order.
+	ErrForbidden = errors.New("actor may not perform this transition")
+	// ErrDisputeExists means the order already has a dispute.
+	ErrDisputeExists = errors.New("order already has a dispute")
 )
 
-// Order is a row of the orders table with its delivery details.
+// InvalidTransitionError carries the from and to the contract's 409 details
+// report, so the client can say what it tried and what the order was.
+type InvalidTransitionError struct {
+	From, To string
+}
+
+func (e *InvalidTransitionError) Error() string {
+	return ErrInvalidTransition.Error() + ": " + e.From + " -> " + e.To
+}
+
+func (e *InvalidTransitionError) Is(target error) bool {
+	return target == ErrInvalidTransition
+}
+
+// ForbiddenError identifies the actor the table allowed, but on the wrong
+// order: a buyer calling a seller move on their own purchase.
+type ForbiddenError struct {
+	ActorType string
+}
+
+func (e *ForbiddenError) Error() string {
+	return ErrForbidden.Error() + ": " + e.ActorType
+}
+
+func (e *ForbiddenError) Is(target error) bool {
+	return target == ErrForbidden
+}
+
+// Actor is who is performing a transition. ID is nil for system actions.
+type Actor struct {
+	Type string
+	ID   *uuid.UUID
+}
+
+// Buyer builds the buyer actor for a user id.
+func Buyer(id uuid.UUID) Actor { return Actor{Type: ActorBuyer, ID: &id} }
+
+// Seller builds the seller actor for a user id.
+func Seller(id uuid.UUID) Actor { return Actor{Type: ActorSeller, ID: &id} }
+
+// System builds the system actor.
+func System() Actor { return Actor{Type: ActorSystem} }
+
+// Order is a row of the orders table.
 type Order struct {
 	ID                 uuid.UUID
 	CheckoutID         uuid.UUID
@@ -106,19 +165,165 @@ type Event struct {
 	CreatedAt  time.Time
 }
 
-// allowedTransitions is DOMAIN §4, restricted to the system transitions Phase
-// 15b needs. Phase 16 replaces this with the full table and its actor checks.
-var allowedTransitions = map[string]map[string]bool{
+// EffectKind is what the caller must do in the same transaction.
+type EffectKind int
+
+const (
+	// EffectRestoreStock returns the order's reserved units to the listings.
+	EffectRestoreStock EffectKind = iota
+	// EffectEnqueueRefund queues the buyer's money back. The worker only
+	// logs until Phase 17a replaces it with the real refund.
+	EffectEnqueueRefund
+	// EffectEnqueueRelease queues the escrow release to the seller. The
+	// worker only logs until Phase 17a replaces it.
+	EffectEnqueueRelease
+	// EffectNotify sends the other party an SMS.
+	EffectNotify
+)
+
+// SideEffect is one instruction from DOMAIN §4's rightmost column.
+type SideEffect struct {
+	Kind EffectKind
+	// Template names a notify template (EffectNotify only).
+	Template string
+	// Recipient is the user to notify (EffectNotify only).
+	Recipient uuid.UUID
+}
+
+// transitionTable is DOMAIN §4, verbatim: from → to → the actor types that
+// may perform the move. Anything absent is illegal. TestTransition_FullTable
+// checks this literal against a hand-copied table, so a typo cannot survive.
+var transitionTable = map[string]map[string][]string{
 	StatusPendingPayment: {
-		StatusPaid:      true,
-		StatusExpired:   true,
-		StatusCancelled: true,
+		StatusPaid:    {ActorSystem},
+		StatusExpired: {ActorSystem},
 	},
-	// Late payment recovery (DOMAIN §4, owner decision 2026-09-26): a
-	// charge.success for an expired checkout either revives the orders, when
-	// the stock could be re-reserved, or cancels them for a full refund.
 	StatusExpired: {
-		StatusPaid:      true,
-		StatusCancelled: true,
+		StatusPaid:      {ActorSystem},
+		StatusCancelled: {ActorSystem},
 	},
+	StatusPaid: {
+		StatusAccepted:  {ActorSeller},
+		StatusCancelled: {ActorSeller, ActorBuyer, ActorSystem},
+	},
+	StatusAccepted: {
+		StatusCancelled: {ActorSeller},
+		StatusShipped:   {ActorSeller},
+	},
+	StatusShipped: {
+		StatusDelivered: {ActorSeller},
+		StatusCompleted: {ActorBuyer},
+		StatusDisputed:  {ActorBuyer},
+	},
+	StatusDelivered: {
+		StatusCompleted: {ActorBuyer, ActorSystem},
+		StatusDisputed:  {ActorBuyer},
+	},
+	StatusDisputed: {
+		StatusRefunded:  {ActorAdmin},
+		StatusCompleted: {ActorAdmin},
+	},
+}
+
+// actorAllowed reports whether the actor may make this move: the type must be
+// in the table, and a buyer or seller must be this order's buyer or seller.
+func actorAllowed(actorTypes []string, actor Actor, order Order) bool {
+	for _, actorType := range actorTypes {
+		if actor.Type != actorType {
+			continue
+		}
+		switch actor.Type {
+		case ActorBuyer:
+			return actor.ID != nil && order.BuyerID == *actor.ID
+		case ActorSeller:
+			return actor.ID != nil && order.SellerID == *actor.ID
+		default:
+			// Admin and system moves are not tied to a party.
+			return true
+		}
+	}
+	return false
+}
+
+// typeAllowed reports whether the actor type appears in the table for this
+// move, without the party check: the difference is ErrForbidden (right type,
+// wrong party) versus ErrInvalidTransition (move not in the table).
+func typeAllowed(actorTypes []string, actor Actor) bool {
+	for _, actorType := range actorTypes {
+		if actor.Type == actorType {
+			return true
+		}
+	}
+	return false
+}
+
+// effectsFor returns DOMAIN §4's side effects for a move. The *other* party is
+// the one who gets an SMS; the system tells both.
+func effectsFor(order Order, to, actorType string) []SideEffect {
+	switch to {
+	case StatusPaid:
+		return []SideEffect{{Kind: EffectNotify, Template: "order_paid_seller", Recipient: order.SellerID}}
+	case StatusAccepted:
+		return []SideEffect{{Kind: EffectNotify, Template: "order_accepted_buyer", Recipient: order.BuyerID}}
+	case StatusShipped:
+		return []SideEffect{{Kind: EffectNotify, Template: "order_shipped_buyer", Recipient: order.BuyerID}}
+	case StatusDelivered:
+		return []SideEffect{{Kind: EffectNotify, Template: "order_delivered_buyer", Recipient: order.BuyerID}}
+	case StatusCompleted:
+		return []SideEffect{
+			{Kind: EffectEnqueueRelease},
+			{Kind: EffectNotify, Template: "order_completed_seller", Recipient: order.SellerID},
+		}
+	case StatusDisputed:
+		return []SideEffect{{Kind: EffectNotify, Template: "order_disputed_seller", Recipient: order.SellerID}}
+	case StatusCancelled:
+		return cancelEffects(order, actorType)
+	default:
+		return nil
+	}
+}
+
+// cancelEffects shape a death: stock back, money back, and whoever did not
+// cancel it is told.
+func cancelEffects(order Order, actorType string) []SideEffect {
+	effects := []SideEffect{{Kind: EffectRestoreStock}, {Kind: EffectEnqueueRefund}}
+	switch actorType {
+	case ActorSeller:
+		return append(effects, SideEffect{Kind: EffectNotify, Template: "order_rejected_buyer", Recipient: order.BuyerID})
+	case ActorBuyer:
+		return append(effects,
+			SideEffect{Kind: EffectNotify, Template: "order_cancelled_seller", Recipient: order.SellerID},
+			SideEffect{Kind: EffectNotify, Template: "order_cancelled_buyer", Recipient: order.BuyerID})
+	default:
+		return append(effects,
+			SideEffect{Kind: EffectNotify, Template: "order_cancelled_seller", Recipient: order.SellerID},
+			SideEffect{Kind: EffectNotify, Template: "order_cancelled_buyer", Recipient: order.BuyerID})
+	}
+}
+
+// ExposeTransitionTable returns the transition table for tests to compare
+// against a hand-written copy of DOMAIN §4. Production code must call
+// Transition, never read this.
+func ExposeTransitionTable() map[string]map[string][]string {
+	out := make(map[string]map[string][]string, len(transitionTable))
+	for from, tos := range transitionTable {
+		copied := make(map[string][]string, len(tos))
+		for to, actors := range tos {
+			copied[to] = append([]string(nil), actors...)
+		}
+		out[from] = copied
+	}
+	return out
+}
+
+// IsForbidden reports whether err is the wrong-party refusal.
+func IsForbidden(err error) bool {
+	var forbidden *ForbiddenError
+	return errors.As(err, &forbidden)
+}
+
+// IsInvalidTransition reports whether err is the not-in-table refusal.
+func IsInvalidTransition(err error) bool {
+	var invalid *InvalidTransitionError
+	return errors.As(err, &invalid)
 }

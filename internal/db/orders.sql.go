@@ -705,22 +705,22 @@ func (q *Queries) ListCheckoutOrders(ctx context.Context, checkoutID uuid.UUID) 
 
 const listDueDeliveredOrders = `-- name: ListDueDeliveredOrders :many
 SELECT id, checkout_id, buyer_id, seller_id, status, escrow_state, subtotal_pesewas, delivery_fee_pesewas, base_pesewas, commission_rate_bps, commission_pesewas, refunded_pesewas, delivery_method, delivery_address, delivery_region, delivery_district, recipient_name, recipient_phone, tracking_ref, paid_at, accepted_at, shipped_at, delivered_at, completed_at, cancelled_at, auto_complete_at, created_at, updated_at FROM orders
-WHERE status = 'delivered' AND auto_complete_at <= $1
+WHERE status = 'delivered' AND auto_complete_at <= $1::timestamptz
 ORDER BY auto_complete_at
 LIMIT $2
 FOR UPDATE SKIP LOCKED
 `
 
 type ListDueDeliveredOrdersParams struct {
-	AutoCompleteAt *time.Time
-	Limit          int32
+	DueAt time.Time
+	Limit int32
 }
 
 // Delivered orders past their auto-complete deadline, for the sweep to finish.
 // The open-dispute exclusion lives in the sweep's per-order check under the
 // row lock, so a dispute opened mid-sweep is still honoured.
 func (q *Queries) ListDueDeliveredOrders(ctx context.Context, arg ListDueDeliveredOrdersParams) ([]Order, error) {
-	rows, err := q.db.Query(ctx, listDueDeliveredOrders, arg.AutoCompleteAt, arg.Limit)
+	rows, err := q.db.Query(ctx, listDueDeliveredOrders, arg.DueAt, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1183,21 +1183,21 @@ func (q *Queries) ListOrdersBySeller(ctx context.Context, arg ListOrdersBySeller
 
 const listUnacceptedPaidOrders = `-- name: ListUnacceptedPaidOrders :many
 SELECT id, checkout_id, buyer_id, seller_id, status, escrow_state, subtotal_pesewas, delivery_fee_pesewas, base_pesewas, commission_rate_bps, commission_pesewas, refunded_pesewas, delivery_method, delivery_address, delivery_region, delivery_district, recipient_name, recipient_phone, tracking_ref, paid_at, accepted_at, shipped_at, delivered_at, completed_at, cancelled_at, auto_complete_at, created_at, updated_at FROM orders
-WHERE status = 'paid' AND paid_at <= $1
+WHERE status = 'paid' AND paid_at <= $1::timestamptz
 ORDER BY paid_at
 LIMIT $2
 FOR UPDATE SKIP LOCKED
 `
 
 type ListUnacceptedPaidOrdersParams struct {
-	PaidAt *time.Time
-	Limit  int32
+	PaidBefore time.Time
+	Limit      int32
 }
 
 // Orders whose seller has not accepted within the timeout window, in a
 // deterministic order. SKIP LOCKED keeps concurrent sweeps from fighting.
 func (q *Queries) ListUnacceptedPaidOrders(ctx context.Context, arg ListUnacceptedPaidOrdersParams) ([]Order, error) {
-	rows, err := q.db.Query(ctx, listUnacceptedPaidOrders, arg.PaidAt, arg.Limit)
+	rows, err := q.db.Query(ctx, listUnacceptedPaidOrders, arg.PaidBefore, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1462,4 +1462,19 @@ func (q *Queries) SetOrderStatus(ctx context.Context, arg SetOrderStatusParams) 
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const setOrderTrackingRef = `-- name: SetOrderTrackingRef :exec
+UPDATE orders SET tracking_ref = COALESCE($2, tracking_ref) WHERE id = $1
+`
+
+type SetOrderTrackingRefParams struct {
+	ID          uuid.UUID
+	TrackingRef *string
+}
+
+// The seller sets it at ship time, optionally; an empty ref keeps the stored one.
+func (q *Queries) SetOrderTrackingRef(ctx context.Context, arg SetOrderTrackingRefParams) error {
+	_, err := q.db.Exec(ctx, setOrderTrackingRef, arg.ID, arg.TrackingRef)
+	return err
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/listings"
 	"github.com/dezmymachine/farmish-backend/internal/media"
 	"github.com/dezmymachine/farmish-backend/internal/media/mediatest"
+	"github.com/dezmymachine/farmish-backend/internal/orders"
 	"github.com/dezmymachine/farmish-backend/internal/payments"
 	"github.com/dezmymachine/farmish-backend/internal/payments/fake"
 	"github.com/dezmymachine/farmish-backend/internal/sellers"
@@ -57,7 +58,7 @@ func newQuoteService(t *testing.T, pool *pgxpool.Pool, now time.Time) *checkout.
 	t.Helper()
 	log := slog.New(slog.DiscardHandler)
 	paymentsSvc := payments.New(pool, fake.New(), log, 195, "https://farmish.gh/payments/status")
-	svc := checkout.New(pool, paymentsSvc, fake.New(), delivery.Manual{}, ledger.New(), log, 195, 30*time.Minute)
+	svc := checkout.New(pool, paymentsSvc, fake.New(), delivery.Manual{}, ledger.New(), orders.NewService(pool, 48*time.Hour, 3*24*time.Hour), log, 195, 30*time.Minute)
 	svc.Now = func() time.Time { return now }
 	return svc
 }

@@ -224,6 +224,8 @@ type Querier interface {
 	// moved. Returns no row when the current status differs, which Transition
 	// treats as a lost race rather than a silent no-op.
 	SetOrderStatus(ctx context.Context, arg SetOrderStatusParams) (Order, error)
+	// The seller sets it at ship time, optionally; an empty ref keeps the stored one.
+	SetOrderTrackingRef(ctx context.Context, arg SetOrderTrackingRefParams) error
 	// Stored after InitializeTransaction, which happens outside the insert's
 	// transaction: the provider call must never hold a database transaction open.
 	SetPaymentAuthorizationURL(ctx context.Context, arg SetPaymentAuthorizationURLParams) (Payment, error)

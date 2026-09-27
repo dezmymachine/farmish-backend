@@ -2,60 +2,220 @@ package orders
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/dezmymachine/farmish-backend/internal/db"
+	"github.com/dezmymachine/farmish-backend/internal/jobs"
+	"github.com/dezmymachine/farmish-backend/internal/notify"
 )
 
-// SideEffects are the actions DOMAIN §4 attaches to a transition. The caller
-// executes them in the same transaction, because only it knows whether the
-// transition came from a job, an endpoint or a recovery path.
-type SideEffects struct {
-	// RestoreStock is true when the order's reserved units go back on sale.
-	RestoreStock bool
-	// RefundNeeded is true when the buyer's money must come back.
-	RefundNeeded bool
-	// NotifySeller is the Phase 16 call site: the transition should tell the
-	// seller. Phase 15b has no notification channel yet, so it is a no-op.
-	NotifySeller bool
+// Service owns the order state machine, its side effects and the order reads.
+type Service struct {
+	// pool backs the reads; the writes always take the caller's transaction.
+	pool *pgxpool.Pool
+	// autoComplete is how long after delivery an undisputed order completes
+	// (DOMAIN §3: 3 days).
+	autoComplete time.Duration
+	// sellerAcceptTimeout is how long a paid order waits for acceptance
+	// before the system cancels it (DOMAIN §3: 48 hours).
+	sellerAcceptTimeout time.Duration
+	// jobs enqueues refund, release and notify jobs inside the caller's
+	// transaction. Nil disables enqueuing (unit tests of the table alone).
+	jobs *jobs.Client
+	// Now is the clock, injectable so the timer tests never sleep.
+	Now func() time.Time
 }
 
-// Transition moves one order to a new status, inside the caller's transaction.
+// NewService returns the state machine with its timers over a pool
+// (DOMAIN §3: 48 hours to accept, 3 days to auto-complete).
+func NewService(pool *pgxpool.Pool, sellerAcceptTimeout, autoComplete time.Duration) *Service {
+	return &Service{
+		pool: pool, autoComplete: autoComplete, sellerAcceptTimeout: sellerAcceptTimeout,
+		Now: time.Now,
+	}
+}
+
+// AttachJobClient gives the service the River client it needs to enqueue
+// refund, release and notify jobs inside the business transaction. cmd/api
+// calls it once, after the registry exists.
+func (s *Service) AttachJobClient(client *jobs.Client) { s.jobs = client }
+
+// RefundNeededArgs queues the buyer's money back. Phase 17a replaces the
+// log-only worker with the real Paystack refund.
+type RefundNeededArgs struct {
+	OrderID       uuid.UUID `json:"orderId"`
+	AmountPesewas int64     `json:"amountPesewas"`
+}
+
+// Kind implements river.JobArgs.
+func (RefundNeededArgs) Kind() string { return "orders.refund_needed" }
+
+// ReleaseNeededArgs queues the escrow release to the seller. Phase 17a
+// replaces the log-only worker with the real release posting.
+type ReleaseNeededArgs struct {
+	OrderID       uuid.UUID `json:"orderId"`
+	AmountPesewas int64     `json:"amountPesewas"`
+}
+
+// Kind implements river.JobArgs.
+func (ReleaseNeededArgs) Kind() string { return "orders.release_needed" }
+
+// Transition moves one order, inside the caller's transaction.
 //
-// It locks the row, checks DOMAIN §4, writes the status (and the target
-// status's timestamp), appends the order event, and returns the side effects
-// the caller must apply in the same transaction. Anything not in the table is
-// ErrInvalidTransition, which the endpoint maps to 409.
-func Transition(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, to, actorType string, actorID *uuid.UUID, note string) (Order, SideEffects, error) {
+// It locks the row, validates (from, to, actor) against DOMAIN §4, updates the
+// status and the target status's timestamp, writes the order event, and
+// returns the side effects the caller must execute in the same transaction.
+// ErrInvalidTransition means the move is not in the table; ErrForbidden means
+// the actor type is right but this actor is the wrong party.
+func (s *Service) Transition(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, to string, actor Actor, note string) (Order, []SideEffect, error) {
 	q := db.New(tx)
 	current, err := q.GetOrderForUpdate(ctx, orderID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Order{}, nil, fmt.Errorf("%w: %s", ErrNotFound, orderID)
+	}
 	if err != nil {
-		return Order{}, SideEffects{}, fmt.Errorf("lock order: %w", err)
+		return Order{}, nil, fmt.Errorf("lock order: %w", err)
 	}
-	if !allowedTransitions[current.Status][to] {
-		return Order{}, SideEffects{}, fmt.Errorf("%w: %s -> %s", ErrInvalidTransition, current.Status, to)
+	order := fromRow(current)
+	allowed, inTable := transitionTable[order.Status][to]
+	switch {
+	case !inTable:
+		return Order{}, nil, &InvalidTransitionError{From: order.Status, To: to}
+	case !actorAllowed(allowed, actor, order):
+		if typeAllowed(allowed, actor) {
+			// The move exists in DOMAIN §4 but not for this party: the order
+			// is real for the caller, so this is a 403, not a 404.
+			return Order{}, nil, &ForbiddenError{ActorType: actor.Type}
+		}
+		return Order{}, nil, &InvalidTransitionError{From: order.Status, To: to}
 	}
+
 	updated, err := q.SetOrderStatus(ctx, db.SetOrderStatusParams{
-		ID: orderID, Status: to, Status_2: current.Status,
+		ID: orderID, Status: to, Status_2: order.Status,
 	})
 	if err != nil {
-		return Order{}, SideEffects{}, fmt.Errorf("set order status: %w", err)
+		return Order{}, nil, fmt.Errorf("set order status: %w", err)
 	}
-	if err := writeEvent(ctx, q, orderID, &current.Status, to, actorType, actorID, note); err != nil {
-		return Order{}, SideEffects{}, err
+	now := s.Now()
+	if err := s.stampStatus(ctx, tx, orderID, to, note == StatusShipped, now); err != nil {
+		return Order{}, nil, err
 	}
-	return fromRow(updated), sideEffectsFor(to), nil
+	if err := writeEvent(ctx, q, orderID, &order.Status, to, actor, note); err != nil {
+		return Order{}, nil, err
+	}
+	moved := fromRow(updated)
+	return moved, effectsFor(moved, to, actor.Type), nil
 }
 
-// MarkPaidAt stamps the escrow and payment columns on an order that just became
-// paid. Transition itself only owns status and events; escrow_state depends on
-// why the order moved (DOMAIN §4 lists it as a side effect).
-func MarkPaidAt(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, now time.Time) error {
+// stampStatus writes the target status's timestamp. Delivered also starts the
+// auto-complete clock, because both are columns of the same row: doing it
+// here keeps the deadline atomic with the move.
+func (s *Service) stampStatus(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, to string, _ bool, now time.Time) error {
+	q := db.New(tx)
+	switch to {
+	case StatusAccepted:
+		if err := q.SetOrderAcceptedAt(ctx, db.SetOrderAcceptedAtParams{ID: orderID, AcceptedAt: &now}); err != nil {
+			return fmt.Errorf("set accepted_at: %w", err)
+		}
+	case StatusShipped:
+		if err := q.SetOrderShipped(ctx, db.SetOrderShippedParams{ID: orderID, ShippedAt: &now}); err != nil {
+			return fmt.Errorf("set shipped_at: %w", err)
+		}
+	case StatusDelivered:
+		deadline := now.Add(s.autoComplete)
+		if err := q.SetOrderDeliveredAt(ctx, db.SetOrderDeliveredAtParams{
+			ID: orderID, DeliveredAt: &now, AutoCompleteAt: &deadline,
+		}); err != nil {
+			return fmt.Errorf("set delivered_at: %w", err)
+		}
+	case StatusCompleted:
+		if err := q.SetOrderCompletedAt(ctx, db.SetOrderCompletedAtParams{ID: orderID, CompletedAt: &now}); err != nil {
+			return fmt.Errorf("set completed_at: %w", err)
+		}
+	case StatusCancelled:
+		if err := q.SetOrderCancelledAt(ctx, db.SetOrderCancelledAtParams{ID: orderID, CancelledAt: &now}); err != nil {
+			return fmt.Errorf("set cancelled_at: %w", err)
+		}
+	}
+	return nil
+}
+
+// ApplyEffects executes a transition's side effects inside the same
+// transaction. Phase 15b's confirm path and the endpoints share it, so the
+// effects can never drift from the table.
+func (s *Service) ApplyEffects(ctx context.Context, tx pgx.Tx, order Order, effects []SideEffect) error {
+	q := db.New(tx)
+	for _, effect := range effects {
+		switch effect.Kind {
+		case EffectRestoreStock:
+			if err := restoreStock(ctx, q, order.ID); err != nil {
+				return err
+			}
+		case EffectEnqueueRefund:
+			if s.jobs == nil {
+				continue
+			}
+			if _, err := s.jobs.InsertTx(ctx, tx, RefundNeededArgs{
+				OrderID: order.ID, AmountPesewas: order.BasePesewas,
+			}, jobs.Unique()); err != nil {
+				return fmt.Errorf("enqueue refund needed: %w", err)
+			}
+		case EffectEnqueueRelease:
+			if s.jobs == nil {
+				continue
+			}
+			if _, err := s.jobs.InsertTx(ctx, tx, ReleaseNeededArgs{
+				OrderID: order.ID, AmountPesewas: order.BasePesewas,
+			}, jobs.Unique()); err != nil {
+				return fmt.Errorf("enqueue release needed: %w", err)
+			}
+		case EffectNotify:
+			if s.jobs == nil {
+				continue
+			}
+			if _, err := s.jobs.InsertTx(ctx, tx, notify.SMSArgs{
+				UserID: effect.Recipient, Template: effect.Template,
+				Params: map[string]string{
+					"orderId":      order.ID.String(),
+					"orderIdShort": order.ID.String()[:8],
+				},
+			}, nil); err != nil {
+				return fmt.Errorf("enqueue notification: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+// restoreStock returns exactly the units the order took, from the stored items
+// rather than the request, in ascending listing order.
+func restoreStock(ctx context.Context, q *db.Queries, orderID uuid.UUID) error {
+	items, err := q.ListOrderItemsByOrder(ctx, orderID)
+	if err != nil {
+		return fmt.Errorf("list order items: %w", err)
+	}
+	for _, item := range items {
+		if err := q.RestoreListingStock(ctx, db.RestoreListingStockParams{
+			ID: item.ListingID, QuantityAvailable: item.Quantity,
+		}); err != nil {
+			return fmt.Errorf("restore stock: %w", err)
+		}
+	}
+	return nil
+}
+
+// MarkPaidAt stamps escrow and payment on an order Transition just moved to
+// paid. Escrow is a side effect the caller owns: 15b's confirm path sets held,
+// and the admin dispute resolution in 17b will set its own states.
+func (s *Service) MarkPaidAt(ctx context.Context, tx pgx.Tx, orderID uuid.UUID) error {
+	now := s.Now()
 	if err := db.New(tx).SetOrderPaid(ctx, db.SetOrderPaidParams{
 		ID: orderID, PaidAt: &now,
 	}); err != nil {
@@ -64,19 +224,8 @@ func MarkPaidAt(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, now time.Time
 	return nil
 }
 
-// MarkCancelledAt stamps when an order was cancelled, after Transition moved it.
-func MarkCancelledAt(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, now time.Time) error {
-	if err := db.New(tx).SetOrderCancelledAt(ctx, db.SetOrderCancelledAtParams{
-		ID: orderID, CancelledAt: &now,
-	}); err != nil {
-		return fmt.Errorf("mark order cancelled: %w", err)
-	}
-	return nil
-}
-
-// SetEscrowState records the escrow side of a transition the caller has already
-// applied, such as refund_pending on a cancelled order whose payment arrived.
-func SetEscrowState(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, state string) error {
+// SetEscrowState records the escrow side of a move the caller has applied.
+func (s *Service) SetEscrowState(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, state string) error {
 	if err := db.New(tx).SetOrderEscrowState(ctx, db.SetOrderEscrowStateParams{
 		ID: orderID, EscrowState: state,
 	}); err != nil {
@@ -85,36 +234,10 @@ func SetEscrowState(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, state str
 	return nil
 }
 
-// NotifySeller is the Phase 16 call site. It is deliberately empty: 15b has no
-// notification channel, and 16 will implement SMS + in-app notices here.
-func NotifySeller(ctx context.Context, orderID uuid.UUID) {
-	_ = ctx
-	_ = orderID
-}
-
-// sideEffectsFor returns the DOMAIN §4 side effects of entering a status.
-func sideEffectsFor(to string) SideEffects {
-	switch to {
-	case StatusPaid:
-		return SideEffects{NotifySeller: true}
-	case StatusExpired:
-		return SideEffects{RestoreStock: true}
-	case StatusCancelled:
-		return SideEffects{RefundNeeded: true}
-	default:
-		return SideEffects{}
-	}
-}
-
-func writeEvent(ctx context.Context, q *db.Queries, orderID uuid.UUID, from *string, to, actorType string, actorID *uuid.UUID, note string) error {
-	var fromStatus *string
-	if from != nil {
-		value := *from
-		fromStatus = &value
-	}
+func writeEvent(ctx context.Context, q *db.Queries, orderID uuid.UUID, from *string, to string, actor Actor, note string) error {
 	if err := q.InsertOrderEvent(ctx, db.InsertOrderEventParams{
-		OrderID: orderID, FromStatus: fromStatus, ToStatus: to,
-		ActorType: actorType, ActorID: actorUUID(actorID), Note: noteOrNil(note),
+		OrderID: orderID, FromStatus: from, ToStatus: to,
+		ActorType: actor.Type, ActorID: actorUUID(actor.ID), Note: noteOrNil(note),
 	}); err != nil {
 		return fmt.Errorf("insert order event: %w", err)
 	}

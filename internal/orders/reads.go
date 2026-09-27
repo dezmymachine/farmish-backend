@@ -16,14 +16,6 @@ import (
 // DefaultPageSize bounds order lists.
 const DefaultPageSize = 20
 
-// Service reads orders for buyers, sellers and the checkout poll.
-type Service struct {
-	q db.DBTX
-}
-
-// NewReadService returns the order read surface over a pool or transaction.
-func NewReadService(q db.DBTX) *Service { return &Service{q: q} }
-
 // Summary is one row of an order list or a checkout poll.
 type Summary struct {
 	Order
@@ -43,13 +35,13 @@ type Detail struct {
 
 // ListForBuyer returns the caller's orders, newest first.
 func (s *Service) ListForBuyer(ctx context.Context, buyerID uuid.UUID, status string, limit, offset int32) ([]Summary, int64, error) {
-	rows, err := db.New(s.q).ListOrdersByBuyer(ctx, db.ListOrdersByBuyerParams{
+	rows, err := db.New(s.pool).ListOrdersByBuyer(ctx, db.ListOrdersByBuyerParams{
 		BuyerID: buyerID, Status: nilString(status), Limit: limit, Offset: offset,
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("list buyer orders: %w", err)
 	}
-	total, err := db.New(s.q).CountOrdersByBuyer(ctx, db.CountOrdersByBuyerParams{
+	total, err := db.New(s.pool).CountOrdersByBuyer(ctx, db.CountOrdersByBuyerParams{
 		BuyerID: buyerID, Status: nilString(status),
 	})
 	if err != nil {
@@ -60,13 +52,13 @@ func (s *Service) ListForBuyer(ctx context.Context, buyerID uuid.UUID, status st
 
 // ListForSeller returns the caller's sale orders, newest first.
 func (s *Service) ListForSeller(ctx context.Context, sellerID uuid.UUID, status string, limit, offset int32) ([]Summary, int64, error) {
-	rows, err := db.New(s.q).ListOrdersBySeller(ctx, db.ListOrdersBySellerParams{
+	rows, err := db.New(s.pool).ListOrdersBySeller(ctx, db.ListOrdersBySellerParams{
 		SellerID: sellerID, Status: nilString(status), Limit: limit, Offset: offset,
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("list seller orders: %w", err)
 	}
-	total, err := db.New(s.q).CountOrdersBySeller(ctx, db.CountOrdersBySellerParams{
+	total, err := db.New(s.pool).CountOrdersBySeller(ctx, db.CountOrdersBySellerParams{
 		SellerID: sellerID, Status: nilString(status),
 	})
 	if err != nil {
@@ -78,7 +70,7 @@ func (s *Service) ListForSeller(ctx context.Context, sellerID uuid.UUID, status 
 // Get returns one order's detail to its buyer or its seller, and reports which
 // role the caller is in. Anyone else gets ErrNotFound, so ids cannot be probed.
 func (s *Service) Get(ctx context.Context, callerID, orderID uuid.UUID) (Detail, bool, error) {
-	row, err := db.New(s.q).GetOrderDetail(ctx, orderID)
+	row, err := db.New(s.pool).GetOrderDetail(ctx, orderID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Detail{}, false, fmt.Errorf("%w: %s", ErrNotFound, orderID)
 	}
@@ -88,11 +80,11 @@ func (s *Service) Get(ctx context.Context, callerID, orderID uuid.UUID) (Detail,
 	if row.BuyerID != callerID && row.SellerID != callerID {
 		return Detail{}, false, fmt.Errorf("%w: %s", ErrNotFound, orderID)
 	}
-	items, err := db.New(s.q).ListOrderItemsByOrder(ctx, orderID)
+	items, err := db.New(s.pool).ListOrderItemsByOrder(ctx, orderID)
 	if err != nil {
 		return Detail{}, false, fmt.Errorf("list order items: %w", err)
 	}
-	events, err := db.New(s.q).ListOrderEvents(ctx, orderID)
+	events, err := db.New(s.pool).ListOrderEvents(ctx, orderID)
 	if err != nil {
 		return Detail{}, false, fmt.Errorf("list order events: %w", err)
 	}
