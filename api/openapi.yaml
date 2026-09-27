@@ -763,6 +763,151 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /v1/checkout:
+    post:
+      tags: [checkout]
+      operationId: createCheckout
+      summary: Create a checkout
+      description: |
+        Reserves stock, creates one order per seller and one payment, and
+        starts a Paystack charge. Idempotent on the `Idempotency-Key` header:
+        the same key with the same payload returns the stored answer, and the
+        same key with a different payload is a 409. Nothing is priced from the
+        request: prices come from the server-side snapshots.
+      x-farmish-rate-limit: sensitive
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckoutQuoteRequest"
+      responses:
+        "201":
+          description: The checkout was created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutCreated"
+        "200":
+          description: |
+            The stored answer for this idempotency key: the checkout already
+            existed with the same payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutCreated"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "502":
+          $ref: "#/components/responses/PaymentProviderError"
+  /v1/checkouts/{id}:
+    get:
+      tags: [checkout]
+      operationId: getCheckout
+      summary: Get my checkout
+      description: |
+        The buyer's own checkout, for polling after the Paystack redirect. A
+        checkout that is not the caller's reads as not found.
+      parameters:
+        - $ref: "#/components/parameters/CheckoutId"
+      responses:
+        "200":
+          description: The checkout with its orders.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/orders:
+    get:
+      tags: [orders]
+      operationId: listMyOrders
+      summary: List my purchases
+      description: The caller's buyer orders, newest first.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/OrderStatus"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: A page of the caller's orders.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderSummaryList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/seller/orders:
+    get:
+      tags: [orders]
+      operationId: listMySales
+      summary: List my sales
+      description: The caller's seller orders, newest first.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/OrderStatus"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: A page of the caller's sales.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderSummaryList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/orders/{id}:
+    get:
+      tags: [orders]
+      operationId: getOrder
+      summary: Get one order
+      description: |
+        The buyer or the seller of the order; anyone else gets a 404. The
+        seller sees the recipient name, the recipient phone, the commission
+        and the seller net. The buyer sees the seller's public profile and no
+        commission.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: The order, role-shaped.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /v1/media/upload-url:
     post:
       tags: [media]
@@ -1202,6 +1347,30 @@ components:
       description: Firebase ID token.
   parameters:
     ListingId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        A client-generated uuid. The same key with the same payload replays
+        the stored checkout; the same key with a different payload is a 409.
+      schema:
+        type: string
+        format: uuid
+    CheckoutId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    OrderId:
       name: id
       in: path
       required: true
@@ -2564,6 +2733,191 @@ components:
           description: The fee grossed onto the buyer. Non-refundable.
         charge:
           $ref: "#/components/schemas/Money"
+    CheckoutCreated:
+      type: object
+      description: |
+        A checkout and where to complete its payment. Replays return the same
+        body with 200 instead of 201.
+      required: [checkoutId, reference, authorizationUrl, quote, expiresAt]
+      properties:
+        checkoutId:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        authorizationUrl:
+          type: string
+          format: uri
+        quote:
+          $ref: "#/components/schemas/CheckoutQuote"
+        expiresAt:
+          type: string
+          format: date-time
+    OrderStatus:
+      type: string
+      description: An order's status (DOMAIN §4).
+      enum: [pending_payment, paid, accepted, shipped, delivered, completed, cancelled, disputed, refunded, expired]
+    EscrowState:
+      type: string
+      enum: [none, held, released, refund_pending, refunded, partially_refunded]
+    OrderSummary:
+      type: object
+      required: [id, checkoutId, sellerId, sellerName, status, escrowState, subtotal, deliveryFee, base, deliveryMethod, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        checkoutId:
+          type: string
+          format: uuid
+        sellerId:
+          type: string
+          format: uuid
+        sellerName:
+          type: string
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+        escrowState:
+          $ref: "#/components/schemas/EscrowState"
+        subtotal:
+          $ref: "#/components/schemas/Money"
+        deliveryFee:
+          $ref: "#/components/schemas/Money"
+        base:
+          $ref: "#/components/schemas/Money"
+        deliveryMethod:
+          type: string
+          enum: [pickup, seller_delivery, courier]
+        createdAt:
+          type: string
+          format: date-time
+        paidAt:
+          type: string
+          format: date-time
+    OrderSummaryList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderSummary"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
+    CheckoutStatus:
+      type: object
+      description: The buyer's checkout poll.
+      required: [id, status, charge, expiresAt, orders]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending_payment, paid, expired, failed]
+        charge:
+          $ref: "#/components/schemas/Money"
+        expiresAt:
+          type: string
+          format: date-time
+        orders:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderSummary"
+    OrderEvent:
+      type: object
+      required: [toStatus, actorType, createdAt]
+      properties:
+        fromStatus:
+          $ref: "#/components/schemas/OrderStatus"
+        toStatus:
+          $ref: "#/components/schemas/OrderStatus"
+        actorType:
+          type: string
+          enum: [buyer, seller, admin, system]
+        note:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    OrderDetail:
+      type: object
+      description: |
+        One order, shaped by the caller's role. The seller additionally sees
+        `recipientName`, `recipientPhone`, `commission` and `sellerNet`; the
+        buyer additionally sees `seller` (the public profile) and never sees
+        the commission.
+      required: [id, checkoutId, buyerId, sellerId, sellerName, status, escrowState, items, subtotal, deliveryFee, base, deliveryMethod, delivery, createdAt, events]
+      properties:
+        id:
+          type: string
+          format: uuid
+        checkoutId:
+          type: string
+          format: uuid
+        buyerId:
+          type: string
+          format: uuid
+        sellerId:
+          type: string
+          format: uuid
+        sellerName:
+          type: string
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+        escrowState:
+          $ref: "#/components/schemas/EscrowState"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CheckoutQuoteItem"
+        subtotal:
+          $ref: "#/components/schemas/Money"
+        deliveryFee:
+          $ref: "#/components/schemas/Money"
+        base:
+          $ref: "#/components/schemas/Money"
+        commission:
+          $ref: "#/components/schemas/Money"
+          description: The platform's cut. Seller only.
+        sellerNet:
+          $ref: "#/components/schemas/Money"
+          description: The base minus the commission. Seller only.
+        deliveryMethod:
+          type: string
+          enum: [pickup, seller_delivery, courier]
+        delivery:
+          type: object
+          description: Where and to whom the order goes. Seller only.
+          properties:
+            address:
+              type: string
+            region:
+              type: string
+            district:
+              type: string
+            recipientName:
+              type: string
+            recipientPhone:
+              type: string
+            trackingRef:
+              type: string
+        seller:
+          $ref: "#/components/schemas/PublicSeller"
+          description: The seller's public profile. Buyer only.
+        createdAt:
+          type: string
+          format: date-time
+        paidAt:
+          type: string
+          format: date-time
+        cancelledAt:
+          type: string
+          format: date-time
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderEvent"
     Money:
       type: object
       description: An amount of money in the smallest currency unit (pesewas).

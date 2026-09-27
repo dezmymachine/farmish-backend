@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -21,9 +22,13 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/http/api"
 	"github.com/dezmymachine/farmish-backend/internal/http/apierror"
 	"github.com/dezmymachine/farmish-backend/internal/http/middleware"
+	"github.com/dezmymachine/farmish-backend/internal/ledger"
 	"github.com/dezmymachine/farmish-backend/internal/listings"
 	"github.com/dezmymachine/farmish-backend/internal/media"
 	"github.com/dezmymachine/farmish-backend/internal/media/mediatest"
+	"github.com/dezmymachine/farmish-backend/internal/orders"
+	"github.com/dezmymachine/farmish-backend/internal/payments"
+	"github.com/dezmymachine/farmish-backend/internal/payments/fake"
 	"github.com/dezmymachine/farmish-backend/internal/ratelimit"
 	"github.com/dezmymachine/farmish-backend/internal/sellers"
 	"github.com/dezmymachine/farmish-backend/internal/users"
@@ -46,11 +51,15 @@ func listingRouterWithLimits(t *testing.T, limits *middleware.RateLimits) (*gin.
 	store := mediatest.R2(t)
 	sellersSvc := sellers.New(pool, nil, nil)
 	listingsSvc := listings.New(pool, catalog.New(pool), media.New(pool, store), sellersSvc)
+	ordersSvc := orders.NewReadService(pool)
 	deps := Deps{
 		DB: fakePinger{}, Verifier: fb, Users: users.New(pool),
 		Sellers: sellersSvc, Media: media.New(pool, store),
 		Listings: listingsSvc, PublicListings: listingsSvc,
-		Checkout: checkout.New(pool, delivery.Manual{}, 195),
+		Checkout: checkout.New(pool,
+			payments.New(pool, fake.New(), slog.New(slog.DiscardHandler), 195, "https://farmish.gh/payments/status"),
+			fake.New(), delivery.Manual{}, ledger.New(), slog.New(slog.DiscardHandler), 195, 30*time.Minute),
+		Orders: ordersSvc,
 	}
 	if limits != nil {
 		deps.RateLimits = limits

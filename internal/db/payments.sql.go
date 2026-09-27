@@ -381,7 +381,7 @@ SET status = 'success',
     channel = $3,
     paystack_fee_pesewas = $4,
     failure_reason = NULL
-WHERE id = $1 AND status = 'pending'
+WHERE id = $1 AND status IN ('pending', 'abandoned')
 RETURNING id, reference, user_id, purpose, purpose_ref, base_pesewas, processing_fee_pesewas, charge_pesewas, currency, status, paystack_fee_pesewas, channel, authorization_url, paid_at, failure_reason, created_at, updated_at, metadata
 `
 
@@ -392,8 +392,10 @@ type SettlePaymentSuccessParams struct {
 	PaystackFeePesewas *int64
 }
 
-// The single writer of success. It only fires from pending, so a replay (or a
-// webhook racing the verify fallback) is a no-op that returns no row.
+// The single writer of success. It fires from pending, or from abandoned when
+// the buyer paid just before the checkout expired and the webhook arrived
+// just after: the expiry sweep guessed no charge would come, and the money
+// proved it wrong. From any other state it is a no-op that returns no row.
 func (q *Queries) SettlePaymentSuccess(ctx context.Context, arg SettlePaymentSuccessParams) (Payment, error) {
 	row := q.db.QueryRow(ctx, settlePaymentSuccess,
 		arg.ID,

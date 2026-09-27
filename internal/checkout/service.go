@@ -3,30 +3,12 @@ package checkout
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/dezmymachine/farmish-backend/internal/db"
-	"github.com/dezmymachine/farmish-backend/internal/delivery"
 	"github.com/dezmymachine/farmish-backend/internal/validation"
 )
-
-// Service quotes carts from server-side snapshots. Phase 15a never reserves
-// stock and never creates checkout or order rows; Phase 15b owns persistence.
-type Service struct {
-	pool     *pgxpool.Pool
-	delivery delivery.Provider
-	feeBps   int
-	// Now is the clock, injectable so tests can freeze listing expiry.
-	Now func() time.Time
-}
-
-// New returns a checkout Service.
-func New(pool *pgxpool.Pool, provider delivery.Provider, feeBps int) *Service {
-	return &Service{pool: pool, delivery: provider, feeBps: feeBps, Now: time.Now}
-}
 
 // QuoteInput is a quote request in domain terms.
 type QuoteInput struct {
@@ -36,7 +18,13 @@ type QuoteInput struct {
 
 // Rates loads DOMAIN §2.1's commission configuration.
 func (s *Service) Rates(ctx context.Context) (CommissionRates, error) {
-	rows, err := db.New(s.pool).ListCommissionConfigs(ctx)
+	return s.ratesFrom(ctx, s.pool)
+}
+
+// ratesFrom reads the commission configuration through the caller's handle, so
+// a checkout prices and snapshots inside one transaction.
+func (s *Service) ratesFrom(ctx context.Context, q db.DBTX) (CommissionRates, error) {
+	rows, err := db.New(q).ListCommissionConfigs(ctx)
 	if err != nil {
 		return CommissionRates{}, fmt.Errorf("list commission configs: %w", err)
 	}

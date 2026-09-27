@@ -503,3 +503,24 @@ func TestConfig_PaystackKeys(t *testing.T) {
 		}
 	})
 }
+
+// TestConfig_CheckoutExpiry covers the unpaid-checkout window.
+func TestConfig_CheckoutExpiry(t *testing.T) {
+	cfg, err := FromLookup(lookup(base(nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.CheckoutExpiryMinutes != 30 {
+		t.Errorf("CheckoutExpiryMinutes = %d, want the 30-minute default", cfg.CheckoutExpiryMinutes)
+	}
+	for _, invalid := range []string{"0", "-5", "soon"} {
+		_, err := FromLookup(lookup(base(map[string]string{"CHECKOUT_EXPIRY_MINUTES": invalid})))
+		if err == nil || !strings.Contains(err.Error(), "CHECKOUT_EXPIRY_MINUTES") {
+			t.Errorf("CHECKOUT_EXPIRY_MINUTES=%q: err = %v, want the range check", invalid, err)
+		}
+	}
+	cfg, err = FromLookup(lookup(base(map[string]string{"CHECKOUT_EXPIRY_MINUTES": "45"})))
+	if err != nil || cfg.CheckoutExpiryMinutes != 45 {
+		t.Fatalf("override = %d, %v; want 45", cfg.CheckoutExpiryMinutes, err)
+	}
+}

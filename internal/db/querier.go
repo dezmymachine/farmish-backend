@@ -19,6 +19,8 @@ type Querier interface {
 	// A listing's category must be a leaf (or a parent with no children).
 	CountCategoryChildren(ctx context.Context, parentID pgtype.UUID) (int64, error)
 	CountListingImages(ctx context.Context, listingID uuid.UUID) (int64, error)
+	CountOrdersByBuyer(ctx context.Context, arg CountOrdersByBuyerParams) (int64, error)
+	CountOrdersBySeller(ctx context.Context, arg CountOrdersBySellerParams) (int64, error)
 	CountSearchListings(ctx context.Context, arg CountSearchListingsParams) (int64, error)
 	CountSellerListings(ctx context.Context, arg CountSellerListingsParams) (int64, error)
 	CountSellerProfilesByStatus(ctx context.Context, verificationStatus string) (int64, error)
@@ -49,6 +51,9 @@ type Querier interface {
 	GetCategoryAttribute(ctx context.Context, arg GetCategoryAttributeParams) (CategoryAttribute, error)
 	GetCategoryByID(ctx context.Context, id uuid.UUID) (Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (Category, error)
+	GetCheckoutByID(ctx context.Context, id uuid.UUID) (Checkout, error)
+	GetCheckoutByIdempotencyKey(ctx context.Context, arg GetCheckoutByIdempotencyKeyParams) (Checkout, error)
+	GetCheckoutForUpdate(ctx context.Context, id uuid.UUID) (Checkout, error)
 	// An account row by its unique code.
 	GetLedgerAccountByCode(ctx context.Context, code string) (LedgerAccount, error)
 	GetListingByID(ctx context.Context, id uuid.UUID) (Listing, error)
@@ -61,6 +66,10 @@ type Querier interface {
 	// when the matching show_* flag is true.
 	GetListingContactDetails(ctx context.Context, id uuid.UUID) (GetListingContactDetailsRow, error)
 	GetMediaObject(ctx context.Context, id uuid.UUID) (MediaObject, error)
+	GetOrderByID(ctx context.Context, id uuid.UUID) (Order, error)
+	// Everything the order detail endpoint needs for either role, in one read.
+	GetOrderDetail(ctx context.Context, id uuid.UUID) (GetOrderDetailRow, error)
+	GetOrderForUpdate(ctx context.Context, id uuid.UUID) (Order, error)
 	GetPaymentByID(ctx context.Context, id uuid.UUID) (Payment, error)
 	GetPaymentByReference(ctx context.Context, reference string) (Payment, error)
 	// Row-locked. Two webhook deliveries for the same reference must not both
@@ -75,6 +84,9 @@ type Querier interface {
 	GetPublicListingBySlug(ctx context.Context, arg GetPublicListingBySlugParams) (GetPublicListingBySlugRow, error)
 	// Narrow projection for the public endpoint: never selects id_number_enc.
 	GetPublicSeller(ctx context.Context, userID uuid.UUID) (GetPublicSellerRow, error)
+	// Snapshot locks for pricing, taken in ascending listing-id order by the
+	// caller to avoid deadlocks between concurrent checkouts.
+	GetQuoteListingForUpdate(ctx context.Context, arg GetQuoteListingForUpdateParams) ([]GetQuoteListingForUpdateRow, error)
 	GetSellerProfile(ctx context.Context, userID uuid.UUID) (SellerProfile, error)
 	GetSellerProfileForUpdate(ctx context.Context, userID uuid.UUID) (SellerProfile, error)
 	GetUserByFirebaseUID(ctx context.Context, firebaseUid string) (User, error)
@@ -86,6 +98,9 @@ type Querier interface {
 	InsertAuditEvent(ctx context.Context, arg InsertAuditEventParams) (AuditEvent, error)
 	// Returns no row when the slug is taken (callers map that to 409).
 	InsertCategory(ctx context.Context, arg InsertCategoryParams) (Category, error)
+	// A checkout holds reserved stock and one payment while the buyer pays. The
+	// unique (buyer_id, idempotency_key) is what makes POST /v1/checkout replayable.
+	InsertCheckout(ctx context.Context, arg InsertCheckoutParams) (Checkout, error)
 	InsertListing(ctx context.Context, arg InsertListingParams) (Listing, error)
 	InsertListingAttribute(ctx context.Context, arg InsertListingAttributeParams) error
 	InsertListingImage(ctx context.Context, arg InsertListingImageParams) error
@@ -94,6 +109,12 @@ type Querier interface {
 	// one active from the replacement time onward.
 	InsertListingPromotion(ctx context.Context, arg InsertListingPromotionParams) (ListingPromotion, error)
 	InsertMediaObject(ctx context.Context, arg InsertMediaObjectParams) (MediaObject, error)
+	// The commission rate and amount are the resolved, snapshotted values from
+	// pricing: later config edits never touch an existing order.
+	InsertOrder(ctx context.Context, arg InsertOrderParams) (Order, error)
+	// The append-only event trail orders.Transition writes.
+	InsertOrderEvent(ctx context.Context, arg InsertOrderEventParams) error
+	InsertOrderItem(ctx context.Context, arg InsertOrderItemParams) error
 	// A pending payment, before Paystack is called. The gross-up is computed by
 	// the caller from internal/money and the CHECK on charge_pesewas enforces it.
 	InsertPayment(ctx context.Context, arg InsertPaymentParams) (Payment, error)
@@ -109,9 +130,16 @@ type Querier interface {
 	// A category filter on a parent slug must include its children (DOMAIN §9);
 	// on a child slug it returns just that child.
 	ListCategoryAndChildIDs(ctx context.Context, slug string) ([]uuid.UUID, error)
+	// One row per seller order of a checkout, with the seller's public name for
+	// summaries and replays.
+	ListCheckoutOrders(ctx context.Context, checkoutID uuid.UUID) ([]ListCheckoutOrdersRow, error)
 	// Every category override plus the default row, for server-side commission
 	// resolution. DOMAIN §2.1 snapshots the resolved rate on each order.
 	ListCommissionConfigs(ctx context.Context) ([]ListCommissionConfigsRow, error)
+	// Unpaid checkouts past their window, in a deterministic order so the sweep
+	// behaves the same on every run. SKIP LOCKED keeps concurrent sweeps from
+	// fighting over the same checkout.
+	ListExpiredPendingCheckouts(ctx context.Context, arg ListExpiredPendingCheckoutsParams) ([]Checkout, error)
 	// Installed Postgres extensions; used by tests to assert migration 000001.
 	ListExtensions(ctx context.Context) ([]string, error)
 	ListListingAttributes(ctx context.Context, listingID uuid.UUID) ([]ListListingAttributesRow, error)
@@ -120,6 +148,15 @@ type Querier interface {
 	ListListingImages(ctx context.Context, listingID uuid.UUID) ([]ListListingImagesRow, error)
 	// One listing's promotion history, newest effective window first.
 	ListListingPromotions(ctx context.Context, listingID uuid.UUID) ([]ListingPromotion, error)
+	ListOrderEvents(ctx context.Context, orderID uuid.UUID) ([]OrderEvent, error)
+	// The stock a checkout reserved, for restoring it exactly on expiry or
+	// provider failure. Ordered by listing id, the same order used to reserve.
+	ListOrderItemsByCheckout(ctx context.Context, checkoutID uuid.UUID) ([]OrderItem, error)
+	ListOrderItemsByOrder(ctx context.Context, orderID uuid.UUID) ([]OrderItem, error)
+	ListOrdersByBuyer(ctx context.Context, arg ListOrdersByBuyerParams) ([]ListOrdersByBuyerRow, error)
+	// Deterministic seller order, matching how the checkout created them.
+	ListOrdersByCheckout(ctx context.Context, checkoutID uuid.UUID) ([]Order, error)
+	ListOrdersBySeller(ctx context.Context, arg ListOrdersBySellerParams) ([]ListOrdersBySellerRow, error)
 	// Cleanup sweep: pending rows older than the cutoff, oldest first.
 	ListPendingMediaBefore(ctx context.Context, arg ListPendingMediaBeforeParams) ([]MediaObject, error)
 	// The server-side snapshot a quote may use. Prices come only from this query:
@@ -137,6 +174,12 @@ type Querier interface {
 	LockPromotionCredits(ctx context.Context, dollar_1 string) (interface{}, error)
 	MarkPaymentAbandoned(ctx context.Context, arg MarkPaymentAbandonedParams) (Payment, error)
 	MarkPaymentFailed(ctx context.Context, arg MarkPaymentFailedParams) (Payment, error)
+	// Atomically decrements stock only while enough remains. Zero affected rows is
+	// ErrInsufficientStock; the caller's transaction rolls back.
+	ReserveListingStock(ctx context.Context, arg ReserveListingStockParams) (int64, error)
+	// The exact inverse of a reservation, from the stored order items rather than
+	// the request, so a restored checkout can never drift.
+	RestoreListingStock(ctx context.Context, arg RestoreListingStockParams) error
 	// Public search (Phase 12). `now` is always passed from the service clock,
 	// never SQL now(), so tests are deterministic.
 	//
@@ -151,9 +194,19 @@ type Querier interface {
 	//     unpromoted (DOMAIN §6).
 	//
 	SearchListings(ctx context.Context, arg SearchListingsParams) ([]SearchListingsRow, error)
+	SetCheckoutPayment(ctx context.Context, arg SetCheckoutPaymentParams) error
+	SetCheckoutStatus(ctx context.Context, arg SetCheckoutStatusParams) error
 	// Only published_at / expires_at are set when they are given (publish sets
 	// both; mark-sold and archive leave them alone).
 	SetListingStatus(ctx context.Context, arg SetListingStatusParams) (Listing, error)
+	SetOrderCancelledAt(ctx context.Context, arg SetOrderCancelledAtParams) error
+	SetOrderEscrowState(ctx context.Context, arg SetOrderEscrowStateParams) error
+	SetOrderPaid(ctx context.Context, arg SetOrderPaidParams) error
+	// Transition's status write. Only the target status's timestamp column moves;
+	// escrow_state is the caller's to set, because it depends on why the order
+	// moved. Returns no row when the current status differs, which Transition
+	// treats as a lost race rather than a silent no-op.
+	SetOrderStatus(ctx context.Context, arg SetOrderStatusParams) (Order, error)
 	// Stored after InitializeTransaction, which happens outside the insert's
 	// transaction: the provider call must never hold a database transaction open.
 	SetPaymentAuthorizationURL(ctx context.Context, arg SetPaymentAuthorizationURLParams) (Payment, error)
@@ -163,8 +216,10 @@ type Querier interface {
 	SetSellerVerification(ctx context.Context, arg SetSellerVerificationParams) (SellerProfile, error)
 	SetUserRole(ctx context.Context, arg SetUserRoleParams) (User, error)
 	SetUserSellerVerified(ctx context.Context, arg SetUserSellerVerifiedParams) (User, error)
-	// The single writer of success. It only fires from pending, so a replay (or a
-	// webhook racing the verify fallback) is a no-op that returns no row.
+	// The single writer of success. It fires from pending, or from abandoned when
+	// the buyer paid just before the checkout expired and the webhook arrived
+	// just after: the expiry sweep guessed no charge would come, and the money
+	// proved it wrong. From any other state it is a no-op that returns no row.
 	SettlePaymentSuccess(ctx context.Context, arg SettlePaymentSuccessParams) (Payment, error)
 	SlugExists(ctx context.Context, slug string) (bool, error)
 	// The account balance is derived from its entries. A code with no entries has

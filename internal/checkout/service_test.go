@@ -3,6 +3,7 @@ package checkout_test
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -16,9 +17,12 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/checkout"
 	"github.com/dezmymachine/farmish-backend/internal/database/dbtest"
 	"github.com/dezmymachine/farmish-backend/internal/delivery"
+	"github.com/dezmymachine/farmish-backend/internal/ledger"
 	"github.com/dezmymachine/farmish-backend/internal/listings"
 	"github.com/dezmymachine/farmish-backend/internal/media"
 	"github.com/dezmymachine/farmish-backend/internal/media/mediatest"
+	"github.com/dezmymachine/farmish-backend/internal/payments"
+	"github.com/dezmymachine/farmish-backend/internal/payments/fake"
 	"github.com/dezmymachine/farmish-backend/internal/sellers"
 	"github.com/dezmymachine/farmish-backend/internal/users"
 )
@@ -43,9 +47,19 @@ func newServiceFixture(t *testing.T) *serviceFixture {
 	now := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
 	listingsSvc := listings.New(pool, catalog.New(pool), media.New(pool, store), sellersSvc)
 	listingsSvc.Now = func() time.Time { return now }
-	svc := checkout.New(pool, delivery.Manual{}, 195)
-	svc.Now = func() time.Time { return now }
+	svc := newQuoteService(t, pool, now)
 	return &serviceFixture{pool: pool, listings: listingsSvc, store: store, svc: svc, now: now}
+}
+
+// newQuoteService builds the full service with a fake provider, for tests that
+// only exercise the quote surface.
+func newQuoteService(t *testing.T, pool *pgxpool.Pool, now time.Time) *checkout.Service {
+	t.Helper()
+	log := slog.New(slog.DiscardHandler)
+	paymentsSvc := payments.New(pool, fake.New(), log, 195, "https://farmish.gh/payments/status")
+	svc := checkout.New(pool, paymentsSvc, fake.New(), delivery.Manual{}, ledger.New(), log, 195, 30*time.Minute)
+	svc.Now = func() time.Time { return now }
+	return svc
 }
 
 func serviceUser(t *testing.T, pool *pgxpool.Pool, uid string) uuid.UUID {

@@ -41,15 +41,17 @@ WHERE id = $1 AND status = 'pending'
 RETURNING *;
 
 -- name: SettlePaymentSuccess :one
--- The single writer of success. It only fires from pending, so a replay (or a
--- webhook racing the verify fallback) is a no-op that returns no row.
+-- The single writer of success. It fires from pending, or from abandoned when
+-- the buyer paid just before the checkout expired and the webhook arrived
+-- just after: the expiry sweep guessed no charge would come, and the money
+-- proved it wrong. From any other state it is a no-op that returns no row.
 UPDATE payments
 SET status = 'success',
     paid_at = $2,
     channel = $3,
     paystack_fee_pesewas = $4,
     failure_reason = NULL
-WHERE id = $1 AND status = 'pending'
+WHERE id = $1 AND status IN ('pending', 'abandoned')
 RETURNING *;
 
 -- name: InsertWebhookEvent :one

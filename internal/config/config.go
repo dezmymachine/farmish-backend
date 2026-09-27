@@ -69,6 +69,9 @@ type Config struct {
 	R2 R2
 	// Paystack configures the payment provider (Phase 13a).
 	Paystack Paystack
+	// CheckoutExpiryMinutes bounds how long a checkout may sit unpaid before
+	// the sweep expires it and returns the reserved stock (DOMAIN §3).
+	CheckoutExpiryMinutes int
 }
 
 // Paystack configures the Paystack API.
@@ -392,6 +395,18 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 			errs = append(errs, fmt.Errorf("PAYSTACK_FEE_BPS must be a basis-point rate between 0 and 1000, got %q", v))
 		default:
 			cfg.Paystack.FeeBps = bps
+		}
+	}
+
+	// Unpaid checkouts hold reserved stock, so the window must stay short.
+	cfg.CheckoutExpiryMinutes = 30
+	if v := get("CHECKOUT_EXPIRY_MINUTES"); v != "" {
+		minutes, err := strconv.Atoi(v)
+		switch {
+		case err != nil || minutes < 1 || minutes > 1440:
+			errs = append(errs, fmt.Errorf("CHECKOUT_EXPIRY_MINUTES must be between 1 and 1440, got %q", v))
+		default:
+			cfg.CheckoutExpiryMinutes = minutes
 		}
 	}
 

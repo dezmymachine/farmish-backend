@@ -346,7 +346,7 @@ func (s *Service) onChargeSuccess(ctx context.Context, tx pgx.Tx, data json.RawM
 		return "", fmt.Errorf("lock payment: %w", err)
 	}
 	current := fromRow(payment)
-	if current.Status != StatusPending {
+	if current.Status != StatusPending && current.Status != StatusAbandoned {
 		// Already settled, most likely by the verify fallback. The webhook is a
 		// duplicate of an effect that happened.
 		return OutcomeIgnored, nil

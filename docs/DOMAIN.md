@@ -72,6 +72,8 @@ The plan's earlier `fulfilling` state is **dropped**: `accepted` covers preparin
 |---|---|---|---|---|
 | pending_payment | paid | system | `ConfirmCheckout` job after `charge.success` | escrow_state=held; ledger §5.2; notify seller |
 | pending_payment | expired | system | `ExpireUnpaidCheckouts` (30 min) | restore stock |
+| expired | paid | system | `ConfirmCheckout` for a checkout whose payment arrived after expiry, **and** whose stock could be re-reserved | escrow_state=held; ledger §5.2; notify seller |
+| expired | cancelled | system | same trigger, but stock could **not** be re-reserved | note `stock_unavailable_after_expiry`; escrow_state=refund_pending; ledger §5.2 posted (the money arrived); enqueue a full refund per order |
 | paid | accepted | seller | `POST /v1/seller/orders/{id}/accept` | notify buyer |
 | paid | cancelled | seller | `POST /v1/seller/orders/{id}/reject` (reason required) | restore stock; enqueue `RefundOrder`; escrow_state=refund_pending |
 | paid | cancelled | buyer | `POST /v1/orders/{id}/cancel` (only before acceptance) | same as reject |

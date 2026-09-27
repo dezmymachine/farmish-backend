@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -77,7 +78,11 @@ func newTestRouterWithConfig(t *testing.T, deps Deps, cfg config.Config) *gin.En
 	if deps.Turnstile == nil {
 		deps.Turnstile = noTurnstile{}
 	}
-	r, err := NewRouter(cfg, logger.New(io.Discard, "error"), deps)
+	out := io.Discard
+	if os.Getenv("QA_DEBUG_LOG") != "" {
+		out = os.Stdout
+	}
+	r, err := NewRouter(cfg, logger.New(out, "debug"), deps)
 	if err != nil {
 		t.Fatal(err)
 	}
