@@ -229,3 +229,43 @@ Fix Blockers 1–3 and Majors 4–6 with the listed tests. Keep `make ci` green,
 | **m8** lost Paystack id is silent | Error log with the Paystack id; reconciliation re-finds it | covered by `TestRefund_TimeoutNeverDoubleRefunds` (adoption path) |
 | *(new)* Create Refund field `reference` | Sends `transaction` (Paystack OpenAPI spec) | `TestPaystackClient_CreateRefund`, manual QA wire capture |
 | *(new)* refund webhooks without `data.id` rejected | Dedupe key falls back to `refund_reference` | `TestWebhook_RefundEventsRouted` (`refund.pending:ref:RF-SECOND`) |
+
+## make ci on HEAD d5cea0d (final)
+
+```
+ok  	github.com/dezmymachine/farmish-backend/cmd/api
+ok  	github.com/dezmymachine/farmish-backend/internal/audit
+ok  	github.com/dezmymachine/farmish-backend/internal/auth
+ok  	github.com/dezmymachine/farmish-backend/internal/catalog
+ok  	github.com/dezmymachine/farmish-backend/internal/checkout
+ok  	github.com/dezmymachine/farmish-backend/internal/config
+ok  	github.com/dezmymachine/farmish-backend/internal/crypto
+ok  	github.com/dezmymachine/farmish-backend/internal/database
+ok  	github.com/dezmymachine/farmish-backend/internal/db
+ok  	github.com/dezmymachine/farmish-backend/internal/delivery
+ok  	github.com/dezmymachine/farmish-backend/internal/geo
+ok  	github.com/dezmymachine/farmish-backend/internal/http
+ok  	github.com/dezmymachine/farmish-backend/internal/http/handlers
+ok  	github.com/dezmymachine/farmish-backend/internal/http/middleware
+ok  	github.com/dezmymachine/farmish-backend/internal/jobs
+ok  	github.com/dezmymachine/farmish-backend/internal/ledger
+ok  	github.com/dezmymachine/farmish-backend/internal/listings
+ok  	github.com/dezmymachine/farmish-backend/internal/media
+ok  	github.com/dezmymachine/farmish-backend/internal/money
+ok  	github.com/dezmymachine/farmish-backend/internal/notify
+ok  	github.com/dezmymachine/farmish-backend/internal/orders
+ok  	github.com/dezmymachine/farmish-backend/internal/payments
+ok  	github.com/dezmymachine/farmish-backend/internal/promotions
+ok  	github.com/dezmymachine/farmish-backend/internal/ratelimit
+ok  	github.com/dezmymachine/farmish-backend/internal/sellers
+ok  	github.com/dezmymachine/farmish-backend/internal/text
+ok  	github.com/dezmymachine/farmish-backend/internal/turnstile
+ok  	github.com/dezmymachine/farmish-backend/internal/users
+ok  	github.com/dezmymachine/farmish-backend/internal/validation
+ok  	github.com/dezmymachine/farmish-backend/migrations
+ok  	github.com/dezmymachine/farmish-backend/pkg/logger
+0 issues.
+Your code is affected by 0 vulnerabilities.
+smoke: migrate ok, /healthz ok, redis limits ok, /v1/me 401 -> 200 with token, /readyz 200 -> 503 on DB loss, graceful shutdown ok
+ci: all checks passed
+```
