@@ -7,6 +7,7 @@ package fake
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/dezmymachine/farmish-backend/internal/payments"
 )
@@ -22,6 +23,24 @@ type Provider struct {
 	// VerifyResult and VerifyErr answer VerifyTransaction.
 	VerifyResult payments.Transaction
 	VerifyErr    error
+	// RefundResult and RefundErr answer CreateRefund.
+	RefundResult payments.RefundResult
+	RefundErr    error
+	// Refunded keeps every RefundInput passed to CreateRefund.
+	Refunded []payments.RefundInput
+	// RefundErrAfterRecord makes CreateRefund create the refund at "Paystack"
+	// and then fail anyway, the ambiguous case: a lost response to a request
+	// that took effect (ADR-0027).
+	RefundErrAfterRecord error
+	// Refunds is the fake Paystack's refund store, filled by CreateRefund and
+	// read by FetchRefund/ListRefunds. Tests may edit statuses with
+	// SetRefundStatus.
+	Refunds []payments.Refund
+	// FetchErr and ListErr make FetchRefund/ListRefunds fail.
+	FetchErr error
+	ListErr  error
+	// Now stamps created refunds; nil means time.Now.
+	Now func() time.Time
 
 	// Calls records the order methods were called in.
 	Calls []string
@@ -80,7 +99,77 @@ func (p *Provider) CreateRefund(ctx context.Context, in payments.RefundInput) (p
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.Calls = append(p.Calls, "CreateRefund")
-	return payments.RefundResult{RefundID: 1, Status: "queued"}, nil
+	p.Refunded = append(p.Refunded, in)
+	if p.RefundErr != nil {
+		return payments.RefundResult{}, p.RefundErr
+	}
+	out := p.RefundResult
+	if out.RefundID == 0 && out.Status == "" {
+		// A distinct id per call, so multiple refunds in one test never collide
+		// on the real schema's UNIQUE(paystack_refund_id).
+		out = payments.RefundResult{RefundID: int64(len(p.Refunded)), Status: "pending"}
+	}
+	now := time.Now
+	if p.Now != nil {
+		now = p.Now
+	}
+	p.Refunds = append(p.Refunds, payments.Refund{
+		ID: out.RefundID, TransactionReference: in.TransactionReference, AmountPesewas: in.AmountPesewas,
+		Currency: "GHS", Status: out.Status, CreatedAt: now(),
+	})
+	if p.RefundErrAfterRecord != nil {
+		return payments.RefundResult{}, p.RefundErrAfterRecord
+	}
+	return out, nil
+}
+
+// FetchRefund implements payments.Provider.
+func (p *Provider) FetchRefund(ctx context.Context, id int64) (payments.Refund, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Calls = append(p.Calls, "FetchRefund")
+	if p.FetchErr != nil {
+		return payments.Refund{}, p.FetchErr
+	}
+	for _, r := range p.Refunds {
+		if r.ID == id {
+			return r, nil
+		}
+	}
+	return payments.Refund{}, payments.ErrRejected
+}
+
+// ListRefunds implements payments.Provider: one page holding every refund
+// created on or after in.From.
+func (p *Provider) ListRefunds(ctx context.Context, in payments.ListRefundsInput) ([]payments.Refund, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Calls = append(p.Calls, "ListRefunds")
+	if p.ListErr != nil {
+		return nil, p.ListErr
+	}
+	if in.Page > 1 {
+		return nil, nil
+	}
+	var out []payments.Refund
+	for _, r := range p.Refunds {
+		if !r.CreatedAt.Before(in.From) {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+// SetRefundStatus changes a stored refund's status, as Paystack settling it
+// would.
+func (p *Provider) SetRefundStatus(id int64, status string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for i := range p.Refunds {
+		if p.Refunds[i].ID == id {
+			p.Refunds[i].Status = status
+		}
+	}
 }
 
 // ResolveAccount implements payments.Provider.

@@ -195,7 +195,8 @@ func TestPaystackClient_CreateRefund(t *testing.T) {
 	if f.got.Method != http.MethodPost || f.got.Path != "/refund" {
 		t.Errorf("request = %s %s", f.got.Method, f.got.Path)
 	}
-	if f.got.Body["reference"] != "FMS-XYZ" || f.got.Body["amount"] != float64(5000) {
+	// Paystack's Create Refund names the transaction "transaction" (ADR-0027).
+	if f.got.Body["transaction"] != "FMS-XYZ" || f.got.Body["amount"] != float64(5000) {
 		t.Errorf("body = %v", f.got.Body)
 	}
 	if got.RefundID != 900 || got.Status != "queued" {
@@ -392,5 +393,86 @@ func TestNewPaystackClient_Defaults(t *testing.T) {
 	trailing := payments.NewPaystackClient("sk_test_secret", "http://127.0.0.1:1/")
 	if trailing.BaseURL() != "http://127.0.0.1:1" {
 		t.Errorf("BaseURL = %q, want the trailing slash trimmed", trailing.BaseURL())
+	}
+}
+
+func TestPaystackClient_FetchRefund(t *testing.T) {
+	f := newFake(t, `{"id":900,"transaction_reference":"FMS-XYZ","amount":5000,"currency":"GHS","status":"processed","createdAt":"2026-09-27T10:00:00.000Z"}`)
+	srv := f.start()
+	got, err := f.client(srv.URL).FetchRefund(context.Background(), 900)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.got.Method != http.MethodGet || f.got.Path != "/refund/900" {
+		t.Errorf("request = %s %s", f.got.Method, f.got.Path)
+	}
+	if got.ID != 900 || got.TransactionReference != "FMS-XYZ" || got.AmountPesewas != 5000 ||
+		got.Currency != "GHS" || got.Status != "processed" || got.CreatedAt.IsZero() {
+		t.Errorf("refund = %+v", got)
+	}
+}
+
+func TestPaystackClient_ListRefunds(t *testing.T) {
+	f := newFake(t, `[{"id":1,"transaction_reference":"FMS-A","amount":100,"currency":"GHS","status":"pending","createdAt":"2026-09-27T10:00:00.000Z"},
+	                  {"id":2,"transaction_reference":"FMS-B","amount":200,"currency":"GHS","status":"processed","createdAt":"2026-09-27T11:00:00.000Z"}]`)
+	srv := f.start()
+	from := time.Date(2026, 9, 27, 9, 0, 0, 0, time.UTC)
+	got, err := f.client(srv.URL).ListRefunds(context.Background(), payments.ListRefundsInput{From: from, Page: 2, PerPage: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.got.Method != http.MethodGet || f.got.Path != "/refund" {
+		t.Errorf("request = %s %s", f.got.Method, f.got.Path)
+	}
+	for _, want := range []string{"from=2026-09-27T09%3A00%3A00Z", "page=2", "perPage=100"} {
+		if !strings.Contains(f.got.Query, want) {
+			t.Errorf("query %q lacks %q", f.got.Query, want)
+		}
+	}
+	if len(got) != 2 || got[1].ID != 2 || got[1].TransactionReference != "FMS-B" || got[1].AmountPesewas != 200 {
+		t.Errorf("refunds = %+v", got)
+	}
+}
+
+// A definite rejection proves nothing happened; everything else is ambiguous
+// (ADR-0027). Refunds retry only after proving nothing happened.
+func TestIsDefiniteRejection(t *testing.T) {
+	cases := []struct {
+		name     string
+		status   int
+		envelope string
+		want     bool
+	}{
+		{"status false", http.StatusOK, `{"status":false,"message":"Transaction has been fully reversed"}`, true},
+		{"400", http.StatusBadRequest, `{"status":false,"message":"Invalid transaction"}`, true},
+		{"404", http.StatusNotFound, `{"status":false,"message":"not found"}`, true},
+		{"408 is ambiguous", http.StatusRequestTimeout, `{}`, false},
+		{"429 is ambiguous", http.StatusTooManyRequests, `{}`, false},
+		{"500 is ambiguous", http.StatusInternalServerError, `oops`, false},
+		{"502 is ambiguous", http.StatusBadGateway, `<html>`, false},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFake(t, `{}`)
+			f.status, f.envelope = tt.status, tt.envelope
+			srv := f.start()
+			_, err := f.client(srv.URL).CreateRefund(context.Background(), payments.RefundInput{TransactionReference: "FMS-X"})
+			if err == nil {
+				t.Fatal("want an error")
+			}
+			if got := payments.IsDefiniteRejection(err); got != tt.want {
+				t.Errorf("IsDefiniteRejection(%v) = %v, want %v", err, got, tt.want)
+			}
+			if tt.status >= 300 && !errors.Is(err, payments.ErrProviderUnavailable) {
+				t.Errorf("non-2xx must still wrap ErrProviderUnavailable for existing callers: %v", err)
+			}
+		})
+	}
+	if payments.IsDefiniteRejection(context.DeadlineExceeded) {
+		t.Error("a timeout must be ambiguous")
+	}
+	dead := payments.NewPaystackClient("sk_test_secret", "http://127.0.0.1:1")
+	if _, err := dead.CreateRefund(context.Background(), payments.RefundInput{TransactionReference: "FMS-X"}); err == nil || payments.IsDefiniteRejection(err) {
+		t.Errorf("a transport error must be ambiguous: %v", err)
 	}
 }

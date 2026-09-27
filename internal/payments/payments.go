@@ -33,6 +33,13 @@ const (
 const (
 	EventChargeSuccess = "charge.success"
 	EventChargeFailed  = "charge.failed"
+	// Refund events (Phase 17a). orders.Service supplies the handlers;
+	// cmd/api registers them, because payments owns the event dispatch but
+	// not the escrow domain.
+	EventRefundProcessed  = "refund.processed"
+	EventRefundFailed     = "refund.failed"
+	EventRefundPending    = "refund.pending"
+	EventRefundProcessing = "refund.processing"
 )
 
 // Webhook outcomes recorded in webhook_events.outcome. A rejection is a
@@ -45,6 +52,9 @@ const (
 	OutcomeUnknownReference = "rejected:unknown_reference"
 	OutcomeAmountMismatch   = "rejected:amount_mismatch"
 	OutcomeCurrencyMismatch = "rejected:currency_mismatch"
+	// OutcomeExceedsBase: a refund settlement would take an order's refunds
+	// above what the buyer paid for it (Phase 17a).
+	OutcomeExceedsBase = "rejected:exceeds_base"
 )
 
 // ErrNotFound is returned for a reference that does not exist, or belongs to

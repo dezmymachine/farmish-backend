@@ -74,6 +74,14 @@ func (s *Service) RegisterPurpose(purpose string, h PurposeHandler) {
 	s.purposes[purpose] = h
 }
 
+// RegisterEvent adds or replaces an event handler after construction. cmd/api
+// uses it for the refund webhooks (Phase 17a), whose handlers live on
+// orders.Service and so cannot be registered until that service exists; call
+// it before the server or workers start.
+func (s *Service) RegisterEvent(event string, h EventHandler) {
+	s.events[event] = h
+}
+
 // WithJobClient makes the service enqueue payments.succeeded when a payment
 // settles. Without it, a successful payment has no follow-up work queued.
 func WithJobClient(client *jobs.Client) Option {
@@ -261,17 +269,25 @@ func (s *Service) HandleWebhook(ctx context.Context, raw []byte) error {
 		return fmt.Errorf("%w: no event field", ErrMalformedEvent)
 	}
 	var identity struct {
-		ID json.RawMessage `json:"id"`
+		ID              json.RawMessage `json:"id"`
+		RefundReference string          `json:"refund_reference"`
 	}
 	if err := json.Unmarshal(event.Data, &identity); err != nil {
 		return fmt.Errorf("%w: parse data: %w", ErrMalformedEvent, err)
 	}
-	if len(identity.ID) == 0 || string(identity.ID) == "null" {
-		return fmt.Errorf("%w: data has no id", ErrMalformedEvent)
-	}
 	// The key is the provider's own id, so the same event delivered twice (or
 	// replayed by Paystack, or synthesised by the verify fallback) collides.
-	eventKey := event.Event + ":" + string(identity.ID)
+	// Refund webhooks may carry no top-level id; their refund_reference is the
+	// per-refund identity instead (ADR-0027).
+	var eventKey string
+	switch {
+	case len(identity.ID) != 0 && string(identity.ID) != "null":
+		eventKey = event.Event + ":" + string(identity.ID)
+	case identity.RefundReference != "":
+		eventKey = event.Event + ":ref:" + identity.RefundReference
+	default:
+		return fmt.Errorf("%w: data has no id", ErrMalformedEvent)
+	}
 
 	return database.InTx(ctx, s.pool, func(tx pgx.Tx) error {
 		row, err := db.New(tx).InsertWebhookEvent(ctx, db.InsertWebhookEventParams{

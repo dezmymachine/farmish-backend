@@ -16,6 +16,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -27,6 +28,8 @@ type Provider interface {
 	InitializeTransaction(ctx context.Context, in InitializeInput) (InitializeResult, error)
 	VerifyTransaction(ctx context.Context, reference string) (Transaction, error)
 	CreateRefund(ctx context.Context, in RefundInput) (RefundResult, error)
+	FetchRefund(ctx context.Context, id int64) (Refund, error)
+	ListRefunds(ctx context.Context, in ListRefundsInput) ([]Refund, error)
 	ResolveAccount(ctx context.Context, in ResolveInput) (Account, error)
 	ListBanks(ctx context.Context, in ListBanksInput) ([]Bank, error)
 	CreateTransferRecipient(ctx context.Context, in TransferRecipientInput) (TransferRecipient, error)
@@ -50,6 +53,30 @@ var ErrProviderUnavailable = errors.New("paystack: unavailable")
 // ErrRejected means Paystack answered, but with status:false. The message is
 // Paystack's own and is safe to log (it never contains the secret).
 var ErrRejected = errors.New("paystack: request rejected")
+
+// StatusError carries the HTTP status of a non-2xx answer. It is wrapped
+// inside ErrProviderUnavailable errors, so existing callers are unaffected,
+// and lets callers that must tell a definite rejection from a transient
+// failure (refunds, ADR-0027) inspect the code with errors.As.
+type StatusError struct{ Code int }
+
+func (e *StatusError) Error() string { return fmt.Sprintf("http %d", e.Code) }
+
+// IsDefiniteRejection reports whether err proves Paystack received the request
+// and refused it, so nothing happened and retrying the same request cannot
+// help: status:false, or a 4xx other than 408/429. Anything else (a transport
+// error, a timeout, a 5xx, an unreadable body) is ambiguous: the request may
+// have taken effect.
+func IsDefiniteRejection(err error) bool {
+	if errors.Is(err, ErrRejected) {
+		return true
+	}
+	var se *StatusError
+	if errors.As(err, &se) {
+		return se.Code >= 400 && se.Code < 500 && se.Code != http.StatusRequestTimeout && se.Code != http.StatusTooManyRequests
+	}
+	return false
+}
 
 // InitializeInput starts a charge.
 type InitializeInput struct {
@@ -106,6 +133,28 @@ type RefundInput struct {
 type RefundResult struct {
 	RefundID int64
 	Status   string
+}
+
+// Refund is one refund as Paystack reports it (Fetch/List Refund).
+type Refund struct {
+	ID                   int64
+	TransactionReference string
+	AmountPesewas        int64
+	Currency             string
+	// Status is Paystack's refund status: pending, processing, processed,
+	// failed (and possibly needs-attention). Only processed and failed are
+	// final.
+	Status    string
+	CreatedAt time.Time
+}
+
+// ListRefundsInput pages through refunds created on or after From. Paystack's
+// List Refunds has no transaction filter (its OpenAPI spec documents only
+// perPage, page, from, to), so callers filter by reference themselves.
+type ListRefundsInput struct {
+	From    time.Time
+	Page    int
+	PerPage int
 }
 
 // ResolveInput looks up a payout account. Used by Phase 18a.
@@ -289,7 +338,9 @@ func (p *PaystackClient) CreateRefund(ctx context.Context, in RefundInput) (Refu
 		Status string `json:"status"`
 		Amount int64  `json:"amount"`
 	}
-	body := map[string]any{"reference": in.TransactionReference}
+	// Paystack's Create Refund names the transaction "transaction" (a
+	// reference or id), per its OpenAPI spec (ADR-0027).
+	body := map[string]any{"transaction": in.TransactionReference}
 	if in.AmountPesewas > 0 {
 		body["amount"] = in.AmountPesewas
 	}
@@ -297,6 +348,57 @@ func (p *PaystackClient) CreateRefund(ctx context.Context, in RefundInput) (Refu
 		return RefundResult{}, err
 	}
 	return RefundResult{RefundID: data.ID, Status: data.Status}, nil
+}
+
+// refundData is Paystack's refund object, shared by fetch and list.
+type refundData struct {
+	ID                   int64  `json:"id"`
+	TransactionReference string `json:"transaction_reference"`
+	Amount               int64  `json:"amount"`
+	Currency             string `json:"currency"`
+	Status               string `json:"status"`
+	CreatedAt            string `json:"createdAt"`
+}
+
+func (d refundData) toRefund() Refund {
+	created, _ := time.Parse(time.RFC3339, d.CreatedAt) // zero if absent or odd
+	return Refund{
+		ID: d.ID, TransactionReference: d.TransactionReference, AmountPesewas: d.Amount,
+		Currency: d.Currency, Status: d.Status, CreatedAt: created,
+	}
+}
+
+// FetchRefund reads one refund's current state. Phase 17a reconciliation.
+func (p *PaystackClient) FetchRefund(ctx context.Context, id int64) (Refund, error) {
+	var data refundData
+	if err := p.call(ctx, http.MethodGet, "/refund/"+strconv.FormatInt(id, 10), nil, &data); err != nil {
+		return Refund{}, err
+	}
+	return data.toRefund(), nil
+}
+
+// ListRefunds returns one page of refunds created on or after in.From.
+// Phase 17a reconciliation.
+func (p *PaystackClient) ListRefunds(ctx context.Context, in ListRefundsInput) ([]Refund, error) {
+	q := url.Values{}
+	if !in.From.IsZero() {
+		q.Set("from", in.From.UTC().Format(time.RFC3339))
+	}
+	if in.Page > 0 {
+		q.Set("page", strconv.Itoa(in.Page))
+	}
+	if in.PerPage > 0 {
+		q.Set("perPage", strconv.Itoa(in.PerPage))
+	}
+	var data []refundData
+	if err := p.call(ctx, http.MethodGet, "/refund?"+q.Encode(), nil, &data); err != nil {
+		return nil, err
+	}
+	out := make([]Refund, len(data))
+	for i, d := range data {
+		out[i] = d.toRefund()
+	}
+	return out, nil
 }
 
 // ResolveAccount validates a payout account and returns its holder's name.
@@ -437,8 +539,8 @@ func (p *PaystackClient) call(ctx context.Context, method, path string, body, ou
 	}
 	unmarshalErr := json.Unmarshal(raw, &envelope)
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return fmt.Errorf("%w: %s %s: http %d: %s",
-			ErrProviderUnavailable, method, path, resp.StatusCode, paystackMessage(envelope.Message, raw))
+		return fmt.Errorf("%w: %s %s: %w: %s",
+			ErrProviderUnavailable, method, path, &StatusError{Code: resp.StatusCode}, paystackMessage(envelope.Message, raw))
 	}
 	if unmarshalErr != nil {
 		return fmt.Errorf("paystack: %s %s: unreadable response: %w", method, path, unmarshalErr)
