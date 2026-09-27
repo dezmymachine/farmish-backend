@@ -304,7 +304,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
   - the end-to-end run goes completed order → payable → payout → transfer.success
   - a failed transfer restores the balance
   - no payout happens during cooldown or below the minimum
-- [ ] Phase 18b
+- [x] Phase 18b
 
 ### Phase 19: Messaging · [spec](docs/phases/phase-19.md)
 - **Depends on:** 11, 16
@@ -375,6 +375,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-27 | Phase 17a: refund lifecycle with Paystack reconciliation: definite rejections fail; ambiguous failures stay pending and are reconciled (resend only after 15 min with nothing at Paystack) so a lost response can never refund twice; webhook fallback match only on a single candidate; settlement checks amount, currency and base; Create Refund field fixed to `transaction`; refund webhooks keyed by `refund_reference` when they have no id | ADR-0027 |
 | 2026-09-27 | Phase 17b: dispute resolution through `orders.Transition` (admin actor); release defers on in-flight refunds with a 10-minute River snooze; admin retries enqueue without job uniqueness (a unique insert would be swallowed by the first attempt's job row); daily 03:00 Africa/Accra reconciliation via a custom `jobs.DailyAt` River schedule (no cron helper in River v0.47); `DisputeAdmin` embeds the seller-shaped order, `AdminOrderDetail` wraps it with contacts plus ledger entries | ADR-0028 |
 | 2026-09-27 | Phase 18a: step-up-gated payout accounts resolved and name-checked via Paystack, encrypted at rest, masked in every response, 48h cooldown on change, admin approve for needs_review, hourly in-memory bank cache; any resolve error is 422, provider outages are 502 | ADR-0029 |
+| 2026-09-27 | Phase 18b: batched payout execution with verify-before-retry sends, late-success-to-admin, fresh-row admin retries, transfer-reference webhook keying scoped to transfer events, GHS text formatting without floats | ADR-0030 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
@@ -401,6 +402,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-27 | 17a | Phase 17a commits (after review) | `make ci` green. Escrow release posts the held remainder (DOMAIN §4.1) and only then marks released; refunds created in the transition tx (over-base refused), driven by a snoozing job that settles via Paystack even without webhooks. Review blockers fixed and each proven by a test that fails when the bug is re-introduced: no double refund on timeout, no mis-settled refund on multi-seller checkouts, amount/currency/base checked. Also fixed the 13a Create Refund field (`reference` → `transaction`). Refund webhooks tested through the real signed endpoint. See ADR-0027 and `docs/reviews/phase-17a.md` |
 | 2026-09-27 | 17b | Phase 17b commits | `make ci` green. Dispute resolution for the three outcomes through `orders.Transition` with audit and dual SMS, failed-refund admin retry, admin order view with contacts and ledger entries, and the daily `ledger.reconcile` detector. Full CI caught two real issues before merge: the retry enqueue skipped as a River-unique duplicate (fixed to non-unique, pinned by a row-count test) and the validation endpoint test tripping the sensitive rate limit. Manual QA against the running API plus emulator verified 401/403/200, 404s and the 400 validation shape. See ADR-0028 and `docs/reviews/phase-17b.md` |
 | 2026-09-27 | 18a | Phase 18a commits | `make ci` green. Step-up-gated payout accounts (MoMo/GhIPSS) with Paystack resolve, token-overlap name check, AES-256-GCM storage, masked responses, 48h change cooldown, admin approve and a cached banks list. CI caught nothing new; manual QA against the running API plus emulator verified step-up 401 live, 403/404/422/502 shapes and zero PII in logs. The shared dev DB needed `migrate-up` to 15 before the new endpoints stopped 500ing. See ADR-0029 and `docs/reviews/phase-18a.md` |
+| 2026-09-27 | 18b | Phase 18b commits | `make ci` green. Daily batched payouts from `seller_payable` via Paystack Transfers: per-seller execute with advisory lock and `payout_initiated` posting, send with verify-before-retry, webhook settlement with late-success-to-admin, daily stuck reconciliation, seller balance/history and admin list/retry. Full CI caught an over-broad webhook keying change (scoped to transfer events, ADR-0030). Manual QA proved balance/history/retry shapes plus the signed webhook accept and `rejected:unknown_reference` recording. See ADR-0030 and `docs/reviews/phase-18b.md` |
 
 ## 10. Backlog (not scheduled)
 - Document the River test-fixture full-registry rule in `docs/ENGINEERING_GUIDE.md`: a `Work:true` test client whose registry lacks a worker kind its flow enqueues stalls the available job (seen with `notify.sms` on River v0.47.0). Found in Phase 16
@@ -415,6 +417,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 - Redis-backed caching (via `internal/redisx`) when a phase needs it
 - River UI for admins (needs a browser session/cookie auth flow; `RequireAuth` + `RequireAdmin` already exist)
 - Seller reserve/holdback against chargebacks
+- `ledger.CheckoutPaid` with an actual Paystack fee of exactly 0 emits a zero `paystack_fees` leg that `Post` rejects; settlement would stall if Paystack ever reports a zero fee. Found in Phase 18b fixture work
 
 ## 11. Open items / risks
 - **Regulatory:** holding customer funds (escrow) in Ghana may fall under the Bank of Ghana Payment Systems and Services Act, 2019 (Act 987). Get legal advice before Phase 22 go-live. Fallback: Paystack split payments with delayed settlement.
