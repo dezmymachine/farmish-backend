@@ -207,9 +207,6 @@ func (p *Provider) ListBanks(ctx context.Context, in payments.ListBanksInput) ([
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.Calls = append(p.Calls, "ListBanks")
-	if p.ListErr != nil {
-		return nil, p.ListErr
-	}
 	if p.BanksErr != nil {
 		return nil, p.BanksErr
 	}

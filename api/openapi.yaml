@@ -478,6 +478,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+        "502":
+          $ref: "#/components/responses/PaymentProviderError"
   /v1/seller/payout-account:
     get:
       tags: [payouts]

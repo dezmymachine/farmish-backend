@@ -40,6 +40,11 @@ func (s Server) ListPayoutBanks(ctx context.Context, req api.ListPayoutBanksRequ
 		return api.ListPayoutBanks400JSONResponse{
 			BadRequestJSONResponse: api.BadRequestJSONResponse(validationFailed(verr)),
 		}, nil
+	case errors.Is(err, payments.ErrProviderUnavailable), errors.Is(err, payments.ErrRejected):
+		return api.ListPayoutBanks502JSONResponse{
+			PaymentProviderErrorJSONResponse: api.PaymentProviderErrorJSONResponse(
+				apierror.New(apierror.CodePaymentProvider, "The payment provider is unavailable; try again")),
+		}, nil
 	default:
 		return nil, err
 	}

@@ -464,3 +464,18 @@ func TestPayoutAccount_NeverUnmasked(t *testing.T) {
 		}
 	}
 }
+
+// TestBanks_ProviderDown proves a Paystack outage is a 502, not a 500.
+func TestBanks_ProviderDown(t *testing.T) {
+	f := newPayoutFixture(t)
+	f.setIdentity("tok", "payout-bankdown", "payout-bankdown@farmish.test", time.Now())
+	f.provider.BanksErr = fmt.Errorf("%w: connection refused", payments.ErrProviderUnavailable)
+
+	req := jsonRequest(http.MethodGet, "/v1/payouts/banks?type=mobile_money", "tok", "")
+	w := serve(t, f.router, req)
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("banks down = %d %s, want 502", w.Code, w.Body.String())
+	}
+	assertErrorEnvelope(t, w.Body.Bytes(), apierror.CodePaymentProvider)
+	assertContract(t, req, w)
+}
