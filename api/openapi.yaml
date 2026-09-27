@@ -538,6 +538,117 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "502":
           $ref: "#/components/responses/PaymentProviderError"
+  /v1/seller/balance:
+    get:
+      tags: [payouts]
+      operationId: getMyBalance
+      summary: Get my money split
+      description: |
+        The caller's available payable balance, the remainder their orders
+        still hold in escrow, the amount in flight to them and the total
+        paid out. All non-negative display values.
+      responses:
+        "200":
+          description: The money split.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SellerBalance"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/seller/payouts:
+    get:
+      tags: [payouts]
+      operationId: listMyPayouts
+      summary: List my payouts
+      description: The caller's payouts, newest first.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: A page of payouts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayoutList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/payouts:
+    get:
+      tags: [payouts]
+      operationId: listAdminPayouts
+      summary: List payouts
+      description: Every payout, newest first, with optional status and seller filters.
+      x-farmish-role: admin
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/PayoutStatus"
+        - name: sellerId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: A page of payouts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayoutList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/payouts/{id}/retry:
+    post:
+      tags: [payouts]
+      operationId: retryPayout
+      summary: Retry a failed payout
+      description: |
+        Queues a fresh payout with a new reference for the seller's
+        re-credited balance. Only failed or reversed payouts retry; anything
+        else, or nothing payable, is a 409.
+      x-farmish-role: admin
+      x-farmish-rate-limit: sensitive
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The fresh payout.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payout"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /v1/admin/payout-accounts/{sellerId}/approve:
     post:
       tags: [payouts]
@@ -3675,6 +3786,63 @@ components:
         updatedAt:
           type: string
           format: date-time
+    PayoutStatus:
+      type: string
+      description: A payout's lifecycle status.
+      enum: [queued, pending, success, failed, reversed]
+    Payout:
+      type: object
+      description: One seller payout. Never carries account numbers.
+      required: [id, sellerId, amount, status, reference, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        sellerId:
+          type: string
+          format: uuid
+        amount:
+          $ref: "#/components/schemas/Money"
+        status:
+          $ref: "#/components/schemas/PayoutStatus"
+        reference:
+          type: string
+          description: The unique PO- reference sent to Paystack.
+        failureReason:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+    PayoutList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Payout"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
+    SellerBalance:
+      type: object
+      description: A seller's money split, all non-negative display values.
+      required: [available, inEscrow, inFlight, paidOut]
+      properties:
+        available:
+          $ref: "#/components/schemas/Money"
+          description: The payable balance awaiting the next payout run.
+        inEscrow:
+          $ref: "#/components/schemas/Money"
+          description: What the seller's orders still hold in escrow.
+        inFlight:
+          $ref: "#/components/schemas/Money"
+          description: Queued and pending payouts on their way.
+        paidOut:
+          $ref: "#/components/schemas/Money"
+          description: The total successfully paid out.
     PayoutAccountType:
       type: string
       description: A payout account type.

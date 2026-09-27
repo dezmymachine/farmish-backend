@@ -410,3 +410,19 @@ func TestDailyAt_Next(t *testing.T) {
 		t.Errorf("on the hour: next = %v, want 03:00 the next day", next)
 	}
 }
+
+// TestSchedule_Next10amAccra proves the payout sweep's daily schedule: just
+// before 10:00 it fires the same day, just after it waits until tomorrow.
+func TestSchedule_Next10amAccra(t *testing.T) {
+	accra := jobs.AccraLocation()
+	schedule := jobs.DailyAt{Hour: 10, Min: 0, Loc: accra}
+
+	before := time.Date(2026, 9, 27, 9, 59, 0, 0, accra)
+	if next := schedule.Next(before); next != time.Date(2026, 9, 27, 10, 0, 0, 0, accra) {
+		t.Errorf("before 10:00: next = %v, want 10:00 the same day", next)
+	}
+	after := time.Date(2026, 9, 27, 10, 0, 1, 0, accra)
+	if next := schedule.Next(after); next != time.Date(2026, 9, 28, 10, 0, 0, 0, accra) {
+		t.Errorf("after 10:00: next = %v, want 10:00 the next day", next)
+	}
+}

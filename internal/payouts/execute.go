@@ -15,6 +15,7 @@ import (
 
 	"github.com/dezmymachine/farmish-backend/internal/db"
 	"github.com/dezmymachine/farmish-backend/internal/ledger"
+	"github.com/dezmymachine/farmish-backend/internal/validation"
 )
 
 // Payout statuses stored in payouts.status.
@@ -157,7 +158,9 @@ func (s *Service) AdminList(ctx context.Context, status string, sellerID *uuid.U
 	var statusFilter *string
 	if status != "" {
 		if !validPayoutStatus(status) {
-			return nil, 0, fmt.Errorf("unknown payout status %q", status)
+			var invalid validation.Error
+			invalid.Add("status", "must be queued, pending, success, failed or reversed")
+			return nil, 0, invalid.OrNil()
 		}
 		statusFilter = &status
 	}

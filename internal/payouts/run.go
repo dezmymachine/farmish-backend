@@ -149,6 +149,7 @@ func (s *Service) SendPayout(ctx context.Context, payoutID uuid.UUID) (time.Dura
 	}
 	var recipientCode, reference string
 	var amount int64
+	var pending bool
 	err := database.InTx(ctx, s.pool, func(tx pgx.Tx) error {
 		payout, err := db.New(tx).GetPayoutForUpdate(ctx, payoutID)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -157,19 +158,27 @@ func (s *Service) SendPayout(ctx context.Context, payoutID uuid.UUID) (time.Dura
 		if err != nil {
 			return fmt.Errorf("lock payout: %w", err)
 		}
-		if payout.Status != PayoutQueued {
+		switch payout.Status {
+		case PayoutQueued:
+			recipientCode, reference, amount = payout.RecipientCode, payout.Reference, payout.AmountPesewas
+		case PayoutPending:
+			// The webhook owns settlement, but a missed webhook must not
+			// stall the payout until the daily check: reconcile on every
+			// poll, like the refund job does.
+			pending = true
+		default:
 			return nil
 		}
-		recipientCode, reference, amount = payout.RecipientCode, payout.Reference, payout.AmountPesewas
 		return nil
 	})
 	if err != nil {
 		return 0, err
 	}
-	if reference == "" {
-		return 0, nil
+	log := s.logger().With(slog.String("payout_id", payoutID.String()))
+	if pending {
+		return s.reconcileSend(ctx, payoutID, log)
 	}
-	log := s.logger().With(slog.String("payout_id", payoutID.String()), slog.String("reference", reference))
+	log = log.With(slog.String("reference", reference))
 	result, callErr := s.paystack.InitiateTransfer(ctx, payments.TransferInput{
 		AmountPesewas: amount, RecipientCode: recipientCode, Reference: reference, Reason: "Farmish payout",
 	})

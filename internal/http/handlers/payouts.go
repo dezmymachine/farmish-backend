@@ -20,6 +20,10 @@ type PayoutStore interface {
 	Get(ctx context.Context, sellerID uuid.UUID) (payouts.Account, error)
 	SetAccount(ctx context.Context, sellerID uuid.UUID, displayName string, in payouts.Input) (payouts.Account, error)
 	Approve(ctx context.Context, adminID, sellerID uuid.UUID) (payouts.Account, error)
+	Balance(ctx context.Context, sellerID uuid.UUID) (payouts.Balance, error)
+	History(ctx context.Context, sellerID uuid.UUID, limit, offset int32) ([]payouts.Payout, int64, error)
+	AdminList(ctx context.Context, status string, sellerID *uuid.UUID, limit, offset int32) ([]payouts.Payout, int64, error)
+	RetryPayout(ctx context.Context, adminID, payoutID uuid.UUID) (payouts.Payout, error)
 }
 
 // ListPayoutBanks returns Paystack's banks for one account type, or both
