@@ -40,6 +40,11 @@ const (
 	EventRefundFailed     = "refund.failed"
 	EventRefundPending    = "refund.pending"
 	EventRefundProcessing = "refund.processing"
+	// Transfer events (Phase 18b). payouts.Service supplies the handlers;
+	// cmd/api registers them, for the same reason as the refund events.
+	EventTransferSuccess  = "transfer.success"
+	EventTransferFailed   = "transfer.failed"
+	EventTransferReversed = "transfer.reversed"
 )
 
 // Webhook outcomes recorded in webhook_events.outcome. A rejection is a

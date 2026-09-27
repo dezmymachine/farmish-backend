@@ -271,6 +271,7 @@ func (s *Service) HandleWebhook(ctx context.Context, raw []byte) error {
 	var identity struct {
 		ID              json.RawMessage `json:"id"`
 		RefundReference string          `json:"refund_reference"`
+		Reference       string          `json:"reference"`
 	}
 	if err := json.Unmarshal(event.Data, &identity); err != nil {
 		return fmt.Errorf("%w: parse data: %w", ErrMalformedEvent, err)
@@ -278,13 +279,16 @@ func (s *Service) HandleWebhook(ctx context.Context, raw []byte) error {
 	// The key is the provider's own id, so the same event delivered twice (or
 	// replayed by Paystack, or synthesised by the verify fallback) collides.
 	// Refund webhooks may carry no top-level id; their refund_reference is the
-	// per-refund identity instead (ADR-0027).
+	// per-refund identity instead (ADR-0027). Transfer webhooks key on our
+	// unique reference, which Paystack echoes back (Phase 18b).
 	var eventKey string
 	switch {
 	case len(identity.ID) != 0 && string(identity.ID) != "null":
 		eventKey = event.Event + ":" + string(identity.ID)
 	case identity.RefundReference != "":
 		eventKey = event.Event + ":ref:" + identity.RefundReference
+	case identity.Reference != "":
+		eventKey = event.Event + ":ref:" + identity.Reference
 	default:
 		return fmt.Errorf("%w: data has no id", ErrMalformedEvent)
 	}

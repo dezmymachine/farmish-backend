@@ -301,6 +301,21 @@ type Payment struct {
 	Metadata             []byte
 }
 
+type Payout struct {
+	ID            uuid.UUID
+	SellerID      uuid.UUID
+	AmountPesewas int64
+	Reference     string
+	RecipientCode string
+	TransferCode  *string
+	Status        string
+	FailureReason *string
+	SentAt        *time.Time
+	CompletedAt   *time.Time
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
 type PromotionConfig struct {
 	Tier         string
 	Name         string

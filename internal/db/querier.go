@@ -17,15 +17,18 @@ type Querier interface {
 	// Marks the object attached, but only while it is still pending.
 	AttachMediaObject(ctx context.Context, id uuid.UUID) (MediaObject, error)
 	CompleteWebhookEvent(ctx context.Context, arg CompleteWebhookEventParams) error
+	CountAdminPayouts(ctx context.Context, arg CountAdminPayoutsParams) (int64, error)
 	// A listing's category must be a leaf (or a parent with no children).
 	CountCategoryChildren(ctx context.Context, parentID pgtype.UUID) (int64, error)
 	CountDisputes(ctx context.Context, status *string) (int64, error)
+	CountInFlightPayoutsForSeller(ctx context.Context, sellerID uuid.UUID) (int64, error)
 	// Refunds that may still move money for an order. The escrow release waits
 	// while any exists (Phase 17b partial resolutions).
 	CountInFlightRefundsForOrder(ctx context.Context, orderID uuid.UUID) (int64, error)
 	CountListingImages(ctx context.Context, listingID uuid.UUID) (int64, error)
 	CountOrdersByBuyer(ctx context.Context, arg CountOrdersByBuyerParams) (int64, error)
 	CountOrdersBySeller(ctx context.Context, arg CountOrdersBySellerParams) (int64, error)
+	CountPayoutsBySeller(ctx context.Context, sellerID uuid.UUID) (int64, error)
 	CountSearchListings(ctx context.Context, arg CountSearchListingsParams) (int64, error)
 	CountSellerListings(ctx context.Context, arg CountSellerListingsParams) (int64, error)
 	CountSellerProfilesByStatus(ctx context.Context, verificationStatus string) (int64, error)
@@ -90,6 +93,10 @@ type Querier interface {
 	GetPaymentsByPurposeRef(ctx context.Context, arg GetPaymentsByPurposeRefParams) ([]Payment, error)
 	// The seller's current payout account, if they set one.
 	GetPayoutAccountBySeller(ctx context.Context, sellerID uuid.UUID) (SellerPayoutAccount, error)
+	GetPayoutByID(ctx context.Context, id uuid.UUID) (Payout, error)
+	GetPayoutForUpdate(ctx context.Context, id uuid.UUID) (Payout, error)
+	// Matches a transfer webhook to its payout by Paystack's reference.
+	GetPayoutForUpdateByReference(ctx context.Context, reference string) (Payout, error)
 	GetPromotionConfig(ctx context.Context, tier string) (PromotionConfig, error)
 	// One listing with its category, its active promotion and the seller's safe
 	// profile fields. Never selects contact or identity data. The caller decides
@@ -138,6 +145,10 @@ type Querier interface {
 	// A pending payment, before Paystack is called. The gross-up is computed by
 	// the caller from internal/money and the CHECK on charge_pesewas enforces it.
 	InsertPayment(ctx context.Context, arg InsertPaymentParams) (Payment, error)
+	// Records a queued payout for the seller's full payable balance, inside the
+	// execution's own transaction. Returns no row when the seller already has a
+	// payout in flight: the caller treats that as "already running".
+	InsertPayout(ctx context.Context, arg InsertPayoutParams) (Payout, error)
 	// Records money owed for an order, inside the transition's own transaction
 	// (the side effect of a cancellation, or the checkout expiry recovery path).
 	// Returns no row when a full refund already exists for this order: the
@@ -152,6 +163,8 @@ type Querier interface {
 	ListActiveCategories(ctx context.Context) ([]Category, error)
 	// The public package list, in display order.
 	ListActivePromotionConfigs(ctx context.Context) ([]PromotionConfig, error)
+	// Every payout, newest first, with optional status and seller filters.
+	ListAdminPayouts(ctx context.Context, arg ListAdminPayoutsParams) ([]Payout, error)
 	ListAttributesByCategory(ctx context.Context, categoryID uuid.UUID) ([]CategoryAttribute, error)
 	// A category filter on a parent slug must include its children (DOMAIN §9);
 	// on a child slug it returns just that child.
@@ -198,6 +211,10 @@ type Querier interface {
 	// Deterministic seller order, matching how the checkout created them.
 	ListOrdersByCheckout(ctx context.Context, checkoutID uuid.UUID) ([]Order, error)
 	ListOrdersBySeller(ctx context.Context, arg ListOrdersBySellerParams) ([]ListOrdersBySellerRow, error)
+	// Sellers whose account is verified and past its change cooldown, oldest
+	// change first so long-waiting sellers go first.
+	ListPayoutCandidates(ctx context.Context, cooldownUntil *time.Time) ([]uuid.UUID, error)
+	ListPayoutsBySeller(ctx context.Context, arg ListPayoutsBySellerParams) ([]Payout, error)
 	// Cleanup sweep: pending rows older than the cutoff, oldest first.
 	ListPendingMediaBefore(ctx context.Context, arg ListPendingMediaBeforeParams) ([]MediaObject, error)
 	// Seller-payable and promotion-credit accounts whose raw entry sum is
@@ -213,11 +230,15 @@ type Querier interface {
 	ListSellerListings(ctx context.Context, arg ListSellerListingsParams) ([]Listing, error)
 	// Admin review queue: oldest submission first.
 	ListSellerProfilesByStatus(ctx context.Context, arg ListSellerProfilesByStatusParams) ([]ListSellerProfilesByStatusRow, error)
+	// Pending payouts sent longer ago than the cutoff, for the reconciler.
+	ListStuckPendingPayouts(ctx context.Context, arg ListStuckPendingPayoutsParams) ([]Payout, error)
 	// Orders whose seller has not accepted within the timeout window, in a
 	// deterministic order. SKIP LOCKED keeps concurrent sweeps from fighting.
 	ListUnacceptedPaidOrders(ctx context.Context, arg ListUnacceptedPaidOrdersParams) ([]Order, error)
 	// Several accounts may share an email (no account linking in v1).
 	ListUsersByEmail(ctx context.Context, email *string) ([]User, error)
+	// Serialises one seller's payout execution against concurrent sweeps.
+	LockPayoutSeller(ctx context.Context, dollar_1 string) (interface{}, error)
 	// Serializes one buyer's credit balance changes for the transaction. The
 	// ledger keeps no mutable balance row to lock, so the advisory lock is the
 	// concurrency control DOMAIN §5.3.5 requires.
@@ -276,6 +297,18 @@ type Querier interface {
 	// An admin approves a needs_review account. Returns no row unless the
 	// account is waiting for review: the caller treats that as "cannot approve".
 	SetPayoutAccountVerified(ctx context.Context, arg SetPayoutAccountVerifiedParams) (SellerPayoutAccount, error)
+	// A failed or reversed transfer. Returns no row once successful: money that
+	// already left can never be failed by a later event.
+	SetPayoutFailed(ctx context.Context, arg SetPayoutFailedParams) (Payout, error)
+	// The transfer exists at Paystack: committed before anything that settles
+	// it, so a crash mid-send leaves a pending payout the reconciler finds.
+	SetPayoutPending(ctx context.Context, arg SetPayoutPendingParams) error
+	// Only from pending with no transfer at Paystack: reconciliation proved the
+	// send never took effect, so sending again cannot pay twice.
+	SetPayoutQueuedForRetry(ctx context.Context, id uuid.UUID) error
+	// Returns no row when the payout already settled: the caller treats that as
+	// a webhook replay.
+	SetPayoutSuccess(ctx context.Context, arg SetPayoutSuccessParams) (Payout, error)
 	SetRefundFailed(ctx context.Context, arg SetRefundFailedParams) error
 	SetRefundPaystackID(ctx context.Context, arg SetRefundPaystackIDParams) error
 	// The job is about to call Paystack: committed before the call, so a crash
@@ -311,6 +344,9 @@ type Querier interface {
 	// The escrow the orders say is still held: base minus refunded over every
 	// order whose escrow is not yet released or refunded away (DOMAIN §5.4).
 	SumHeldOrdersRemainder(ctx context.Context) (int64, error)
+	// What the seller's orders still hold in escrow: base minus refunded over
+	// every order whose escrow is not yet released or refunded away.
+	SumHeldRemainderBySeller(ctx context.Context, sellerID uuid.UUID) (int64, error)
 	// The account balance is derived from its entries. A code with no entries has
 	// a zero balance, so this always returns a row for an existing account.
 	SumLedgerAccountBalance(ctx context.Context, code string) (int64, error)
@@ -320,6 +356,9 @@ type Querier interface {
 	// Every refund that has or may still move money (all but failed ones). New
 	// refunds must keep this within the order's base.
 	SumOutstandingRefundsForOrder(ctx context.Context, orderID uuid.UUID) (int64, error)
+	// The seller's totals for one terminal status (success) or the in-flight
+	// pair. Callers pass the statuses they need.
+	SumPayoutsBySellerStatus(ctx context.Context, arg SumPayoutsBySellerStatusParams) (int64, error)
 	// Mirror Firebase-owned identity fields; only writes when something changed.
 	SyncUserIdentity(ctx context.Context, arg SyncUserIdentityParams) (User, error)
 	// Scoped to the category: an attribute of another category reads as missing.

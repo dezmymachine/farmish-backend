@@ -10,7 +10,48 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const countAdminPayouts = `-- name: CountAdminPayouts :one
+SELECT count(*) FROM payouts
+WHERE ($1::text IS NULL OR status = $1)
+  AND ($2::uuid IS NULL OR seller_id = $2)
+`
+
+type CountAdminPayoutsParams struct {
+	Status   *string
+	SellerID pgtype.UUID
+}
+
+func (q *Queries) CountAdminPayouts(ctx context.Context, arg CountAdminPayoutsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAdminPayouts, arg.Status, arg.SellerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countInFlightPayoutsForSeller = `-- name: CountInFlightPayoutsForSeller :one
+SELECT count(*) FROM payouts WHERE seller_id = $1 AND status IN ('queued', 'pending')
+`
+
+func (q *Queries) CountInFlightPayoutsForSeller(ctx context.Context, sellerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countInFlightPayoutsForSeller, sellerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPayoutsBySeller = `-- name: CountPayoutsBySeller :one
+SELECT count(*) FROM payouts WHERE seller_id = $1
+`
+
+func (q *Queries) CountPayoutsBySeller(ctx context.Context, sellerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countPayoutsBySeller, sellerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const getPayoutAccountBySeller = `-- name: GetPayoutAccountBySeller :one
 SELECT seller_id, type, bank_code, bank_name, account_number_enc, account_number_mask, account_name, recipient_code, status, verified_at, cooldown_until, created_at, updated_at FROM seller_payout_accounts WHERE seller_id = $1
@@ -36,6 +77,306 @@ func (q *Queries) GetPayoutAccountBySeller(ctx context.Context, sellerID uuid.UU
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getPayoutByID = `-- name: GetPayoutByID :one
+SELECT id, seller_id, amount_pesewas, reference, recipient_code, transfer_code, status, failure_reason, sent_at, completed_at, created_at, updated_at FROM payouts WHERE id = $1
+`
+
+func (q *Queries) GetPayoutByID(ctx context.Context, id uuid.UUID) (Payout, error) {
+	row := q.db.QueryRow(ctx, getPayoutByID, id)
+	var i Payout
+	err := row.Scan(
+		&i.ID,
+		&i.SellerID,
+		&i.AmountPesewas,
+		&i.Reference,
+		&i.RecipientCode,
+		&i.TransferCode,
+		&i.Status,
+		&i.FailureReason,
+		&i.SentAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPayoutForUpdate = `-- name: GetPayoutForUpdate :one
+SELECT id, seller_id, amount_pesewas, reference, recipient_code, transfer_code, status, failure_reason, sent_at, completed_at, created_at, updated_at FROM payouts WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetPayoutForUpdate(ctx context.Context, id uuid.UUID) (Payout, error) {
+	row := q.db.QueryRow(ctx, getPayoutForUpdate, id)
+	var i Payout
+	err := row.Scan(
+		&i.ID,
+		&i.SellerID,
+		&i.AmountPesewas,
+		&i.Reference,
+		&i.RecipientCode,
+		&i.TransferCode,
+		&i.Status,
+		&i.FailureReason,
+		&i.SentAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPayoutForUpdateByReference = `-- name: GetPayoutForUpdateByReference :one
+SELECT id, seller_id, amount_pesewas, reference, recipient_code, transfer_code, status, failure_reason, sent_at, completed_at, created_at, updated_at FROM payouts WHERE reference = $1 FOR UPDATE
+`
+
+// Matches a transfer webhook to its payout by Paystack's reference.
+func (q *Queries) GetPayoutForUpdateByReference(ctx context.Context, reference string) (Payout, error) {
+	row := q.db.QueryRow(ctx, getPayoutForUpdateByReference, reference)
+	var i Payout
+	err := row.Scan(
+		&i.ID,
+		&i.SellerID,
+		&i.AmountPesewas,
+		&i.Reference,
+		&i.RecipientCode,
+		&i.TransferCode,
+		&i.Status,
+		&i.FailureReason,
+		&i.SentAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertPayout = `-- name: InsertPayout :one
+INSERT INTO payouts (seller_id, amount_pesewas, reference, recipient_code)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (seller_id) WHERE status IN ('queued','pending') DO NOTHING
+RETURNING id, seller_id, amount_pesewas, reference, recipient_code, transfer_code, status, failure_reason, sent_at, completed_at, created_at, updated_at
+`
+
+type InsertPayoutParams struct {
+	SellerID      uuid.UUID
+	AmountPesewas int64
+	Reference     string
+	RecipientCode string
+}
+
+// Records a queued payout for the seller's full payable balance, inside the
+// execution's own transaction. Returns no row when the seller already has a
+// payout in flight: the caller treats that as "already running".
+func (q *Queries) InsertPayout(ctx context.Context, arg InsertPayoutParams) (Payout, error) {
+	row := q.db.QueryRow(ctx, insertPayout,
+		arg.SellerID,
+		arg.AmountPesewas,
+		arg.Reference,
+		arg.RecipientCode,
+	)
+	var i Payout
+	err := row.Scan(
+		&i.ID,
+		&i.SellerID,
+		&i.AmountPesewas,
+		&i.Reference,
+		&i.RecipientCode,
+		&i.TransferCode,
+		&i.Status,
+		&i.FailureReason,
+		&i.SentAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listAdminPayouts = `-- name: ListAdminPayouts :many
+SELECT id, seller_id, amount_pesewas, reference, recipient_code, transfer_code, status, failure_reason, sent_at, completed_at, created_at, updated_at FROM payouts
+WHERE ($1::text IS NULL OR status = $1)
+  AND ($2::uuid IS NULL OR seller_id = $2)
+ORDER BY created_at DESC
+LIMIT $4 OFFSET $3
+`
+
+type ListAdminPayoutsParams struct {
+	Status   *string
+	SellerID pgtype.UUID
+	Offset   int32
+	Limit    int32
+}
+
+// Every payout, newest first, with optional status and seller filters.
+func (q *Queries) ListAdminPayouts(ctx context.Context, arg ListAdminPayoutsParams) ([]Payout, error) {
+	rows, err := q.db.Query(ctx, listAdminPayouts,
+		arg.Status,
+		arg.SellerID,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Payout{}
+	for rows.Next() {
+		var i Payout
+		if err := rows.Scan(
+			&i.ID,
+			&i.SellerID,
+			&i.AmountPesewas,
+			&i.Reference,
+			&i.RecipientCode,
+			&i.TransferCode,
+			&i.Status,
+			&i.FailureReason,
+			&i.SentAt,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPayoutCandidates = `-- name: ListPayoutCandidates :many
+SELECT seller_id FROM seller_payout_accounts
+WHERE status = 'verified' AND (cooldown_until IS NULL OR cooldown_until <= $1)
+ORDER BY cooldown_until NULLS FIRST, seller_id
+`
+
+// Sellers whose account is verified and past its change cooldown, oldest
+// change first so long-waiting sellers go first.
+func (q *Queries) ListPayoutCandidates(ctx context.Context, cooldownUntil *time.Time) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listPayoutCandidates, cooldownUntil)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var seller_id uuid.UUID
+		if err := rows.Scan(&seller_id); err != nil {
+			return nil, err
+		}
+		items = append(items, seller_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPayoutsBySeller = `-- name: ListPayoutsBySeller :many
+SELECT id, seller_id, amount_pesewas, reference, recipient_code, transfer_code, status, failure_reason, sent_at, completed_at, created_at, updated_at FROM payouts WHERE seller_id = $1
+ORDER BY created_at DESC
+LIMIT $3 OFFSET $2
+`
+
+type ListPayoutsBySellerParams struct {
+	SellerID uuid.UUID
+	Offset   int32
+	Limit    int32
+}
+
+func (q *Queries) ListPayoutsBySeller(ctx context.Context, arg ListPayoutsBySellerParams) ([]Payout, error) {
+	rows, err := q.db.Query(ctx, listPayoutsBySeller, arg.SellerID, arg.Offset, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Payout{}
+	for rows.Next() {
+		var i Payout
+		if err := rows.Scan(
+			&i.ID,
+			&i.SellerID,
+			&i.AmountPesewas,
+			&i.Reference,
+			&i.RecipientCode,
+			&i.TransferCode,
+			&i.Status,
+			&i.FailureReason,
+			&i.SentAt,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStuckPendingPayouts = `-- name: ListStuckPendingPayouts :many
+SELECT id, seller_id, amount_pesewas, reference, recipient_code, transfer_code, status, failure_reason, sent_at, completed_at, created_at, updated_at FROM payouts
+WHERE status = 'pending' AND sent_at <= $1
+ORDER BY sent_at
+LIMIT $2
+`
+
+type ListStuckPendingPayoutsParams struct {
+	SentAt *time.Time
+	Limit  int32
+}
+
+// Pending payouts sent longer ago than the cutoff, for the reconciler.
+func (q *Queries) ListStuckPendingPayouts(ctx context.Context, arg ListStuckPendingPayoutsParams) ([]Payout, error) {
+	rows, err := q.db.Query(ctx, listStuckPendingPayouts, arg.SentAt, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Payout{}
+	for rows.Next() {
+		var i Payout
+		if err := rows.Scan(
+			&i.ID,
+			&i.SellerID,
+			&i.AmountPesewas,
+			&i.Reference,
+			&i.RecipientCode,
+			&i.TransferCode,
+			&i.Status,
+			&i.FailureReason,
+			&i.SentAt,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockPayoutSeller = `-- name: LockPayoutSeller :one
+SELECT pg_advisory_xact_lock(hashtext('payout:' || $1::text)) AS locked
+`
+
+// Serialises one seller's payout execution against concurrent sweeps.
+func (q *Queries) LockPayoutSeller(ctx context.Context, dollar_1 string) (interface{}, error) {
+	row := q.db.QueryRow(ctx, lockPayoutSeller, dollar_1)
+	var locked interface{}
+	err := row.Scan(&locked)
+	return locked, err
 }
 
 const setPayoutAccountVerified = `-- name: SetPayoutAccountVerified :one
@@ -71,6 +412,143 @@ func (q *Queries) SetPayoutAccountVerified(ctx context.Context, arg SetPayoutAcc
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const setPayoutFailed = `-- name: SetPayoutFailed :one
+UPDATE payouts SET status = $2, failure_reason = $3, completed_at = $4
+WHERE id = $1 AND status <> 'success'
+RETURNING id, seller_id, amount_pesewas, reference, recipient_code, transfer_code, status, failure_reason, sent_at, completed_at, created_at, updated_at
+`
+
+type SetPayoutFailedParams struct {
+	ID            uuid.UUID
+	Status        string
+	FailureReason *string
+	CompletedAt   *time.Time
+}
+
+// A failed or reversed transfer. Returns no row once successful: money that
+// already left can never be failed by a later event.
+func (q *Queries) SetPayoutFailed(ctx context.Context, arg SetPayoutFailedParams) (Payout, error) {
+	row := q.db.QueryRow(ctx, setPayoutFailed,
+		arg.ID,
+		arg.Status,
+		arg.FailureReason,
+		arg.CompletedAt,
+	)
+	var i Payout
+	err := row.Scan(
+		&i.ID,
+		&i.SellerID,
+		&i.AmountPesewas,
+		&i.Reference,
+		&i.RecipientCode,
+		&i.TransferCode,
+		&i.Status,
+		&i.FailureReason,
+		&i.SentAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const setPayoutPending = `-- name: SetPayoutPending :exec
+UPDATE payouts SET status = 'pending', transfer_code = $2, sent_at = $3
+WHERE id = $1 AND status = 'queued'
+`
+
+type SetPayoutPendingParams struct {
+	ID           uuid.UUID
+	TransferCode *string
+	SentAt       *time.Time
+}
+
+// The transfer exists at Paystack: committed before anything that settles
+// it, so a crash mid-send leaves a pending payout the reconciler finds.
+func (q *Queries) SetPayoutPending(ctx context.Context, arg SetPayoutPendingParams) error {
+	_, err := q.db.Exec(ctx, setPayoutPending, arg.ID, arg.TransferCode, arg.SentAt)
+	return err
+}
+
+const setPayoutQueuedForRetry = `-- name: SetPayoutQueuedForRetry :exec
+UPDATE payouts SET status = 'queued', transfer_code = NULL, sent_at = NULL
+WHERE id = $1 AND status = 'pending' AND transfer_code IS NULL
+`
+
+// Only from pending with no transfer at Paystack: reconciliation proved the
+// send never took effect, so sending again cannot pay twice.
+func (q *Queries) SetPayoutQueuedForRetry(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setPayoutQueuedForRetry, id)
+	return err
+}
+
+const setPayoutSuccess = `-- name: SetPayoutSuccess :one
+UPDATE payouts SET status = 'success', completed_at = $2
+WHERE id = $1 AND status IN ('queued', 'pending')
+RETURNING id, seller_id, amount_pesewas, reference, recipient_code, transfer_code, status, failure_reason, sent_at, completed_at, created_at, updated_at
+`
+
+type SetPayoutSuccessParams struct {
+	ID          uuid.UUID
+	CompletedAt *time.Time
+}
+
+// Returns no row when the payout already settled: the caller treats that as
+// a webhook replay.
+func (q *Queries) SetPayoutSuccess(ctx context.Context, arg SetPayoutSuccessParams) (Payout, error) {
+	row := q.db.QueryRow(ctx, setPayoutSuccess, arg.ID, arg.CompletedAt)
+	var i Payout
+	err := row.Scan(
+		&i.ID,
+		&i.SellerID,
+		&i.AmountPesewas,
+		&i.Reference,
+		&i.RecipientCode,
+		&i.TransferCode,
+		&i.Status,
+		&i.FailureReason,
+		&i.SentAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const sumHeldRemainderBySeller = `-- name: SumHeldRemainderBySeller :one
+SELECT coalesce(sum(base_pesewas - refunded_pesewas), 0)::bigint AS remainder
+FROM orders
+WHERE seller_id = $1 AND escrow_state IN ('held', 'refund_pending', 'partially_refunded')
+`
+
+// What the seller's orders still hold in escrow: base minus refunded over
+// every order whose escrow is not yet released or refunded away.
+func (q *Queries) SumHeldRemainderBySeller(ctx context.Context, sellerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, sumHeldRemainderBySeller, sellerID)
+	var remainder int64
+	err := row.Scan(&remainder)
+	return remainder, err
+}
+
+const sumPayoutsBySellerStatus = `-- name: SumPayoutsBySellerStatus :one
+SELECT coalesce(sum(amount_pesewas), 0)::bigint FROM payouts
+WHERE seller_id = $1 AND status = ANY($2::text[])
+`
+
+type SumPayoutsBySellerStatusParams struct {
+	SellerID uuid.UUID
+	Statuses []string
+}
+
+// The seller's totals for one terminal status (success) or the in-flight
+// pair. Callers pass the statuses they need.
+func (q *Queries) SumPayoutsBySellerStatus(ctx context.Context, arg SumPayoutsBySellerStatusParams) (int64, error) {
+	row := q.db.QueryRow(ctx, sumPayoutsBySellerStatus, arg.SellerID, arg.Statuses)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const upsertPayoutAccount = `-- name: UpsertPayoutAccount :one

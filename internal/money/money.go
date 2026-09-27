@@ -140,3 +140,13 @@ func check(amounts ...int64) error {
 	}
 	return nil
 }
+
+// FormatGHS renders pesewas as cedis with two decimals ("123.45"), for text
+// channels like SMS that cannot use the Money shape. Callers prefix "GHS "
+// themselves. No float is involved: it is integer division and remainder.
+func FormatGHS(pesewas int64) (string, error) {
+	if err := check(pesewas); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%d.%02d", pesewas/100, pesewas%100), nil
+}

@@ -6,6 +6,7 @@ package fake
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -51,6 +52,24 @@ type Provider struct {
 	RecipientErr    error
 	// Recipients keeps every TransferRecipientInput.
 	Recipients []payments.TransferRecipientInput
+	// TransferResult and TransferErr answer InitiateTransfer.
+	TransferResult payments.TransferResult
+	TransferErr    error
+	// Transferred keeps every TransferInput passed to InitiateTransfer.
+	Transferred []payments.TransferInput
+	// TransferErrAfterRecord makes InitiateTransfer record the transfer at
+	// "Paystack" and then fail anyway, the ambiguous case: a lost response
+	// to a request that took effect (the 18b analogue of
+	// RefundErrAfterRecord).
+	TransferErrAfterRecord error
+	// Transfers is the fake Paystack's transfer store, filled by
+	// InitiateTransfer and read by VerifyTransfer. Tests may edit statuses
+	// with SetTransferStatus.
+	Transfers []payments.Transfer
+	// VerifyTransferResult and VerifyTransferErr answer VerifyTransfer when
+	// set; otherwise the Transfers store is read.
+	VerifyTransferResult payments.Transfer
+	VerifyTransferErr    error
 	// FetchErr and ListErr make FetchRefund/ListRefunds fail.
 	FetchErr error
 	ListErr  error
@@ -236,7 +255,24 @@ func (p *Provider) InitiateTransfer(ctx context.Context, in payments.TransferInp
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.Calls = append(p.Calls, "InitiateTransfer")
-	return payments.TransferResult{TransferCode: "TRF_FAKE", Status: "queued", Reference: in.Reference}, nil
+	p.Transferred = append(p.Transferred, in)
+	if p.TransferErr != nil {
+		return payments.TransferResult{}, p.TransferErr
+	}
+	out := p.TransferResult
+	if out.TransferCode == "" && out.Status == "" {
+		// A distinct code per call, so several payouts in one test never
+		// collide on the real schema's UNIQUE(transfer_code).
+		out = payments.TransferResult{TransferCode: fmt.Sprintf("TRF_FAKE_%d", len(p.Transferred)), Status: "pending", Reference: in.Reference}
+	}
+	p.Transfers = append(p.Transfers, payments.Transfer{
+		Status: out.Status, TransferCode: out.TransferCode, Reference: in.Reference,
+		AmountPesewas: in.AmountPesewas,
+	})
+	if p.TransferErrAfterRecord != nil {
+		return payments.TransferResult{}, p.TransferErrAfterRecord
+	}
+	return out, nil
 }
 
 // VerifyTransfer implements payments.Provider.
@@ -244,7 +280,31 @@ func (p *Provider) VerifyTransfer(ctx context.Context, reference string) (paymen
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.Calls = append(p.Calls, "VerifyTransfer")
-	return payments.Transfer{Status: "success", Reference: reference}, nil
+	if p.VerifyTransferErr != nil {
+		return payments.Transfer{}, p.VerifyTransferErr
+	}
+	if p.VerifyTransferResult.Reference != "" {
+		return p.VerifyTransferResult, nil
+	}
+	for _, tr := range p.Transfers {
+		if tr.Reference == reference {
+			return tr, nil
+		}
+	}
+	// Paystack holds nothing for this reference: not a success, just absent.
+	return payments.Transfer{}, payments.ErrRejected
+}
+
+// SetTransferStatus changes a stored transfer's status, as Paystack settling
+// it would.
+func (p *Provider) SetTransferStatus(reference, status string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for i := range p.Transfers {
+		if p.Transfers[i].Reference == reference {
+			p.Transfers[i].Status = status
+		}
+	}
 }
 
 // CallCount returns how many times a method was called.

@@ -229,3 +229,24 @@ func TestNoFloats(t *testing.T) {
 		t.Errorf("MaxAmount = %d, want 1e12", MaxAmount)
 	}
 }
+
+func TestFormatGHS(t *testing.T) {
+	for _, tc := range []struct {
+		pesewas int64
+		want    string
+	}{
+		{0, "0.00"},
+		{1, "0.01"},
+		{20, "0.20"},
+		{2000, "20.00"},
+		{12345, "123.45"},
+		{1000000000000, "10000000000.00"},
+	} {
+		if got, err := FormatGHS(tc.pesewas); err != nil || got != tc.want {
+			t.Errorf("FormatGHS(%d) = (%q, %v), want (%q, nil)", tc.pesewas, got, err, tc.want)
+		}
+	}
+	if _, err := FormatGHS(-1); err == nil {
+		t.Error("negative amount: want an error")
+	}
+}

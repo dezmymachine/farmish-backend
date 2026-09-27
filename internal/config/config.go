@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dezmymachine/farmish-backend/internal/money"
 	"github.com/dezmymachine/farmish-backend/internal/turnstile"
 )
 
@@ -72,6 +73,9 @@ type Config struct {
 	// CheckoutExpiryMinutes bounds how long a checkout may sit unpaid before
 	// the sweep expires it and returns the reserved stock (DOMAIN §3).
 	CheckoutExpiryMinutes int
+	// Payouts carries the payout floor and the absorbed transfer fee
+	// (DOMAIN §2.3, §3).
+	Payouts Payouts
 	// Fulfilment carries the order timers (DOMAIN §3).
 	Fulfilment Fulfilment
 	// Notify configures transactional SMS (Phase 16).
@@ -86,6 +90,17 @@ type Fulfilment struct {
 	// EscrowAutoComplete bounds how long after delivery an undisputed order
 	// auto-completes and releases escrow.
 	EscrowAutoComplete time.Duration
+}
+
+// Payouts holds the seller payout floor and the absorbed transfer fee
+// (DOMAIN §2.3, §3).
+type Payouts struct {
+	// MinPesewas is the minimum seller_payable balance that triggers a
+	// payout. Default GHS 20.
+	MinPesewas int64
+	// TransferFeePesewas is the Paystack transfer fee the platform absorbs
+	// per successful payout. Default 0 until confirmed from the dashboard.
+	TransferFeePesewas int64
 }
 
 // Notify configures transactional SMS through mNotify (Phase 16).
@@ -457,6 +472,28 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 			errs = append(errs, fmt.Errorf("ESCROW_AUTO_COMPLETE_DAYS must be between 1 and 30, got %q", v))
 		default:
 			cfg.Fulfilment.EscrowAutoComplete = time.Duration(days) * 24 * time.Hour
+		}
+	}
+
+	// Seller payouts (DOMAIN §2.3, §3): GHS 20 minimum, no transfer fee
+	// until the live Paystack dashboard confirms one.
+	cfg.Payouts = Payouts{MinPesewas: 2000}
+	if v := get("PAYOUT_MIN_PESEWAS"); v != "" {
+		min, err := strconv.ParseInt(v, 10, 64)
+		switch {
+		case err != nil || min < 0 || min > money.MaxAmount:
+			errs = append(errs, fmt.Errorf("PAYOUT_MIN_PESEWAS must be between 0 and %d, got %q", money.MaxAmount, v))
+		default:
+			cfg.Payouts.MinPesewas = min
+		}
+	}
+	if v := get("PAYSTACK_TRANSFER_FEE_PESEWAS"); v != "" {
+		fee, err := strconv.ParseInt(v, 10, 64)
+		switch {
+		case err != nil || fee < 0 || fee > money.MaxAmount:
+			errs = append(errs, fmt.Errorf("PAYSTACK_TRANSFER_FEE_PESEWAS must be between 0 and %d, got %q", money.MaxAmount, v))
+		default:
+			cfg.Payouts.TransferFeePesewas = fee
 		}
 	}
 

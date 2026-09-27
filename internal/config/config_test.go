@@ -52,27 +52,32 @@ func TestFromLookup_Defaults(t *testing.T) {
 	if cfg.DB.MaxConns != 10 || cfg.DB.StatementTimeout != 30*time.Second {
 		t.Errorf("unexpected DB defaults: %+v", cfg.DB)
 	}
+	if cfg.Payouts.MinPesewas != 2000 || cfg.Payouts.TransferFeePesewas != 0 {
+		t.Errorf("unexpected payout defaults: %+v", cfg.Payouts)
+	}
 }
 
 func TestFromLookup_Overrides(t *testing.T) {
 	cfg, err := FromLookup(lookup(merge(map[string]string{
-		"APP_ENV":                   "production",
-		"PORT":                      "9000",
-		"LOG_LEVEL":                 "DEBUG",
-		"SHUTDOWN_TIMEOUT":          "5s",
-		"CORS_ORIGINS":              "https://farmish.gh",
-		"DATABASE_URL":              "postgresql://u:p@db:5432/farmish",
-		"DB_MAX_CONNS":              "25",
-		"DB_STATEMENT_TIMEOUT":      "2s",
-		"FIREBASE_PROJECT_ID":       "farmish-prod",
-		"FIREBASE_CREDENTIALS_JSON": `{"type":"service_account","project_id":"farmish-prod"}`,
-		"TURNSTILE_SECRET":          "0x4AAAAAAA-real-secret",
-		"DATA_ENCRYPTION_KEY":       "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
-		"TRUSTED_PROXIES":           "10.0.0.0/8, 100.64.0.1/10",
-		"TRUST_CLOUDFLARE":          "true",
-		"PAYSTACK_SECRET_KEY":       "sk_live_0123456789abcdef",
-		"PAYSTACK_PUBLIC_KEY":       "pk_live_0123456789abcdef",
-		"PAYSTACK_CALLBACK_URL":     "https://farmish.gh/payments/status",
+		"APP_ENV":                       "production",
+		"PORT":                          "9000",
+		"LOG_LEVEL":                     "DEBUG",
+		"SHUTDOWN_TIMEOUT":              "5s",
+		"CORS_ORIGINS":                  "https://farmish.gh",
+		"DATABASE_URL":                  "postgresql://u:p@db:5432/farmish",
+		"DB_MAX_CONNS":                  "25",
+		"DB_STATEMENT_TIMEOUT":          "2s",
+		"FIREBASE_PROJECT_ID":           "farmish-prod",
+		"FIREBASE_CREDENTIALS_JSON":     `{"type":"service_account","project_id":"farmish-prod"}`,
+		"TURNSTILE_SECRET":              "0x4AAAAAAA-real-secret",
+		"DATA_ENCRYPTION_KEY":           "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
+		"TRUSTED_PROXIES":               "10.0.0.0/8, 100.64.0.1/10",
+		"TRUST_CLOUDFLARE":              "true",
+		"PAYSTACK_SECRET_KEY":           "sk_live_0123456789abcdef",
+		"PAYSTACK_PUBLIC_KEY":           "pk_live_0123456789abcdef",
+		"PAYSTACK_CALLBACK_URL":         "https://farmish.gh/payments/status",
+		"PAYOUT_MIN_PESEWAS":            "5000",
+		"PAYSTACK_TRANSFER_FEE_PESEWAS": "100",
 	}, r2())))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -82,6 +87,9 @@ func TestFromLookup_Overrides(t *testing.T) {
 	}
 	if cfg.DB.MaxConns != 25 || cfg.DB.StatementTimeout != 2*time.Second {
 		t.Errorf("DB overrides not applied: %+v", cfg.DB)
+	}
+	if cfg.Payouts.MinPesewas != 5000 || cfg.Payouts.TransferFeePesewas != 100 {
+		t.Errorf("payout overrides not applied: %+v", cfg.Payouts)
 	}
 	if !cfg.ClientIP.TrustCloudflare || len(cfg.ClientIP.TrustedProxies) != 2 ||
 		cfg.ClientIP.TrustedProxies[1].String() != "100.64.0.0/10" || cfg.TurnstileSecret != "0x4AAAAAAA-real-secret" {
@@ -106,6 +114,8 @@ func TestFromLookup_Invalid(t *testing.T) {
 		{"timeout too short", map[string]string{"APP_ENV": "test", "SHUTDOWN_TIMEOUT": "2s", "CORS_ORIGINS": "https://a.gh"}, []string{"at least 3s"}},
 		{"wildcard cors", map[string]string{"APP_ENV": "test", "CORS_ORIGINS": "*"}, []string{"not *"}},
 		{"cors no scheme", map[string]string{"APP_ENV": "test", "CORS_ORIGINS": "farmish.gh"}, []string{"must start with http"}},
+		{"bad payout min", map[string]string{"APP_ENV": "test", "PAYOUT_MIN_PESEWAS": "-1"}, []string{"PAYOUT_MIN_PESEWAS must be"}},
+		{"bad transfer fee", map[string]string{"APP_ENV": "test", "PAYSTACK_TRANSFER_FEE_PESEWAS": "much"}, []string{"PAYSTACK_TRANSFER_FEE_PESEWAS must be"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
