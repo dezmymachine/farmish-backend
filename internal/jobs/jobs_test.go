@@ -390,3 +390,23 @@ func TestStop_CancelsJobsAfterSoftTimeout(t *testing.T) {
 		t.Errorf("stop took %v", d)
 	}
 }
+
+// TestDailyAt_Next proves the daily schedule fires at the wall-clock time:
+// later the same day before the hour, the next day after it.
+func TestDailyAt_Next(t *testing.T) {
+	accra := time.FixedZone("Africa/Accra", 0)
+	schedule := jobs.DailyAt{Hour: 3, Min: 0, Loc: accra}
+
+	before := time.Date(2026, 9, 27, 2, 0, 0, 0, accra)
+	if next := schedule.Next(before); next != time.Date(2026, 9, 27, 3, 0, 0, 0, accra) {
+		t.Errorf("before the hour: next = %v, want 03:00 the same day", next)
+	}
+	after := time.Date(2026, 9, 27, 4, 0, 0, 0, accra)
+	if next := schedule.Next(after); next != time.Date(2026, 9, 28, 3, 0, 0, 0, accra) {
+		t.Errorf("after the hour: next = %v, want 03:00 the next day", next)
+	}
+	exact := time.Date(2026, 9, 27, 3, 0, 0, 0, accra)
+	if next := schedule.Next(exact); next != time.Date(2026, 9, 28, 3, 0, 0, 0, accra) {
+		t.Errorf("on the hour: next = %v, want 03:00 the next day", next)
+	}
+}
