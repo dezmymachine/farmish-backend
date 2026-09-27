@@ -13,6 +13,7 @@ import (
 )
 
 type Querier interface {
+	AddOrderRefundedPesewas(ctx context.Context, arg AddOrderRefundedPesewasParams) (Order, error)
 	// Marks the object attached, but only while it is still pending.
 	AttachMediaObject(ctx context.Context, id uuid.UUID) (MediaObject, error)
 	CompleteWebhookEvent(ctx context.Context, arg CompleteWebhookEventParams) error
@@ -77,6 +78,8 @@ type Querier interface {
 	// Row-locked. Two webhook deliveries for the same reference must not both
 	// settle the payment, so the handler settles it under this lock.
 	GetPaymentByReferenceForUpdate(ctx context.Context, reference string) (Payment, error)
+	// The reference Paystack refunds against: the order's checkout payment.
+	GetPaymentReferenceForOrder(ctx context.Context, id uuid.UUID) (string, error)
 	// A buyer retrying after a failed attempt needs to find the earlier rows.
 	GetPaymentsByPurposeRef(ctx context.Context, arg GetPaymentsByPurposeRefParams) ([]Payment, error)
 	GetPromotionConfig(ctx context.Context, tier string) (PromotionConfig, error)
@@ -89,6 +92,9 @@ type Querier interface {
 	// Snapshot locks for pricing, taken in ascending listing-id order by the
 	// caller to avoid deadlocks between concurrent checkouts.
 	GetQuoteListingForUpdate(ctx context.Context, arg GetQuoteListingForUpdateParams) ([]GetQuoteListingForUpdateRow, error)
+	GetRefundForUpdate(ctx context.Context, id uuid.UUID) (Refund, error)
+	// Matches a refund webhook once Paystack's id has been stored by the job.
+	GetRefundForUpdateByPaystackRefundID(ctx context.Context, paystackRefundID *string) (Refund, error)
 	GetSellerProfile(ctx context.Context, userID uuid.UUID) (SellerProfile, error)
 	GetSellerProfileForUpdate(ctx context.Context, userID uuid.UUID) (SellerProfile, error)
 	GetUserByFirebaseUID(ctx context.Context, firebaseUid string) (User, error)
@@ -123,6 +129,12 @@ type Querier interface {
 	// A pending payment, before Paystack is called. The gross-up is computed by
 	// the caller from internal/money and the CHECK on charge_pesewas enforces it.
 	InsertPayment(ctx context.Context, arg InsertPaymentParams) (Payment, error)
+	// Records money owed for an order, inside the transition's own transaction
+	// (the side effect of a cancellation, or the checkout expiry recovery path).
+	// Returns no row when a full refund already exists for this order: the
+	// partial unique index is the idempotency guard, and the caller treats a
+	// missing row as "already recorded".
+	InsertRefund(ctx context.Context, arg InsertRefundParams) (Refund, error)
 	// Returns no row if a concurrent request created the user first.
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
 	// Returns no row when (provider, event_key) already exists: that is a replay,
@@ -151,6 +163,11 @@ type Querier interface {
 	ListExpiredPendingCheckouts(ctx context.Context, arg ListExpiredPendingCheckoutsParams) ([]Checkout, error)
 	// Installed Postgres extensions; used by tests to assert migration 000001.
 	ListExtensions(ctx context.Context) ([]string, error)
+	// The webhook fallback match, before a refund's paystack_refund_id is known:
+	// the order's payment reference plus the refunded amount, restricted to
+	// refunds still in flight. A multi-seller checkout shares one reference, so
+	// the caller must only act when exactly one row matches (ADR-0027).
+	ListInFlightRefundsByReference(ctx context.Context, arg ListInFlightRefundsByReferenceParams) ([]Refund, error)
 	ListListingAttributes(ctx context.Context, listingID uuid.UUID) ([]ListListingAttributesRow, error)
 	// Read-only join so the owner's view can carry each object's key (and hence
 	// its public URL).
@@ -172,6 +189,7 @@ type Querier interface {
 	// cart lines carry quantities, never prices. Active is evaluated against the
 	// caller's clock, which tests control; the pricing function itself stays pure.
 	ListQuoteListings(ctx context.Context, arg ListQuoteListingsParams) ([]ListQuoteListingsRow, error)
+	ListRefundsByOrder(ctx context.Context, orderID uuid.UUID) ([]Refund, error)
 	ListSellerListings(ctx context.Context, arg ListSellerListingsParams) ([]Listing, error)
 	// Admin review queue: oldest submission first.
 	ListSellerProfilesByStatus(ctx context.Context, arg ListSellerProfilesByStatusParams) ([]ListSellerProfilesByStatusRow, error)
@@ -186,6 +204,9 @@ type Querier interface {
 	LockPromotionCredits(ctx context.Context, dollar_1 string) (interface{}, error)
 	MarkPaymentAbandoned(ctx context.Context, arg MarkPaymentAbandonedParams) (Payment, error)
 	MarkPaymentFailed(ctx context.Context, arg MarkPaymentFailedParams) (Payment, error)
+	// Whether a Paystack refund id already belongs to one of our rows, so
+	// reconciliation never adopts the same Paystack refund twice.
+	PaystackRefundIDLinked(ctx context.Context, paystackRefundID *string) (bool, error)
 	// Atomically decrements stock only while enough remains. Zero affected rows is
 	// ErrInsufficientStock; the caller's transaction rolls back.
 	ReserveListingStock(ctx context.Context, arg ReserveListingStockParams) (int64, error)
@@ -229,6 +250,21 @@ type Querier interface {
 	// Stored after InitializeTransaction, which happens outside the insert's
 	// transaction: the provider call must never hold a database transaction open.
 	SetPaymentAuthorizationURL(ctx context.Context, arg SetPaymentAuthorizationURLParams) (Payment, error)
+	SetRefundFailed(ctx context.Context, arg SetRefundFailedParams) error
+	SetRefundPaystackID(ctx context.Context, arg SetRefundPaystackIDParams) error
+	// The job is about to call Paystack: committed before the call, so a crash
+	// mid-call leaves a pending refund that reconciliation finds, never a queued
+	// one that a retry would send twice.
+	SetRefundPending(ctx context.Context, arg SetRefundPendingParams) error
+	// Returns no row when the refund was already processed: the caller treats
+	// that as a replay.
+	SetRefundProcessed(ctx context.Context, id uuid.UUID) (Refund, error)
+	// Only from pending with no Paystack refund: reconciliation proved Paystack
+	// holds nothing for this attempt, so sending again cannot double-refund.
+	SetRefundQueuedForRetry(ctx context.Context, id uuid.UUID) error
+	// Any status except processed may still move; processed is final, so a
+	// replayed webhook or a job retry can never reopen a settled refund.
+	SetRefundStatus(ctx context.Context, arg SetRefundStatusParams) error
 	// Stores a (new) encrypted ID and (re)submits the profile for verification.
 	SetSellerIdentity(ctx context.Context, arg SetSellerIdentityParams) (SellerProfile, error)
 	// Records an admin verification decision (reviewed_at = now()).
@@ -244,6 +280,9 @@ type Querier interface {
 	// The account balance is derived from its entries. A code with no entries has
 	// a zero balance, so this always returns a row for an existing account.
 	SumLedgerAccountBalance(ctx context.Context, code string) (int64, error)
+	// Every refund that has or may still move money (all but failed ones). New
+	// refunds must keep this within the order's base.
+	SumOutstandingRefundsForOrder(ctx context.Context, orderID uuid.UUID) (int64, error)
 	// Mirror Firebase-owned identity fields; only writes when something changed.
 	SyncUserIdentity(ctx context.Context, arg SyncUserIdentityParams) (User, error)
 	// Scoped to the category: an attribute of another category reads as missing.

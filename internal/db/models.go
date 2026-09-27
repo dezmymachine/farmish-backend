@@ -316,6 +316,19 @@ type PromotionConfig struct {
 	UpdatedAt    time.Time
 }
 
+type Refund struct {
+	ID               uuid.UUID
+	OrderID          uuid.UUID
+	AmountPesewas    int64
+	Reason           string
+	Status           string
+	PaystackRefundID *string
+	FailureReason    *string
+	AttemptedAt      *time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
 type RiverJob struct {
 	ID           int64
 	State        RiverJobState
