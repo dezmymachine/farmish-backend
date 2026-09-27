@@ -42,18 +42,26 @@ CREATE UNIQUE INDEX refunds_one_full_per_order ON refunds (order_id)
 **`orders.refund {RefundID}`** (the refund row is created **in the transition's tx** by the side effect, `status=queued`; this job does the external call):
 1. Lock the refund row. If it isn't `queued`, no-op.
 2. Lock the order. Require `escrow_state ∈ {held, refund_pending, partially_refunded}`. If the escrow is `released`: mark the refund `failed` with reason `refund_after_release`, log an Error, write an audit event, and **stop**. That's the **manual path**: an admin handles it outside the system.
-3. Commit the `pending` state first, then call Paystack `CreateRefund(transaction = payment.reference, amount)` **outside** the tx, then store `paystack_refund_id` in a new tx.
-4. Paystack error → back to `queued`, and return the error so River retries with backoff (max attempts 10).
+3. Commit the `pending` state first, then call Paystack `CreateRefund(transaction = payment.reference, amount)` **outside** the tx, then store `paystack_refund_id` in a new tx. If that store fails, log at Error with the Paystack id.
+4. **Classify Paystack errors.** Never retry blindly: a lost response can hide a refund Paystack already created, and Paystack allows several partial refunds per transaction, so a blind retry **refunds twice**.
+   - **Definite rejection** (`ErrRejected`, HTTP 4xx): refund `failed` (`paystack_rejected: <message>`), an audit event, an Error log. No retry; admins retry via 17b.
+   - **Ambiguous** (transport error, timeout, 5xx, unreadable body): **keep `pending`**. Snooze and reconcile:
+     - `ListRefunds(transactionReference)` (`GET /refund?transaction=…`; add it to the client)
+     - if a refund with this amount exists, created after `refunds.created_at` and not linked to another row: store its id and let the webhook settle it
+     - only if none exists after 15 minutes: back to `queued`, and retry
+   - Test with a fake that creates the refund **and** returns a timeout: exactly one `CreateRefund` overall.
 
 ## Webhooks (registered in the 13a event registry)
 
-- **`refund.processed`**, matched by `paystack_refund_id` (or `data.transaction_reference` plus amount when the id isn't set yet). In one tx:
+- **`refund.processed`**. Match by `paystack_refund_id`. **Fallback** (id not stored yet): `data.transaction_reference` plus amount, **only if exactly one** in-flight refund matches. A multi-seller checkout shares one reference, so equal amounts are ambiguous: on two or more candidates, return a transient error so Paystack retries later. In one tx:
+  - lock the order
+  - require `data.amount == refund.amount_pesewas`, `data.currency == "GHS"` and `refunded + amount <= base`; otherwise outcome `rejected:amount_mismatch` / `rejected:exceeds_base`, an Error log and an audit event, with nothing settled
   - refund `processed`
   - post `order_refund` (ref = refund id, amount `r`)
   - order `refunded_pesewas += r`
   - `escrow_state = refunded` if `refunded == base`, else `partially_refunded`
   - notify the buyer
-- **`refund.failed`:** refund `failed`, an Error log, an audit event, and escrow stays held. Admins retry via 17b tooling.
+- **`refund.failed`:** refund `failed`, an **Error log (emitted by the orders handler itself)**, an audit event, and escrow stays held. Admins retry via 17b tooling. Use the webhook outcome constants (ADR-0021).
 - **`refund.pending` / `refund.processing`:** set `pending` (informational).
 
 Verify the event names and payload fields against Paystack's refund webhook docs, and record them in the ADR.
@@ -62,7 +70,8 @@ Verify the event names and payload fields against Paystack's refund webhook docs
 
 - **No refund after release** (plan Done-when). It's enforced in the job **and** in the transition layer: a dispute can't be opened after completion, because DOMAIN §4 forbids it.
 - The processing fee is non-refundable (DOMAIN §2.2). A full refund = the order `base`.
-- The sum of refunds for an order must never exceed `base`. Check it under the order lock.
+- The sum of refunds for an order must never exceed `base`. Check it under the order lock, both when **creating** a refund (Σ non-failed + amount ≤ base) and when **settling** one.
+- The refund webhooks must be tested **through the real signed webhook endpoint**, using the same registration code as `cmd/api`, not only by calling the handlers directly.
 
 ## Tests
 
