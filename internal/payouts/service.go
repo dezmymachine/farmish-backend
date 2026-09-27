@@ -17,6 +17,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/database"
 	"github.com/dezmymachine/farmish-backend/internal/db"
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
+	"github.com/dezmymachine/farmish-backend/internal/ledger"
 	"github.com/dezmymachine/farmish-backend/internal/notify"
 	"github.com/dezmymachine/farmish-backend/internal/payments"
 	"github.com/dezmymachine/farmish-backend/internal/sellers"
@@ -39,9 +40,14 @@ type Service struct {
 	paystack payments.Provider
 	sellers  SellerStore
 	jobs     *jobs.Client
+	ledger   *ledger.Ledger
 	log      *slog.Logger
 	// Now is the clock, injectable so cooldown and cache tests never sleep.
 	Now func() time.Time
+	// minPesewas is the payable floor that triggers a payout (Configure).
+	minPesewas int64
+	// transferFeePesewas is the absorbed Paystack fee booked per success.
+	transferFeePesewas int64
 
 	mu    sync.Mutex
 	banks map[string]cachedBanks

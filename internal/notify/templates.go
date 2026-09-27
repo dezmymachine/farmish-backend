@@ -20,6 +20,8 @@ const (
 	TemplateDisputeResolvedBuyer  = "dispute_resolved_buyer"
 	TemplateDisputeResolvedSeller = "dispute_resolved_seller"
 	TemplatePayoutAccountChanged  = "payout_account_changed"
+	TemplatePayoutSent          = "payout_sent"
+	TemplatePayoutFailed        = "payout_failed"
 )
 
 // templates renders every message. Values are order facts the recipient
@@ -38,6 +40,8 @@ var templates = map[string]string{
 	TemplateDisputeResolvedBuyer:  "Farmish: the dispute on order {{.orderIdShort}} was resolved ({{.outcome}}). We will message you about next steps.",
 	TemplateDisputeResolvedSeller: "Farmish: the dispute on order {{.orderIdShort}} was resolved ({{.outcome}}). Released earnings appear in your balance.",
 	TemplatePayoutAccountChanged:  "Farmish: your payout account was changed. If this wasn't you, contact support.",
+	TemplatePayoutSent:          "Farmish: GHS {{.amount}} sent to your payout account.",
+	TemplatePayoutFailed:        "Farmish: your payout of GHS {{.amount}} failed. The amount is back in your balance.",
 }
 
 // Render renders a template with the given values, truncated to one SMS.

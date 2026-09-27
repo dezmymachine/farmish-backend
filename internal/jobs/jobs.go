@@ -169,3 +169,13 @@ func Stop(client *Client, soft, hard time.Duration, log *slog.Logger) error {
 	}
 	return nil
 }
+
+// AccraLocation is Africa/Accra for daily schedules. Accra stays on UTC+0
+// with no daylight saving, so the fixed zone is exact even where the tz
+// database is missing; LoadLocation wins when it exists.
+func AccraLocation() *time.Location {
+	if loc, err := time.LoadLocation("Africa/Accra"); err == nil {
+		return loc
+	}
+	return time.FixedZone("Africa/Accra", 0)
+}
