@@ -72,6 +72,31 @@ type Config struct {
 	// CheckoutExpiryMinutes bounds how long a checkout may sit unpaid before
 	// the sweep expires it and returns the reserved stock (DOMAIN §3).
 	CheckoutExpiryMinutes int
+	// Fulfilment carries the order timers (DOMAIN §3).
+	Fulfilment Fulfilment
+	// Notify configures transactional SMS (Phase 16).
+	Notify Notify
+}
+
+// Fulfilment holds the order state machine's timers (DOMAIN §3).
+type Fulfilment struct {
+	// SellerAcceptTimeout bounds how long a paid order may wait for the
+	// seller to accept before the system cancels and refunds it.
+	SellerAcceptTimeout time.Duration
+	// EscrowAutoComplete bounds how long after delivery an undisputed order
+	// auto-completes and releases escrow.
+	EscrowAutoComplete time.Duration
+}
+
+// Notify configures transactional SMS through mNotify (Phase 16).
+type Notify struct {
+	// SMSEnabled turns on real SMS. Off in development and test, where the
+	// LogOnly sender is used and no message leaves the machine.
+	SMSEnabled bool
+	// APIKey and Sender are the mNotify credentials; required when
+	// SMSEnabled is true.
+	APIKey string
+	Sender string
 }
 
 // Paystack configures the Paystack API.
@@ -407,6 +432,55 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 			errs = append(errs, fmt.Errorf("CHECKOUT_EXPIRY_MINUTES must be between 1 and 1440, got %q", v))
 		default:
 			cfg.CheckoutExpiryMinutes = minutes
+		}
+	}
+
+	// The order timers (DOMAIN §3): a paid order waits 48h for acceptance,
+	// and a delivered order completes 3 days later unless disputed.
+	cfg.Fulfilment = Fulfilment{
+		SellerAcceptTimeout: 48 * time.Hour,
+		EscrowAutoComplete:  3 * 24 * time.Hour,
+	}
+	if v := get("SELLER_ACCEPT_TIMEOUT_HOURS"); v != "" {
+		hours, err := strconv.Atoi(v)
+		switch {
+		case err != nil || hours < 1 || hours > 24*30:
+			errs = append(errs, fmt.Errorf("SELLER_ACCEPT_TIMEOUT_HOURS must be between 1 and %d, got %q", 24*30, v))
+		default:
+			cfg.Fulfilment.SellerAcceptTimeout = time.Duration(hours) * time.Hour
+		}
+	}
+	if v := get("ESCROW_AUTO_COMPLETE_DAYS"); v != "" {
+		days, err := strconv.Atoi(v)
+		switch {
+		case err != nil || days < 1 || days > 30:
+			errs = append(errs, fmt.Errorf("ESCROW_AUTO_COMPLETE_DAYS must be between 1 and 30, got %q", v))
+		default:
+			cfg.Fulfilment.EscrowAutoComplete = time.Duration(days) * 24 * time.Hour
+		}
+	}
+
+	// Transactional SMS. Off unless explicitly enabled: development and test
+	// use the LogOnly sender, which never sends a real message.
+	cfg.Notify = Notify{Sender: "Farmish"}
+	if v := get("NOTIFY_SMS_ENABLED"); v != "" {
+		enabled, err := strconv.ParseBool(v)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("NOTIFY_SMS_ENABLED must be true or false, got %q", v))
+		} else {
+			cfg.Notify.SMSEnabled = enabled
+		}
+	}
+	cfg.Notify.APIKey = get("MNOTIFY_API_KEY")
+	if v := get("MNOTIFY_SENDER"); v != "" {
+		cfg.Notify.Sender = v
+	}
+	if cfg.Notify.SMSEnabled {
+		if cfg.Notify.APIKey == "" {
+			errs = append(errs, errors.New("MNOTIFY_API_KEY is required when NOTIFY_SMS_ENABLED=true"))
+		}
+		if cfg.Notify.Sender == "" {
+			errs = append(errs, errors.New("MNOTIFY_SENDER is required when NOTIFY_SMS_ENABLED=true"))
 		}
 	}
 

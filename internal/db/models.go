@@ -119,6 +119,22 @@ type CommissionConfig struct {
 	UpdatedAt  time.Time
 }
 
+type Dispute struct {
+	ID             uuid.UUID
+	OrderID        uuid.UUID
+	OpenedBy       uuid.UUID
+	Reason         string
+	Description    string
+	Status         string
+	Outcome        *string
+	RefundPesewas  *int64
+	ResolutionNote *string
+	ResolvedBy     pgtype.UUID
+	ResolvedAt     *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
 type LedgerAccount struct {
 	ID        int64
 	Code      string

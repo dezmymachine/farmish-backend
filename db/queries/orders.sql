@@ -158,3 +158,49 @@ FROM orders o
 JOIN seller_profiles sp ON sp.user_id = o.seller_id
 JOIN users u ON u.id = o.seller_id
 WHERE o.id = $1;
+
+-- name: InsertDispute :one
+-- Returns no row when the order already has a dispute: the buyer cannot open
+-- a second case (the unique order_id enforces it).
+INSERT INTO disputes (order_id, opened_by, reason, description)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (order_id) DO NOTHING
+RETURNING *;
+
+-- name: GetOpenDisputeByOrder :one
+-- The auto-complete sweep's timer stop: an open dispute holds the order.
+SELECT * FROM disputes WHERE order_id = $1 AND status = 'open';
+
+-- name: ListUnacceptedPaidOrders :many
+-- Orders whose seller has not accepted within the timeout window, in a
+-- deterministic order. SKIP LOCKED keeps concurrent sweeps from fighting.
+SELECT * FROM orders
+WHERE status = 'paid' AND paid_at <= $1
+ORDER BY paid_at
+LIMIT $2
+FOR UPDATE SKIP LOCKED;
+
+-- name: ListDueDeliveredOrders :many
+-- Delivered orders past their auto-complete deadline, for the sweep to finish.
+-- The open-dispute exclusion lives in the sweep's per-order check under the
+-- row lock, so a dispute opened mid-sweep is still honoured.
+SELECT * FROM orders
+WHERE status = 'delivered' AND auto_complete_at <= $1
+ORDER BY auto_complete_at
+LIMIT $2
+FOR UPDATE SKIP LOCKED;
+
+-- name: SetOrderAcceptedAt :exec
+UPDATE orders SET accepted_at = $2 WHERE id = $1 AND status = 'accepted';
+
+-- name: SetOrderShipped :exec
+UPDATE orders SET shipped_at = $2, tracking_ref = COALESCE($3, tracking_ref)
+WHERE id = $1 AND status = 'shipped';
+
+-- name: SetOrderDeliveredAt :exec
+-- The auto-complete clock starts at delivery (DOMAIN §3: 3 days).
+UPDATE orders SET delivered_at = $2, auto_complete_at = $3
+WHERE id = $1 AND status = 'delivered';
+
+-- name: SetOrderCompletedAt :exec
+UPDATE orders SET completed_at = $2 WHERE id = $1 AND status = 'completed';

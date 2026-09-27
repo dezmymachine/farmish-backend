@@ -66,6 +66,8 @@ type Querier interface {
 	// when the matching show_* flag is true.
 	GetListingContactDetails(ctx context.Context, id uuid.UUID) (GetListingContactDetailsRow, error)
 	GetMediaObject(ctx context.Context, id uuid.UUID) (MediaObject, error)
+	// The auto-complete sweep's timer stop: an open dispute holds the order.
+	GetOpenDisputeByOrder(ctx context.Context, orderID uuid.UUID) (Dispute, error)
 	GetOrderByID(ctx context.Context, id uuid.UUID) (Order, error)
 	// Everything the order detail endpoint needs for either role, in one read.
 	GetOrderDetail(ctx context.Context, id uuid.UUID) (GetOrderDetailRow, error)
@@ -101,6 +103,9 @@ type Querier interface {
 	// A checkout holds reserved stock and one payment while the buyer pays. The
 	// unique (buyer_id, idempotency_key) is what makes POST /v1/checkout replayable.
 	InsertCheckout(ctx context.Context, arg InsertCheckoutParams) (Checkout, error)
+	// Returns no row when the order already has a dispute: the buyer cannot open
+	// a second case (the unique order_id enforces it).
+	InsertDispute(ctx context.Context, arg InsertDisputeParams) (Dispute, error)
 	InsertListing(ctx context.Context, arg InsertListingParams) (Listing, error)
 	InsertListingAttribute(ctx context.Context, arg InsertListingAttributeParams) error
 	InsertListingImage(ctx context.Context, arg InsertListingImageParams) error
@@ -136,6 +141,10 @@ type Querier interface {
 	// Every category override plus the default row, for server-side commission
 	// resolution. DOMAIN §2.1 snapshots the resolved rate on each order.
 	ListCommissionConfigs(ctx context.Context) ([]ListCommissionConfigsRow, error)
+	// Delivered orders past their auto-complete deadline, for the sweep to finish.
+	// The open-dispute exclusion lives in the sweep's per-order check under the
+	// row lock, so a dispute opened mid-sweep is still honoured.
+	ListDueDeliveredOrders(ctx context.Context, arg ListDueDeliveredOrdersParams) ([]Order, error)
 	// Unpaid checkouts past their window, in a deterministic order so the sweep
 	// behaves the same on every run. SKIP LOCKED keeps concurrent sweeps from
 	// fighting over the same checkout.
@@ -166,6 +175,9 @@ type Querier interface {
 	ListSellerListings(ctx context.Context, arg ListSellerListingsParams) ([]Listing, error)
 	// Admin review queue: oldest submission first.
 	ListSellerProfilesByStatus(ctx context.Context, arg ListSellerProfilesByStatusParams) ([]ListSellerProfilesByStatusRow, error)
+	// Orders whose seller has not accepted within the timeout window, in a
+	// deterministic order. SKIP LOCKED keeps concurrent sweeps from fighting.
+	ListUnacceptedPaidOrders(ctx context.Context, arg ListUnacceptedPaidOrdersParams) ([]Order, error)
 	// Several accounts may share an email (no account linking in v1).
 	ListUsersByEmail(ctx context.Context, email *string) ([]User, error)
 	// Serializes one buyer's credit balance changes for the transaction. The
@@ -199,9 +211,14 @@ type Querier interface {
 	// Only published_at / expires_at are set when they are given (publish sets
 	// both; mark-sold and archive leave them alone).
 	SetListingStatus(ctx context.Context, arg SetListingStatusParams) (Listing, error)
+	SetOrderAcceptedAt(ctx context.Context, arg SetOrderAcceptedAtParams) error
 	SetOrderCancelledAt(ctx context.Context, arg SetOrderCancelledAtParams) error
+	SetOrderCompletedAt(ctx context.Context, arg SetOrderCompletedAtParams) error
+	// The auto-complete clock starts at delivery (DOMAIN §3: 3 days).
+	SetOrderDeliveredAt(ctx context.Context, arg SetOrderDeliveredAtParams) error
 	SetOrderEscrowState(ctx context.Context, arg SetOrderEscrowStateParams) error
 	SetOrderPaid(ctx context.Context, arg SetOrderPaidParams) error
+	SetOrderShipped(ctx context.Context, arg SetOrderShippedParams) error
 	// Transition's status write. Only the target status's timestamp column moves;
 	// escrow_state is the caller's to set, because it depends on why the order
 	// moved. Returns no row when the current status differs, which Transition

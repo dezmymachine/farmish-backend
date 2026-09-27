@@ -524,3 +524,45 @@ func TestConfig_CheckoutExpiry(t *testing.T) {
 		t.Fatalf("override = %d, %v; want 45", cfg.CheckoutExpiryMinutes, err)
 	}
 }
+
+// TestConfig_FulfilmentAndNotify covers the order timers and the SMS switch.
+func TestConfig_FulfilmentAndNotify(t *testing.T) {
+	cfg, err := FromLookup(lookup(base(nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Fulfilment.SellerAcceptTimeout != 48*time.Hour {
+		t.Errorf("SellerAcceptTimeout = %s, want the 48h default", cfg.Fulfilment.SellerAcceptTimeout)
+	}
+	if cfg.Fulfilment.EscrowAutoComplete != 3*24*time.Hour {
+		t.Errorf("EscrowAutoComplete = %s, want the 3-day default", cfg.Fulfilment.EscrowAutoComplete)
+	}
+	if cfg.Notify.SMSEnabled {
+		t.Error("SMS must be off by default")
+	}
+	cfg, err = FromLookup(lookup(base(map[string]string{
+		"SELLER_ACCEPT_TIMEOUT_HOURS": "24", "ESCROW_AUTO_COMPLETE_DAYS": "2",
+	})))
+	if err != nil || cfg.Fulfilment.SellerAcceptTimeout != 24*time.Hour || cfg.Fulfilment.EscrowAutoComplete != 48*time.Hour {
+		t.Fatalf("overrides = %+v, %v", cfg.Fulfilment, err)
+	}
+	for _, invalid := range []string{"0", "-1", "soon"} {
+		if _, err := FromLookup(lookup(base(map[string]string{"SELLER_ACCEPT_TIMEOUT_HOURS": invalid}))); err == nil {
+			t.Errorf("SELLER_ACCEPT_TIMEOUT_HOURS=%q accepted", invalid)
+		}
+	}
+	if _, err := FromLookup(lookup(base(map[string]string{"ESCROW_AUTO_COMPLETE_DAYS": "0"}))); err == nil {
+		t.Error("ESCROW_AUTO_COMPLETE_DAYS=0 accepted")
+	}
+	// Enabling SMS requires both credentials.
+	_, err = FromLookup(lookup(base(map[string]string{"NOTIFY_SMS_ENABLED": "true"})))
+	if err == nil || !strings.Contains(err.Error(), "MNOTIFY_API_KEY") {
+		t.Errorf("SMS without a key: err = %v", err)
+	}
+	cfg, err = FromLookup(lookup(base(map[string]string{
+		"NOTIFY_SMS_ENABLED": "true", "MNOTIFY_API_KEY": "key", "MNOTIFY_SENDER": "FARMISH",
+	})))
+	if err != nil || !cfg.Notify.SMSEnabled || cfg.Notify.Sender != "FARMISH" {
+		t.Fatalf("enabled SMS = %+v, %v", cfg.Notify, err)
+	}
+}

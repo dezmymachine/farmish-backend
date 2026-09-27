@@ -124,6 +124,32 @@ func (q *Queries) GetCheckoutForUpdate(ctx context.Context, id uuid.UUID) (Check
 	return i, err
 }
 
+const getOpenDisputeByOrder = `-- name: GetOpenDisputeByOrder :one
+SELECT id, order_id, opened_by, reason, description, status, outcome, refund_pesewas, resolution_note, resolved_by, resolved_at, created_at, updated_at FROM disputes WHERE order_id = $1 AND status = 'open'
+`
+
+// The auto-complete sweep's timer stop: an open dispute holds the order.
+func (q *Queries) GetOpenDisputeByOrder(ctx context.Context, orderID uuid.UUID) (Dispute, error) {
+	row := q.db.QueryRow(ctx, getOpenDisputeByOrder, orderID)
+	var i Dispute
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.OpenedBy,
+		&i.Reason,
+		&i.Description,
+		&i.Status,
+		&i.Outcome,
+		&i.RefundPesewas,
+		&i.ResolutionNote,
+		&i.ResolvedBy,
+		&i.ResolvedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getOrderByID = `-- name: GetOrderByID :one
 SELECT id, checkout_id, buyer_id, seller_id, status, escrow_state, subtotal_pesewas, delivery_fee_pesewas, base_pesewas, commission_rate_bps, commission_pesewas, refunded_pesewas, delivery_method, delivery_address, delivery_region, delivery_district, recipient_name, recipient_phone, tracking_ref, paid_at, accepted_at, shipped_at, delivered_at, completed_at, cancelled_at, auto_complete_at, created_at, updated_at FROM orders WHERE id = $1
 `
@@ -409,6 +435,48 @@ func (q *Queries) InsertCheckout(ctx context.Context, arg InsertCheckoutParams) 
 	return i, err
 }
 
+const insertDispute = `-- name: InsertDispute :one
+INSERT INTO disputes (order_id, opened_by, reason, description)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (order_id) DO NOTHING
+RETURNING id, order_id, opened_by, reason, description, status, outcome, refund_pesewas, resolution_note, resolved_by, resolved_at, created_at, updated_at
+`
+
+type InsertDisputeParams struct {
+	OrderID     uuid.UUID
+	OpenedBy    uuid.UUID
+	Reason      string
+	Description string
+}
+
+// Returns no row when the order already has a dispute: the buyer cannot open
+// a second case (the unique order_id enforces it).
+func (q *Queries) InsertDispute(ctx context.Context, arg InsertDisputeParams) (Dispute, error) {
+	row := q.db.QueryRow(ctx, insertDispute,
+		arg.OrderID,
+		arg.OpenedBy,
+		arg.Reason,
+		arg.Description,
+	)
+	var i Dispute
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.OpenedBy,
+		&i.Reason,
+		&i.Description,
+		&i.Status,
+		&i.Outcome,
+		&i.RefundPesewas,
+		&i.ResolutionNote,
+		&i.ResolvedBy,
+		&i.ResolvedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const insertOrder = `-- name: InsertOrder :one
 INSERT INTO orders (checkout_id, buyer_id, seller_id, status, subtotal_pesewas,
                     delivery_fee_pesewas, base_pesewas, commission_rate_bps,
@@ -624,6 +692,71 @@ func (q *Queries) ListCheckoutOrders(ctx context.Context, checkoutID uuid.UUID) 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.SellerName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDueDeliveredOrders = `-- name: ListDueDeliveredOrders :many
+SELECT id, checkout_id, buyer_id, seller_id, status, escrow_state, subtotal_pesewas, delivery_fee_pesewas, base_pesewas, commission_rate_bps, commission_pesewas, refunded_pesewas, delivery_method, delivery_address, delivery_region, delivery_district, recipient_name, recipient_phone, tracking_ref, paid_at, accepted_at, shipped_at, delivered_at, completed_at, cancelled_at, auto_complete_at, created_at, updated_at FROM orders
+WHERE status = 'delivered' AND auto_complete_at <= $1
+ORDER BY auto_complete_at
+LIMIT $2
+FOR UPDATE SKIP LOCKED
+`
+
+type ListDueDeliveredOrdersParams struct {
+	AutoCompleteAt *time.Time
+	Limit          int32
+}
+
+// Delivered orders past their auto-complete deadline, for the sweep to finish.
+// The open-dispute exclusion lives in the sweep's per-order check under the
+// row lock, so a dispute opened mid-sweep is still honoured.
+func (q *Queries) ListDueDeliveredOrders(ctx context.Context, arg ListDueDeliveredOrdersParams) ([]Order, error) {
+	rows, err := q.db.Query(ctx, listDueDeliveredOrders, arg.AutoCompleteAt, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Order{}
+	for rows.Next() {
+		var i Order
+		if err := rows.Scan(
+			&i.ID,
+			&i.CheckoutID,
+			&i.BuyerID,
+			&i.SellerID,
+			&i.Status,
+			&i.EscrowState,
+			&i.SubtotalPesewas,
+			&i.DeliveryFeePesewas,
+			&i.BasePesewas,
+			&i.CommissionRateBps,
+			&i.CommissionPesewas,
+			&i.RefundedPesewas,
+			&i.DeliveryMethod,
+			&i.DeliveryAddress,
+			&i.DeliveryRegion,
+			&i.DeliveryDistrict,
+			&i.RecipientName,
+			&i.RecipientPhone,
+			&i.TrackingRef,
+			&i.PaidAt,
+			&i.AcceptedAt,
+			&i.ShippedAt,
+			&i.DeliveredAt,
+			&i.CompletedAt,
+			&i.CancelledAt,
+			&i.AutoCompleteAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1048,6 +1181,70 @@ func (q *Queries) ListOrdersBySeller(ctx context.Context, arg ListOrdersBySeller
 	return items, nil
 }
 
+const listUnacceptedPaidOrders = `-- name: ListUnacceptedPaidOrders :many
+SELECT id, checkout_id, buyer_id, seller_id, status, escrow_state, subtotal_pesewas, delivery_fee_pesewas, base_pesewas, commission_rate_bps, commission_pesewas, refunded_pesewas, delivery_method, delivery_address, delivery_region, delivery_district, recipient_name, recipient_phone, tracking_ref, paid_at, accepted_at, shipped_at, delivered_at, completed_at, cancelled_at, auto_complete_at, created_at, updated_at FROM orders
+WHERE status = 'paid' AND paid_at <= $1
+ORDER BY paid_at
+LIMIT $2
+FOR UPDATE SKIP LOCKED
+`
+
+type ListUnacceptedPaidOrdersParams struct {
+	PaidAt *time.Time
+	Limit  int32
+}
+
+// Orders whose seller has not accepted within the timeout window, in a
+// deterministic order. SKIP LOCKED keeps concurrent sweeps from fighting.
+func (q *Queries) ListUnacceptedPaidOrders(ctx context.Context, arg ListUnacceptedPaidOrdersParams) ([]Order, error) {
+	rows, err := q.db.Query(ctx, listUnacceptedPaidOrders, arg.PaidAt, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Order{}
+	for rows.Next() {
+		var i Order
+		if err := rows.Scan(
+			&i.ID,
+			&i.CheckoutID,
+			&i.BuyerID,
+			&i.SellerID,
+			&i.Status,
+			&i.EscrowState,
+			&i.SubtotalPesewas,
+			&i.DeliveryFeePesewas,
+			&i.BasePesewas,
+			&i.CommissionRateBps,
+			&i.CommissionPesewas,
+			&i.RefundedPesewas,
+			&i.DeliveryMethod,
+			&i.DeliveryAddress,
+			&i.DeliveryRegion,
+			&i.DeliveryDistrict,
+			&i.RecipientName,
+			&i.RecipientPhone,
+			&i.TrackingRef,
+			&i.PaidAt,
+			&i.AcceptedAt,
+			&i.ShippedAt,
+			&i.DeliveredAt,
+			&i.CompletedAt,
+			&i.CancelledAt,
+			&i.AutoCompleteAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const reserveListingStock = `-- name: ReserveListingStock :execrows
 UPDATE listings SET quantity_available = quantity_available - $2
 WHERE id = $1 AND quantity_available >= $2
@@ -1113,6 +1310,20 @@ func (q *Queries) SetCheckoutStatus(ctx context.Context, arg SetCheckoutStatusPa
 	return err
 }
 
+const setOrderAcceptedAt = `-- name: SetOrderAcceptedAt :exec
+UPDATE orders SET accepted_at = $2 WHERE id = $1 AND status = 'accepted'
+`
+
+type SetOrderAcceptedAtParams struct {
+	ID         uuid.UUID
+	AcceptedAt *time.Time
+}
+
+func (q *Queries) SetOrderAcceptedAt(ctx context.Context, arg SetOrderAcceptedAtParams) error {
+	_, err := q.db.Exec(ctx, setOrderAcceptedAt, arg.ID, arg.AcceptedAt)
+	return err
+}
+
 const setOrderCancelledAt = `-- name: SetOrderCancelledAt :exec
 UPDATE orders SET cancelled_at = $2 WHERE id = $1 AND status = 'cancelled'
 `
@@ -1124,6 +1335,37 @@ type SetOrderCancelledAtParams struct {
 
 func (q *Queries) SetOrderCancelledAt(ctx context.Context, arg SetOrderCancelledAtParams) error {
 	_, err := q.db.Exec(ctx, setOrderCancelledAt, arg.ID, arg.CancelledAt)
+	return err
+}
+
+const setOrderCompletedAt = `-- name: SetOrderCompletedAt :exec
+UPDATE orders SET completed_at = $2 WHERE id = $1 AND status = 'completed'
+`
+
+type SetOrderCompletedAtParams struct {
+	ID          uuid.UUID
+	CompletedAt *time.Time
+}
+
+func (q *Queries) SetOrderCompletedAt(ctx context.Context, arg SetOrderCompletedAtParams) error {
+	_, err := q.db.Exec(ctx, setOrderCompletedAt, arg.ID, arg.CompletedAt)
+	return err
+}
+
+const setOrderDeliveredAt = `-- name: SetOrderDeliveredAt :exec
+UPDATE orders SET delivered_at = $2, auto_complete_at = $3
+WHERE id = $1 AND status = 'delivered'
+`
+
+type SetOrderDeliveredAtParams struct {
+	ID             uuid.UUID
+	DeliveredAt    *time.Time
+	AutoCompleteAt *time.Time
+}
+
+// The auto-complete clock starts at delivery (DOMAIN §3: 3 days).
+func (q *Queries) SetOrderDeliveredAt(ctx context.Context, arg SetOrderDeliveredAtParams) error {
+	_, err := q.db.Exec(ctx, setOrderDeliveredAt, arg.ID, arg.DeliveredAt, arg.AutoCompleteAt)
 	return err
 }
 
@@ -1152,6 +1394,22 @@ type SetOrderPaidParams struct {
 
 func (q *Queries) SetOrderPaid(ctx context.Context, arg SetOrderPaidParams) error {
 	_, err := q.db.Exec(ctx, setOrderPaid, arg.ID, arg.PaidAt)
+	return err
+}
+
+const setOrderShipped = `-- name: SetOrderShipped :exec
+UPDATE orders SET shipped_at = $2, tracking_ref = COALESCE($3, tracking_ref)
+WHERE id = $1 AND status = 'shipped'
+`
+
+type SetOrderShippedParams struct {
+	ID          uuid.UUID
+	ShippedAt   *time.Time
+	TrackingRef *string
+}
+
+func (q *Queries) SetOrderShipped(ctx context.Context, arg SetOrderShippedParams) error {
+	_, err := q.db.Exec(ctx, setOrderShipped, arg.ID, arg.ShippedAt, arg.TrackingRef)
 	return err
 }
 
