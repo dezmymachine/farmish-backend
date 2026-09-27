@@ -50,6 +50,8 @@ type Server struct {
 	Checkout CheckoutStore
 	// Orders reads buyer and seller orders.
 	Orders OrderStore
+	// OrderActions moves an order through DOMAIN §4's table.
+	OrderActions OrderActions
 	// Views enqueues the listing view count. Nil disables counting, which
 	// keeps the read path working without a job queue.
 	Views listings.ViewCounter

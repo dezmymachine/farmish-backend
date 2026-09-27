@@ -51,14 +51,15 @@ func listingRouterWithLimits(t *testing.T, limits *middleware.RateLimits) (*gin.
 	store := mediatest.R2(t)
 	sellersSvc := sellers.New(pool, nil, nil)
 	listingsSvc := listings.New(pool, catalog.New(pool), media.New(pool, store), sellersSvc)
-	ordersSvc := orders.NewReadService(pool)
+	ordersSvc := orders.NewService(pool, 48*time.Hour, 3*24*time.Hour)
 	deps := Deps{
 		DB: fakePinger{}, Verifier: fb, Users: users.New(pool),
 		Sellers: sellersSvc, Media: media.New(pool, store),
 		Listings: listingsSvc, PublicListings: listingsSvc,
 		Checkout: checkout.New(pool,
 			payments.New(pool, fake.New(), slog.New(slog.DiscardHandler), 195, "https://farmish.gh/payments/status"),
-			fake.New(), delivery.Manual{}, ledger.New(), slog.New(slog.DiscardHandler), 195, 30*time.Minute),
+			fake.New(), delivery.Manual{}, ledger.New(), ordersSvc,
+			slog.New(slog.DiscardHandler), 195, 30*time.Minute),
 		Orders: ordersSvc,
 	}
 	if limits != nil {

@@ -30,6 +30,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/media"
 	"github.com/dezmymachine/farmish-backend/internal/media/mediatest"
 	"github.com/dezmymachine/farmish-backend/internal/money"
+	"github.com/dezmymachine/farmish-backend/internal/notify"
 	"github.com/dezmymachine/farmish-backend/internal/orders"
 	"github.com/dezmymachine/farmish-backend/internal/payments"
 	"github.com/dezmymachine/farmish-backend/internal/payments/fake"
@@ -68,12 +69,15 @@ func newCheckoutFixtureWithLimits(t *testing.T, limits *middleware.RateLimits) *
 	log := slog.New(slog.DiscardHandler)
 	provider := fake.New()
 	paymentsSvc := payments.New(pool, provider, log, paystackFeeBps, "https://farmish.gh/payments/status")
-	svc := checkout.New(pool, paymentsSvc, provider, delivery.Manual{}, ledger.New(), log, paystackFeeBps, 30*time.Minute)
+	ordersSvc := orders.NewService(pool, 48*time.Hour, 3*24*time.Hour)
+	svc := checkout.New(pool, paymentsSvc, provider, delivery.Manual{}, ledger.New(), ordersSvc, log, paystackFeeBps, 30*time.Minute)
 	paymentsSvc.RegisterPurpose(payments.PurposeCheckout, svc.HandleCheckoutPaid)
 
 	reg := jobs.NewRegistry()
 	payments.RegisterSucceeded(reg, paymentsSvc, log)
 	checkout.RegisterJobs(reg, svc, log)
+	orders.RegisterJobs(reg, ordersSvc, log)
+	notify.Register(reg, notify.NewWorker(notify.LogOnly{Log: log}, log, pool))
 	client, err := jobs.NewClient(pool, reg, log, jobs.Options{Work: true, FetchPollInterval: 50 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
@@ -85,6 +89,7 @@ func newCheckoutFixtureWithLimits(t *testing.T, limits *middleware.RateLimits) *
 	}
 	paymentsSvc.AttachJobClient(client)
 	svc.AttachJobClient(client)
+	ordersSvc.AttachJobClient(client)
 	t.Cleanup(func() {
 		if err := jobs.Stop(client, 5*time.Second, 2*time.Second, log); err != nil {
 			t.Errorf("stop jobs: %v", err)
@@ -96,7 +101,7 @@ func newCheckoutFixtureWithLimits(t *testing.T, limits *middleware.RateLimits) *
 		DB: fakePinger{}, Verifier: fb, Users: users.New(pool),
 		Sellers: sellersSvc, Media: media.New(pool, store),
 		Listings: listingsSvc, PublicListings: listingsSvc,
-		Payments: paymentsSvc, Checkout: svc, Orders: orders.NewReadService(pool),
+		Payments: paymentsSvc, Checkout: svc, Orders: ordersSvc,
 	}
 	if limits != nil {
 		deps.RateLimits = limits
@@ -417,6 +422,9 @@ func waitForCheckoutJob(t *testing.T, events <-chan *river.Event) {
 		case event := <-events:
 			if event.Kind == river.EventKindJobCompleted && event.Job.Kind == "payments.succeeded" {
 				return
+			}
+			if event.Kind == river.EventKindJobFailed && event.Job.Kind == "payments.succeeded" {
+				t.Fatalf("payments.succeeded failed: %s", event.Job.Errors[0].Error)
 			}
 		case <-deadline:
 			t.Fatal("timed out waiting for payments.succeeded")

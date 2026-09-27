@@ -28,6 +28,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/ledger"
 	"github.com/dezmymachine/farmish-backend/internal/listings"
 	"github.com/dezmymachine/farmish-backend/internal/media"
+	"github.com/dezmymachine/farmish-backend/internal/notify"
 	"github.com/dezmymachine/farmish-backend/internal/orders"
 	"github.com/dezmymachine/farmish-backend/internal/payments"
 	"github.com/dezmymachine/farmish-backend/internal/promotions"
@@ -88,7 +89,8 @@ func sharedLimiter(ctx context.Context, cfg config.Config, log *slog.Logger) (ra
 // workers and periodic jobs here. The orphan sweep is registered only when
 // media storage is configured (it is required when deployed).
 func registry(log *slog.Logger, mediaSvc *media.Service, listingsSvc *listings.Service,
-	paymentsSvc *payments.Service, checkoutSvc *checkout.Service,
+	paymentsSvc *payments.Service, checkoutSvc *checkout.Service, ordersSvc *orders.Service,
+	sender notify.SMS, pool *pgxpool.Pool,
 ) *jobs.Registry {
 	r := jobs.NewRegistry()
 	jobs.Register(r, &jobs.NoopWorker{Log: log})
@@ -99,6 +101,8 @@ func registry(log *slog.Logger, mediaSvc *media.Service, listingsSvc *listings.S
 	listings.RegisterCountView(r, listingsSvc)
 	payments.RegisterSucceeded(r, paymentsSvc, log)
 	checkout.RegisterJobs(r, checkoutSvc, log)
+	orders.RegisterJobs(r, ordersSvc, log)
+	notify.Register(r, notify.NewWorker(sender, log, pool))
 	return r
 }
 
@@ -174,14 +178,20 @@ func run() error {
 	// A settled promotion payment grants credits through the same purpose-handler
 	// mechanism Phase 13a defined. Register it before any worker can run.
 	paymentsSvc.RegisterPurpose(payments.PurposePromotion, promotionsSvc.HandlePromotionPaid)
+	ordersSvc := orders.NewService(pool, cfg.Fulfilment.SellerAcceptTimeout, cfg.Fulfilment.EscrowAutoComplete)
 	checkoutSvc := checkout.New(pool, paymentsSvc, payments.NewPaystackClient(cfg.Paystack.SecretKey, cfg.Paystack.BaseURL),
-		delivery.Manual{}, ledger.New(), log, cfg.Paystack.FeeBps,
+		delivery.Manual{}, ledger.New(), ordersSvc, log, cfg.Paystack.FeeBps,
 		time.Duration(cfg.CheckoutExpiryMinutes)*time.Minute)
 	// Both purposes exist now: promotion grants credits (Phase 14), checkout
 	// holds escrow (Phase 15b). Register before any worker can run.
 	paymentsSvc.RegisterPurpose(payments.PurposeCheckout, checkoutSvc.HandleCheckoutPaid)
+	notifySender := notify.SMS(notify.LogOnly{Log: log})
+	if cfg.Notify.SMSEnabled {
+		notifySender = notify.NewMNotify(cfg.Notify.APIKey, cfg.Notify.Sender, "")
+		log.Info("transactional SMS enabled", "sender", cfg.Notify.Sender)
+	}
 
-	jobClient, err := jobs.NewClient(pool, registry(log, mediaSvc, listingsSvc, paymentsSvc, checkoutSvc), log, jobs.Options{
+	jobClient, err := jobs.NewClient(pool, registry(log, mediaSvc, listingsSvc, paymentsSvc, checkoutSvc, ordersSvc, notifySender, pool), log, jobs.Options{
 		Work:       cfg.RunMode.WorksJobs(),
 		MaxWorkers: cfg.JobsMaxWorkers,
 	})
@@ -193,6 +203,7 @@ func run() error {
 	// before the server starts, so no request can arrive in between.
 	paymentsSvc.AttachJobClient(jobClient)
 	checkoutSvc.AttachJobClient(jobClient)
+	ordersSvc.AttachJobClient(jobClient)
 
 	if cfg.RunMode.WorksJobs() {
 		// Not the signal context: cancelling Start's context would abort running
@@ -238,7 +249,8 @@ func run() error {
 			Payments:      paymentsSvc,
 			Promotions:    promotionsSvc,
 			Checkout:      checkoutSvc,
-			Orders:        orders.NewReadService(pool),
+			Orders:        ordersSvc,
+			OrderActions:  ordersSvc,
 			Turnstile:     turnstile.New(cfg.TurnstileSecret),
 			IPLimiter:     ipLimiter,
 			SharedLimiter: shared,

@@ -883,6 +883,247 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /v1/seller/orders/{id}/accept:
+    post:
+      tags: [orders]
+      operationId: acceptOrder
+      summary: Accept a paid order
+      description: |
+        The seller of the order only; anyone else gets a 404. Accepting starts
+        fulfilment. A paid order that is not accepted within 48 hours
+        auto-cancels with a refund.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: The accepted order, seller-shaped.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "default":
+          $ref: "#/components/responses/OrderActionError"
+  /v1/seller/orders/{id}/reject:
+    post:
+      tags: [orders]
+      operationId: rejectOrder
+      summary: Refuse an order
+      description: |
+        The seller of the order only. Refusing cancels the order, restores the
+        reserved stock and queues the buyer's refund. The reason is recorded
+        in the event trail.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderActionRequest"
+      responses:
+        "200":
+          description: The cancelled order, seller-shaped.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "default":
+          $ref: "#/components/responses/OrderActionError"
+  /v1/seller/orders/{id}/ship:
+    post:
+      tags: [orders]
+      operationId: shipOrder
+      summary: Mark an order shipped
+      description: |
+        The seller of the order only. For pickup orders "shipped" means "ready
+        for pickup". The optional tracking reference is shown to the buyer.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShipOrderRequest"
+      responses:
+        "200":
+          description: The shipped order, seller-shaped.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "default":
+          $ref: "#/components/responses/OrderActionError"
+  /v1/seller/orders/{id}/mark-delivered:
+    post:
+      tags: [orders]
+      operationId: markOrderDelivered
+      summary: Mark an order delivered
+      description: |
+        The seller of the order only. Delivery starts the 3-day window in
+        which the buyer confirms receipt or opens a dispute; after that the
+        order auto-completes and escrow releases.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: The delivered order, seller-shaped.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "default":
+          $ref: "#/components/responses/OrderActionError"
+  /v1/orders/{id}/cancel:
+    post:
+      tags: [orders]
+      operationId: cancelOrder
+      summary: Cancel my purchase
+      description: |
+        The buyer of the order only, and only before the seller accepts. The
+        stock goes back on sale and the seller is told the sale is off.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderActionRequest"
+      responses:
+        "200":
+          description: The cancelled order, buyer-shaped.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "default":
+          $ref: "#/components/responses/OrderActionError"
+  /v1/orders/{id}/confirm-receipt:
+    post:
+      tags: [orders]
+      operationId: confirmOrderReceipt
+      summary: Confirm I received my order
+      description: |
+        The buyer of the order only, on a shipped or delivered order.
+        Confirming completes the order and queues the seller's escrow release.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: The completed order, buyer-shaped.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "default":
+          $ref: "#/components/responses/OrderActionError"
+  /v1/orders/{id}/dispute:
+    post:
+      tags: [orders]
+      operationId: disputeOrder
+      summary: Open a dispute
+      description: |
+        The buyer of the order only, on a shipped or delivered order and
+        before auto-completion. Opening a dispute stops the 3-day
+        auto-complete clock; escrow stays held until our team resolves the
+        case.
+      x-farmish-rate-limit: sensitive
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DisputeOrderRequest"
+      responses:
+        "200":
+          description: The disputed order, buyer-shaped.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "default":
+          $ref: "#/components/responses/OrderActionError"
   /v1/orders/{id}:
     get:
       tags: [orders]
@@ -1466,6 +1707,16 @@ components:
       description: |
         The payment provider could not be reached or refused the request. No
         money moved: the buyer can retry.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    OrderActionError:
+      description: |
+        400 validation_failed, 403 forbidden (wrong party for this order),
+        404 not found (including not a party), 409 invalid_transition (with
+        `from` and `to` in the details). The body is the shared error
+        envelope.
       content:
         application/json:
           schema:
@@ -2840,6 +3091,36 @@ components:
         createdAt:
           type: string
           format: date-time
+    OrderActionRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      description: A free-text reason, recorded in the order's event trail.
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    ShipOrderRequest:
+      type: object
+      additionalProperties: false
+      description: The tracking reference is optional; omitting it keeps any stored one.
+      properties:
+        trackingRef:
+          type: string
+          maxLength: 120
+    DisputeOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [reason, description]
+      properties:
+        reason:
+          type: string
+          enum: [not_received, not_as_described, damaged, wrong_item, other]
+        description:
+          type: string
+          minLength: 10
+          maxLength: 2000
     OrderDetail:
       type: object
       description: |
