@@ -52,6 +52,26 @@ const (
 // AllActorTypes is every actor type, for the full-table test.
 var AllActorTypes = []string{ActorBuyer, ActorSeller, ActorAdmin, ActorSystem}
 
+// Refund reasons stored in refunds.reason (Phase 17a schema). dispute_refund
+// and dispute_partial are Phase 17b's; they exist here only because the CHECK
+// constraint and the schema are this phase's.
+const (
+	RefundReasonSellerRejected   = "seller_rejected"
+	RefundReasonBuyerCancelled   = "buyer_cancelled"
+	RefundReasonSellerTimeout    = "seller_timeout"
+	RefundReasonStockUnavailable = "stock_unavailable"
+	RefundReasonDisputeRefund    = "dispute_refund"
+	RefundReasonDisputePartial   = "dispute_partial"
+)
+
+// Refund statuses stored in refunds.status (Phase 17a schema).
+const (
+	RefundStatusQueued    = "queued"
+	RefundStatusPending   = "pending"
+	RefundStatusProcessed = "processed"
+	RefundStatusFailed    = "failed"
+)
+
 var (
 	// ErrNotFound means no order matches, or the caller is not a party to it.
 	// Both read as 404 so order ids cannot be probed.
@@ -188,6 +208,8 @@ type SideEffect struct {
 	Template string
 	// Recipient is the user to notify (EffectNotify only).
 	Recipient uuid.UUID
+	// Reason is the refunds.reason value to record (EffectEnqueueRefund only).
+	Reason string
 }
 
 // transitionTable is DOMAIN §4, verbatim: from → to → the actor types that
@@ -284,9 +306,10 @@ func effectsFor(order Order, to, actorType string) []SideEffect {
 }
 
 // cancelEffects shape a death: stock back, money back, and whoever did not
-// cancel it is told.
+// cancel it is told. The refund's reason records who caused it (DOMAIN's
+// refunds.reason, Phase 17a).
 func cancelEffects(order Order, actorType string) []SideEffect {
-	effects := []SideEffect{{Kind: EffectRestoreStock}, {Kind: EffectEnqueueRefund}}
+	effects := []SideEffect{{Kind: EffectRestoreStock}, {Kind: EffectEnqueueRefund, Reason: refundReasonFor(actorType)}}
 	switch actorType {
 	case ActorSeller:
 		return append(effects, SideEffect{Kind: EffectNotify, Template: "order_rejected_buyer", Recipient: order.BuyerID})
@@ -298,6 +321,21 @@ func cancelEffects(order Order, actorType string) []SideEffect {
 		return append(effects,
 			SideEffect{Kind: EffectNotify, Template: "order_cancelled_seller", Recipient: order.SellerID},
 			SideEffect{Kind: EffectNotify, Template: "order_cancelled_buyer", Recipient: order.BuyerID})
+	}
+}
+
+// refundReasonFor maps the actor who cancelled the order to the refund's
+// stored reason. A system cancellation here is always the 48h accept timeout
+// (DOMAIN §3): the checkout-expiry recovery path records its own reason
+// directly, bypassing this table.
+func refundReasonFor(actorType string) string {
+	switch actorType {
+	case ActorSeller:
+		return RefundReasonSellerRejected
+	case ActorBuyer:
+		return RefundReasonBuyerCancelled
+	default:
+		return RefundReasonSellerTimeout
 	}
 }
 

@@ -72,8 +72,13 @@ func newFulfilmentFixtureWithLimits(t *testing.T, limits *middleware.RateLimits)
 	provider := fake.New()
 	paymentsSvc := payments.New(pool, provider, log, paystackFeeBps, "https://farmish.gh/payments/status")
 	ordersSvc := orders.NewService(pool, 48*time.Hour, 3*24*time.Hour)
+	ordersSvc.AttachLedger(ledger.New())
+	ordersSvc.AttachPaystack(provider)
 	checkoutSvc := checkout.New(pool, paymentsSvc, provider, delivery.Manual{}, ledger.New(), ordersSvc, log, paystackFeeBps, 30*time.Minute)
 	paymentsSvc.RegisterPurpose(payments.PurposeCheckout, checkoutSvc.HandleCheckoutPaid)
+	// The same registration cmd/api performs (Phase 17a), so the refund
+	// webhook tests prove the production wiring.
+	orders.RegisterRefundEvents(paymentsSvc, ordersSvc)
 
 	reg := jobs.NewRegistry()
 	payments.RegisterSucceeded(reg, paymentsSvc, log)
@@ -281,7 +286,7 @@ func TestEndpoints_FulfilmentHappyPath(t *testing.T) {
 	// The escrow release is queued.
 	var releaseJobs int64
 	if err := f.pool.QueryRow(context.Background(),
-		`SELECT COUNT(*) FROM river_job WHERE kind = 'orders.release_needed'`).Scan(&releaseJobs); err != nil {
+		`SELECT COUNT(*) FROM river_job WHERE kind = 'orders.release_escrow'`).Scan(&releaseJobs); err != nil {
 		t.Fatal(err)
 	}
 	if releaseJobs != 1 {
@@ -434,7 +439,7 @@ func TestEndpoints_RejectRefunds(t *testing.T) {
 	}
 	var refundJobs int64
 	if err := f.pool.QueryRow(context.Background(),
-		`SELECT COUNT(*) FROM river_job WHERE kind = 'orders.refund_needed'`).Scan(&refundJobs); err != nil {
+		`SELECT COUNT(*) FROM river_job WHERE kind = 'orders.refund'`).Scan(&refundJobs); err != nil {
 		t.Fatal(err)
 	}
 	if refundJobs != 1 {

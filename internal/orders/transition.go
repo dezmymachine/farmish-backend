@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,7 +14,9 @@ import (
 
 	"github.com/dezmymachine/farmish-backend/internal/db"
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
+	"github.com/dezmymachine/farmish-backend/internal/ledger"
 	"github.com/dezmymachine/farmish-backend/internal/notify"
+	"github.com/dezmymachine/farmish-backend/internal/payments"
 )
 
 // Service owns the order state machine, its side effects and the order reads.
@@ -29,8 +32,28 @@ type Service struct {
 	// jobs enqueues refund, release and notify jobs inside the caller's
 	// transaction. Nil disables enqueuing (unit tests of the table alone).
 	jobs *jobs.Client
+	// ledger posts the escrow release and refund transactions (Phase 17a). Nil
+	// makes ReleaseEscrow and ProcessRefund fail loudly rather than silently
+	// skip: unlike notifications, money must never be dropped.
+	ledger *ledger.Ledger
+	// paystack makes the refund's external call (Phase 17a). Nil fails loudly,
+	// for the same reason.
+	paystack payments.Provider
 	// Now is the clock, injectable so the timer tests never sleep.
 	Now func() time.Time
+	// log receives the refund failure and rejection alerts (Phase 17a). Nil
+	// means slog.Default().
+	log *slog.Logger
+}
+
+// AttachLogger gives the service the logger its money alerts go to.
+func (s *Service) AttachLogger(l *slog.Logger) { s.log = l }
+
+func (s *Service) logger() *slog.Logger {
+	if s.log == nil {
+		return slog.Default()
+	}
+	return s.log
 }
 
 // NewService returns the state machine with its timers over a pool
@@ -47,25 +70,13 @@ func NewService(pool *pgxpool.Pool, sellerAcceptTimeout, autoComplete time.Durat
 // calls it once, after the registry exists.
 func (s *Service) AttachJobClient(client *jobs.Client) { s.jobs = client }
 
-// RefundNeededArgs queues the buyer's money back. Phase 17a replaces the
-// log-only worker with the real Paystack refund.
-type RefundNeededArgs struct {
-	OrderID       uuid.UUID `json:"orderId"`
-	AmountPesewas int64     `json:"amountPesewas"`
-}
+// AttachLedger gives the service the ledger it needs to post escrow releases
+// and refunds (Phase 17a). cmd/api calls it once, before any job can run.
+func (s *Service) AttachLedger(l *ledger.Ledger) { s.ledger = l }
 
-// Kind implements river.JobArgs.
-func (RefundNeededArgs) Kind() string { return "orders.refund_needed" }
-
-// ReleaseNeededArgs queues the escrow release to the seller. Phase 17a
-// replaces the log-only worker with the real release posting.
-type ReleaseNeededArgs struct {
-	OrderID       uuid.UUID `json:"orderId"`
-	AmountPesewas int64     `json:"amountPesewas"`
-}
-
-// Kind implements river.JobArgs.
-func (ReleaseNeededArgs) Kind() string { return "orders.release_needed" }
+// AttachPaystack gives the service the provider it needs to call the refund
+// API (Phase 17a). cmd/api calls it once, before any job can run.
+func (s *Service) AttachPaystack(p payments.Provider) { s.paystack = p }
 
 // Transition moves one order, inside the caller's transaction.
 //
@@ -159,22 +170,15 @@ func (s *Service) ApplyEffects(ctx context.Context, tx pgx.Tx, order Order, effe
 				return err
 			}
 		case EffectEnqueueRefund:
-			if s.jobs == nil {
-				continue
-			}
-			if _, err := s.jobs.InsertTx(ctx, tx, RefundNeededArgs{
-				OrderID: order.ID, AmountPesewas: order.BasePesewas,
-			}, jobs.Unique()); err != nil {
-				return fmt.Errorf("enqueue refund needed: %w", err)
+			if err := s.CreateRefund(ctx, tx, order.ID, order.BasePesewas, effect.Reason); err != nil {
+				return err
 			}
 		case EffectEnqueueRelease:
 			if s.jobs == nil {
 				continue
 			}
-			if _, err := s.jobs.InsertTx(ctx, tx, ReleaseNeededArgs{
-				OrderID: order.ID, AmountPesewas: order.BasePesewas,
-			}, jobs.Unique()); err != nil {
-				return fmt.Errorf("enqueue release needed: %w", err)
+			if _, err := s.jobs.InsertTx(ctx, tx, ReleaseEscrowArgs{OrderID: order.ID}, jobs.Unique()); err != nil {
+				return fmt.Errorf("enqueue release escrow: %w", err)
 			}
 		case EffectNotify:
 			if s.jobs == nil {

@@ -65,11 +65,19 @@ func TestAutoCancel_FakeClock(t *testing.T) {
 	}
 	var refundJobs int64
 	if err := f.pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM river_job WHERE kind = 'orders.refund_needed'`).Scan(&refundJobs); err != nil {
+		`SELECT COUNT(*) FROM river_job WHERE kind = 'orders.refund'`).Scan(&refundJobs); err != nil {
 		t.Fatal(err)
 	}
 	if refundJobs != 1 {
 		t.Errorf("refund jobs = %d, want 1", refundJobs)
+	}
+	var refundRows int64
+	if err := f.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM refunds WHERE order_id = $1 AND reason = 'seller_timeout'`, f.orderID).Scan(&refundRows); err != nil {
+		t.Fatal(err)
+	}
+	if refundRows != 1 {
+		t.Errorf("refund rows = %d, want 1 seller_timeout", refundRows)
 	}
 	var notifyJobs int64
 	if err := f.pool.QueryRow(ctx,
@@ -122,12 +130,14 @@ func TestAutoComplete_FakeClock(t *testing.T) {
 		`SELECT status, escrow_state FROM orders WHERE id = $1`, f.orderID).Scan(&status, &escrowState); err != nil {
 		t.Fatal(err)
 	}
-	if status != orders.StatusCompleted || escrowState != orders.EscrowReleased {
-		t.Errorf("order = %s/%s, want completed/released", status, escrowState)
+	// Escrow stays held until the release job (Phase 17a) actually posts the
+	// ledger entries; the sweep only completes the order and queues it.
+	if status != orders.StatusCompleted || escrowState != orders.EscrowHeld {
+		t.Errorf("order = %s/%s, want completed/held", status, escrowState)
 	}
 	var releaseJobs int64
 	if err := f.pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM river_job WHERE kind = 'orders.release_needed'`).Scan(&releaseJobs); err != nil {
+		`SELECT COUNT(*) FROM river_job WHERE kind = 'orders.release_escrow'`).Scan(&releaseJobs); err != nil {
 		t.Fatal(err)
 	}
 	if releaseJobs != 1 {

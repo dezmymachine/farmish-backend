@@ -93,12 +93,8 @@ func (s *Service) confirmExpired(ctx context.Context, tx pgx.Tx, q *db.Queries, 
 			if err := s.orders.SetEscrowState(ctx, tx, order.ID, orders.EscrowRefundPending); err != nil {
 				return err
 			}
-			if s.jobs != nil {
-				if _, err := s.jobs.InsertTx(ctx, tx, orders.RefundNeededArgs{
-					OrderID: order.ID, AmountPesewas: order.BasePesewas,
-				}, jobsUnique()); err != nil {
-					return fmt.Errorf("enqueue refund needed: %w", err)
-				}
+			if err := s.orders.CreateRefund(ctx, tx, order.ID, order.BasePesewas, orders.RefundReasonStockUnavailable); err != nil {
+				return err
 			}
 			if err := audit.Record(ctx, tx, audit.Event{
 				Action: "order.refund_needed", TargetType: "order", TargetID: order.ID.String(),

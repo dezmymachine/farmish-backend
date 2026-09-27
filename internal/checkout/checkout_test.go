@@ -91,6 +91,8 @@ func newFixture(t *testing.T) *fixture {
 	f.provider = fake.New()
 	f.payments = payments.New(pool, f.provider, log, feeBps, "https://farmish.gh/payments/status")
 	f.orders = orders.NewService(pool, 48*time.Hour, 3*24*time.Hour)
+	f.orders.AttachLedger(ledger.New())
+	f.orders.AttachPaystack(f.provider)
 	f.svc = checkout.New(pool, f.payments, f.provider, delivery.Manual{}, ledger.New(), f.orders, log, feeBps, 30*time.Minute)
 	f.svc.Now = func() time.Time { return f.now }
 	f.payments.RegisterPurpose(payments.PurposeCheckout, f.svc.HandleCheckoutPaid)
@@ -684,11 +686,11 @@ func TestCheckout_PaidAfterExpiry(t *testing.T) {
 		}
 		var refundJobs int64
 		if err := f.pool.QueryRow(ctx,
-			`SELECT COUNT(*) FROM river_job WHERE kind = 'orders.refund_needed'`).Scan(&refundJobs); err != nil {
+			`SELECT COUNT(*) FROM river_job WHERE kind = 'orders.refund'`).Scan(&refundJobs); err != nil {
 			t.Fatal(err)
 		}
 		if refundJobs != 1 {
-			t.Errorf("refund-needed jobs = %d, want 1", refundJobs)
+			t.Errorf("refund jobs = %d, want 1", refundJobs)
 		}
 		var audits int64
 		if err := f.pool.QueryRow(ctx,

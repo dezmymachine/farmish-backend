@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 
@@ -19,34 +20,66 @@ import (
 // 100, taken with FOR UPDATE SKIP LOCKED).
 const SweepBatch = 100
 
-// RefundNeededWorker records that a refund is owed. Phase 17a replaces this
-// body with the real Paystack refund; until then the audit trail plus this
-// log line is the operator's queue.
-type RefundNeededWorker struct {
-	river.WorkerDefaults[RefundNeededArgs]
-	Log *slog.Logger
+// ReleaseEscrowArgs queues an order's escrow release to its seller (DOMAIN
+// §5.3.2, §4.1). The job recomputes the remaining base and commission from
+// the order row itself, so no amount travels in the args.
+type ReleaseEscrowArgs struct {
+	OrderID uuid.UUID `json:"orderId"`
+}
+
+// Kind implements river.JobArgs.
+func (ReleaseEscrowArgs) Kind() string { return "orders.release_escrow" }
+
+// ReleaseEscrowWorker posts the escrow release. It is idempotent: a wrong
+// state is a logged no-op, and the ledger's UNIQUE(kind, reference) stops a
+// second posting for the same order.
+type ReleaseEscrowWorker struct {
+	river.WorkerDefaults[ReleaseEscrowArgs]
+	Service *Service
+	Log     *slog.Logger
 }
 
 // Work implements river.Worker.
-func (w *RefundNeededWorker) Work(_ context.Context, job *river.Job[RefundNeededArgs]) error {
-	w.Log.Warn("refund needed (Phase 17a will process it)",
-		slog.String("order_id", job.Args.OrderID.String()),
-		slog.Int64("pesewas", job.Args.AmountPesewas))
+func (w *ReleaseEscrowWorker) Work(ctx context.Context, job *river.Job[ReleaseEscrowArgs]) error {
+	posted, err := w.Service.ReleaseEscrow(ctx, job.Args.OrderID)
+	if err != nil {
+		return err
+	}
+	if !posted {
+		w.Log.Info("escrow release skipped: order is not completed with escrow held",
+			slog.String("order_id", job.Args.OrderID.String()))
+	}
 	return nil
 }
 
-// ReleaseNeededWorker records that escrow should be released. Phase 17a
-// replaces this body with the real release posting.
-type ReleaseNeededWorker struct {
-	river.WorkerDefaults[ReleaseNeededArgs]
-	Log *slog.Logger
+// RefundArgs queues one attempt of a queued refund's Paystack call. The
+// refund row is created in the transition's own transaction, with
+// status=queued; this job only makes the external call and reacts to it.
+type RefundArgs struct {
+	RefundID uuid.UUID `json:"refundId"`
+}
+
+// Kind implements river.JobArgs.
+func (RefundArgs) Kind() string { return "orders.refund" }
+
+// RefundWorker runs one step of a refund (ADR-0027). While the refund is
+// pending it snoozes and re-checks with Paystack (snoozes do not use up
+// attempts); only database errors return an error for River's retry.
+type RefundWorker struct {
+	river.WorkerDefaults[RefundArgs]
+	Service *Service
+	Log     *slog.Logger
 }
 
 // Work implements river.Worker.
-func (w *ReleaseNeededWorker) Work(_ context.Context, job *river.Job[ReleaseNeededArgs]) error {
-	w.Log.Warn("escrow release needed (Phase 17a will process it)",
-		slog.String("order_id", job.Args.OrderID.String()),
-		slog.Int64("pesewas", job.Args.AmountPesewas))
+func (w *RefundWorker) Work(ctx context.Context, job *river.Job[RefundArgs]) error {
+	next, err := w.Service.ProcessRefund(ctx, job.Args.RefundID)
+	if err != nil {
+		return err
+	}
+	if next > 0 {
+		return river.JobSnooze(next)
+	}
 	return nil
 }
 
@@ -105,8 +138,8 @@ func (w *AutoCompleteWorker) Work(ctx context.Context, _ *river.Job[AutoComplete
 // RegisterJobs adds the workers and the two hourly schedules. Both run on
 // start, so a deployment immediately clears anything already overdue.
 func RegisterJobs(r *jobs.Registry, svc *Service, log *slog.Logger) {
-	jobs.Register(r, &RefundNeededWorker{Log: log})
-	jobs.Register(r, &ReleaseNeededWorker{Log: log})
+	jobs.Register(r, &ReleaseEscrowWorker{Service: svc, Log: log})
+	jobs.Register(r, &RefundWorker{Service: svc, Log: log})
 	jobs.Register(r, &AutoCancelWorker{Service: svc, Log: log})
 	jobs.Register(r, &AutoCompleteWorker{Service: svc, Log: log})
 	r.Every(time.Hour, func() river.JobArgs { return AutoCancelArgs{} }, true)
@@ -175,9 +208,8 @@ func (s *Service) AutoCompleteDelivered(ctx context.Context) (int, error) {
 			if err != nil {
 				return err
 			}
-			if err := s.SetEscrowState(ctx, tx, order.ID, EscrowReleased); err != nil {
-				return err
-			}
+			// Escrow stays held: the release job (Phase 17a) sets it to released
+			// only after it actually posts the ledger entries.
 			if err := s.ApplyEffects(ctx, tx, order, effects); err != nil {
 				return err
 			}

@@ -9,6 +9,7 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
+	"github.com/dezmymachine/farmish-backend/internal/ledger"
 	"github.com/dezmymachine/farmish-backend/internal/notify"
 	"github.com/dezmymachine/farmish-backend/internal/orders"
 )
@@ -25,6 +26,7 @@ func newRiverTimerFixture(t *testing.T, now time.Time) *riverTimerFixture {
 	t.Helper()
 	base := newTableFixture(t)
 	base.svc.Now = func() time.Time { return now }
+	base.svc.AttachLedger(ledger.New())
 	log := slog.New(slog.DiscardHandler)
 	reg := jobs.NewRegistry()
 	orders.RegisterJobs(reg, base.svc, log)
@@ -94,16 +96,26 @@ func TestSweeps_RiverExecution(t *testing.T) {
 
 	// Back to delivered and due: the second sweep completes it through River.
 	if _, err := f.pool.Exec(ctx,
-		`UPDATE orders SET status = 'delivered', delivered_at = $2, auto_complete_at = $3,
+		`UPDATE orders SET status = 'delivered', escrow_state = 'held', delivered_at = $2, auto_complete_at = $3,
 		   cancelled_at = NULL WHERE id = $1`,
 		f.orderID, now.Add(-4*24*time.Hour), now.Add(-time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	f.runSweep(t, orders.AutoCompleteArgs{}, "orders.auto_complete")
+	// The completion enqueues the release as its own job, which may complete
+	// before or after the sweep's own completion event: poll the row instead
+	// of racing the events channel a second time.
 	var completed, released string
-	if err := f.pool.QueryRow(ctx,
-		`SELECT status, escrow_state FROM orders WHERE id = $1`, f.orderID).Scan(&completed, &released); err != nil {
-		t.Fatal(err)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if err := f.pool.QueryRow(ctx,
+			`SELECT status, escrow_state FROM orders WHERE id = $1`, f.orderID).Scan(&completed, &released); err != nil {
+			t.Fatal(err)
+		}
+		if released == orders.EscrowReleased || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 	if completed != orders.StatusCompleted || released != orders.EscrowReleased {
 		t.Errorf("auto-completed = %s/%s, want completed/released", completed, released)

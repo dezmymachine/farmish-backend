@@ -179,12 +179,21 @@ func run() error {
 	// mechanism Phase 13a defined. Register it before any worker can run.
 	paymentsSvc.RegisterPurpose(payments.PurposePromotion, promotionsSvc.HandlePromotionPaid)
 	ordersSvc := orders.NewService(pool, cfg.Fulfilment.SellerAcceptTimeout, cfg.Fulfilment.EscrowAutoComplete)
+	// Escrow release and refunds (Phase 17a) need the ledger and a Paystack
+	// client of their own. Attached before any worker can run.
+	ordersSvc.AttachLedger(ledger.New())
+	ordersSvc.AttachLogger(log)
+	ordersSvc.AttachPaystack(payments.NewPaystackClient(cfg.Paystack.SecretKey, cfg.Paystack.BaseURL))
 	checkoutSvc := checkout.New(pool, paymentsSvc, payments.NewPaystackClient(cfg.Paystack.SecretKey, cfg.Paystack.BaseURL),
 		delivery.Manual{}, ledger.New(), ordersSvc, log, cfg.Paystack.FeeBps,
 		time.Duration(cfg.CheckoutExpiryMinutes)*time.Minute)
 	// Both purposes exist now: promotion grants credits (Phase 14), checkout
 	// holds escrow (Phase 15b). Register before any worker can run.
 	paymentsSvc.RegisterPurpose(payments.PurposeCheckout, checkoutSvc.HandleCheckoutPaid)
+	// The refund webhooks (Phase 17a) drive orders.Service's own state;
+	// payments owns event dispatch but not the escrow domain, so the handlers
+	// are registered here, once ordersSvc exists and before any worker runs.
+	orders.RegisterRefundEvents(paymentsSvc, ordersSvc)
 	notifySender := notify.SMS(notify.LogOnly{Log: log})
 	if cfg.Notify.SMSEnabled {
 		notifySender = notify.NewMNotify(cfg.Notify.APIKey, cfg.Notify.Sender, "")

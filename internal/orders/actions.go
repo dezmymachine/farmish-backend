@@ -130,9 +130,10 @@ func (s *Service) Dispute(ctx context.Context, buyerID, orderID uuid.UUID, reaso
 }
 
 // act runs one transition with its effects in a single transaction, then
-// applies the escrow column the transition implies: a completed order's escrow
-// is released, a cancelled one's is refund-pending (the refund job 17a will
-// post the money back).
+// applies the escrow column the transition implies for a cancellation:
+// refund-pending, so the refund job can post the money back. A completed
+// order's escrow stays held until the release job (Phase 17a) actually posts
+// the ledger entries; only then does escrow_state become released.
 func (s *Service) act(ctx context.Context, actor Actor, orderID uuid.UUID, to, note string) (Order, error) {
 	// Role before state: the caller must be this order's buyer or seller for
 	// the move they attempt. The other party gets 403, a stranger gets 404,
@@ -161,13 +162,8 @@ func (s *Service) act(ctx context.Context, actor Actor, orderID uuid.UUID, to, n
 			return err
 		}
 		moved = order
-		switch to {
-		case StatusCancelled:
+		if to == StatusCancelled {
 			if err := s.SetEscrowState(ctx, tx, order.ID, EscrowRefundPending); err != nil {
-				return err
-			}
-		case StatusCompleted:
-			if err := s.SetEscrowState(ctx, tx, order.ID, EscrowReleased); err != nil {
 				return err
 			}
 		}

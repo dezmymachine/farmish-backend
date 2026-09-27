@@ -44,10 +44,6 @@ func RegisterJobs(r *jobs.Registry, svc *Service, log *slog.Logger) {
 	r.Every(5*time.Minute, func() river.JobArgs { return ExpireUnpaidArgs{} }, true)
 }
 
-// jobsUnique is River's by-args uniqueness: at most one refund-needed job per
-// order, because the args carry the order id.
-func jobsUnique() *river.InsertOpts { return jobs.Unique() }
-
 func sortedUUIDs(ids []uuid.UUID) []uuid.UUID {
 	sorted := append([]uuid.UUID(nil), ids...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].String() < sorted[j].String() })

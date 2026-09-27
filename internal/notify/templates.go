@@ -16,6 +16,7 @@ const (
 	TemplateOrderCancelledBuyer  = "order_cancelled_buyer"
 	TemplateOrderCancelledSeller = "order_cancelled_seller"
 	TemplateOrderDisputedSeller  = "order_disputed_seller"
+	TemplateOrderRefundedBuyer   = "order_refunded_buyer"
 )
 
 // templates renders every message. Values are order facts the recipient
@@ -30,6 +31,7 @@ var templates = map[string]string{
 	TemplateOrderCancelledBuyer:  "Farmish: order {{.orderIdShort}} was cancelled. Your payment is being refunded.",
 	TemplateOrderCancelledSeller: "Farmish: order {{.orderIdShort}} was cancelled by the buyer.",
 	TemplateOrderDisputedSeller:  "Farmish: the buyer opened a dispute on order {{.orderIdShort}}. Our team will review it.",
+	TemplateOrderRefundedBuyer:   "Farmish: your refund for order {{.orderIdShort}} has been processed.",
 }
 
 // Render renders a template with the given values, truncated to one SMS.

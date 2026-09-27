@@ -70,6 +70,8 @@ func newCheckoutFixtureWithLimits(t *testing.T, limits *middleware.RateLimits) *
 	provider := fake.New()
 	paymentsSvc := payments.New(pool, provider, log, paystackFeeBps, "https://farmish.gh/payments/status")
 	ordersSvc := orders.NewService(pool, 48*time.Hour, 3*24*time.Hour)
+	ordersSvc.AttachLedger(ledger.New())
+	ordersSvc.AttachPaystack(provider)
 	svc := checkout.New(pool, paymentsSvc, provider, delivery.Manual{}, ledger.New(), ordersSvc, log, paystackFeeBps, 30*time.Minute)
 	paymentsSvc.RegisterPurpose(payments.PurposeCheckout, svc.HandleCheckoutPaid)
 
