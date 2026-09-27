@@ -283,7 +283,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 ### Phase 17a: Escrow release & refunds · [spec](docs/phases/phase-17a.md)
 - **Depends on:** 16
 - **Done when:** release and refund are each idempotent, there's no refund after release (it goes to the manual path), and partial-refund commission follows DOMAIN §4.1.
-- [ ] Phase 17a
+- [x] Phase 17a
 
 ### Phase 17b: Disputes & ledger reconciliation · [spec](docs/phases/phase-17b.md)
 - **Depends on:** 17a
@@ -372,6 +372,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-27 | Phase 15b: a late `charge.success` settles an `abandoned` payment, because the expiry sweep's abandonment is a guess the webhook disproves (ADR-0025); the paid-after-expiry recovery rows (`expired → paid`, `expired → cancelled` with refund_pending) are in DOMAIN §4 by owner decision, not an ADR-only deviation | ADR-0025 |
 | 2026-09-26 | Phase 12: seller listing writes move to `/v1/me/listings/{id}` so the public detail can be `GET /v1/listings/{slug}` (OpenAPI forbids two paths differing only by the parameter name; owner decision). View dedup uses `HMAC(DATA_ENCRYPTION_KEY, "view:"+ip)`: no new secret, one-way, domain-separated (owner decision). The `EXPLAIN` fixture uses 20k production-shaped rows, not the spec's 2000 stub rows | ADR-0018, ADR-0019 |
 | 2026-09-27 | Phase 16: mNotify quick-endpoint verified live (`POST api.mnotify.com/api/sms/quick`, local `0XXXXXXXXX` format converted from E.164); SMS off by default with masked log-only fallback; phones resolved at send time | ADR-0026 |
+| 2026-09-27 | Phase 17a: refund lifecycle with Paystack reconciliation: definite rejections fail; ambiguous failures stay pending and are reconciled (resend only after 15 min with nothing at Paystack) so a lost response can never refund twice; webhook fallback match only on a single candidate; settlement checks amount, currency and base; Create Refund field fixed to `transaction`; refund webhooks keyed by `refund_reference` when they have no id | ADR-0027 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
@@ -395,6 +396,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-26 | 12 | Phase 12 commits | `make ci` green. Public search (q, category incl. parent expansion, region, district, price range, item state; relevance/newest/price_asc/price_desc) with promoted-first ordering; public detail with the Phase 8 seller projection; opt-in contact reveal. Cache-Control + weak ETag + 304 on both reads (ETag over the exact body bytes). `listings.count_view` via River, deduped per listing/viewer/hour. `EXPLAIN` proves the FTS, trigram, region and published indexes are used. Manual QA surfaced the detail page reporting `promoted: null` for a promoted listing, now fixed and pinned by a test. Known limitation: a long fuzzy query gets a ~1.0 trigram selectivity estimate, so near-miss search can fall back to a scan. See ADR-0018, ADR-0019 |
 | 2026-09-26 | 9 | Phase 9 commits | `make ci` green. `make seed` ports DOMAIN §9 (12 parents, 72 children, 32 attributes) idempotently; public tree/detail/locations with Cache-Control; admin category + attribute CRUD (409 on taken slug/key); child inherits parent group/attributes with override merge. See ADR-0015 |
 | 2026-09-27 | 16 | Phase 16 commits | `make ci` green. One order state machine over DOMAIN §4 (single `Transition` under the row lock, role-before-state actions, one status writer), seven contract-first action endpoints with role-shaped responses, hourly River sweeps for the 48h accept and 3-day auto-complete timers, disputes that stop the clock, and per-transition SMS (mNotify client verified, masked log-only while disabled). Full-table, timer, sweep-execution, notify, actor-enforcement, illegal-transition and dispute rate-limit tests; manual QA walked paid → completed against the running API with five masked SMS in the logs. See ADR-0026 |
+| 2026-09-27 | 17a | Phase 17a commits (after review) | `make ci` green. Escrow release posts the held remainder (DOMAIN §4.1) and only then marks released; refunds created in the transition tx (over-base refused), driven by a snoozing job that settles via Paystack even without webhooks. Review blockers fixed and each proven by a test that fails when the bug is re-introduced: no double refund on timeout, no mis-settled refund on multi-seller checkouts, amount/currency/base checked. Also fixed the 13a Create Refund field (`reference` → `transaction`). Refund webhooks tested through the real signed endpoint. See ADR-0027 and `docs/reviews/phase-17a.md` |
 
 ## 10. Backlog (not scheduled)
 - Document the River test-fixture full-registry rule in `docs/ENGINEERING_GUIDE.md`: a `Work:true` test client whose registry lacks a worker kind its flow enqueues stalls the available job (seen with `notify.sms` on River v0.47.0). Found in Phase 16

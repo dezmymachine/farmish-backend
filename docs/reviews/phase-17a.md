@@ -1,6 +1,110 @@
 # Review packet: Phase 17a Escrow release & refunds
 
-> **The implementer's packet is missing.** The phase is uncommitted work in progress on top of `0b955db` (Phase 16). This file holds the review only. The implementer must add the packet sections (REVIEW_PROTOCOL template) when resubmitting.
+> The first submission (uncommitted, reviewed below as **CHANGES REQUESTED**) was reworked. **The fixes were implemented by Claude Opus 5.5 at the owner's request**, the same model that wrote the review. An independent re-review (a separate reviewer session using `docs/REVIEW_PROTOCOL.md`, base `0b955db`) is recommended before this is treated as accepted.
+
+## Summary
+
+- **Escrow release:** posts each completed order's held remainder, with commission on the remaining subtotal (DOMAIN §4.1). It marks escrow `released` only after posting, replacing Phase 16's premature flag.
+- **Refund creation:** refunds are created inside the cancelling transition's tx. A refund that would exceed the order's base is refused under the order lock.
+- **The refund job:** `orders.refund` drives each refund to a final state through Paystack.
+  - A definite rejection fails the refund.
+  - An ambiguous failure stays pending and is reconciled against Paystack's refund list. It's resent only when Paystack provably holds nothing after 15 minutes.
+  - Pending refunds are polled until settled, so settlement never depends on webhooks.
+- **Webhooks and settlement:** the webhooks settle quickly through the same checks: the amount, the currency, the base, and a single-candidate fallback match.
+- **Found along the way:** two further live-breaking bugs.
+  - Create Refund sent `reference` instead of Paystack's `transaction`.
+  - Refund webhooks may carry no top-level `id`, and were rejected as malformed.
+
+## Commits
+
+```
+8ad3a39 Phase 17a: escrow release and refund lifecycle with reconciliation
+65daede Phase 17a: Paystack refund API fixes, fetch/list refunds, error classes
+3b3dcee Phase 17a: refunds schema and queries
+256c676 Review: Phase 17a changes requested; fix refund retry rule in spec
+```
+
+Each code commit was checked out alone in a temporary worktree and passes `go vet ./...`. `make ci` was run on the final tree (below).
+
+## Done-when checklist
+
+- [x] **Release and refund are each idempotent:**
+  - `TestReleaseEscrow_PostsAndIsIdempotent`, `TestRefund_Idempotent`, `TestRefund_FullFlow` (replay)
+  - `TestRefund_TimeoutNeverDoubleRefunds`
+  - `TestWebhook_RefundEventsRouted` (the webhook_events dedupe)
+  - Files: `internal/orders/refunds_test.go`, `internal/http/refunds_test.go`
+- [x] **No refund after release (the manual path):** `TestRefund_AfterReleaseGoesManual`
+- [x] **Partial-refund commission follows DOMAIN §4.1:** `TestPartialRefund_CommissionOnRemaining`
+- [x] **Ledger reconciles after mixed flows:** `TestLedger_ReconcileAfterMixedFlows`
+- [x] **Spec tests:** `TestReleaseEscrow_WrongStateNoop`, `TestRefund_ProviderErrorRetries` (rewritten for the ADR-0027 rule)
+- [x] **Review-required tests:** see the resolution table below.
+
+## make ci
+
+Ends with `0 issues.`, 31 packages `ok`, `smoke: … graceful shutdown ok`, `ci: all checks passed` (exit 0). The full output of the final run is recorded at the end of this file.
+
+## Manual QA
+
+The real HTTP Paystack client was run against `scripts/qa/paystack-refund-stub.py` (a local `/refund` endpoint that logs requests):
+
+```
+result={RefundID:1 Status:pending} err=<nil>
+stub: POST /refund body={"amount":12345,"transaction":"FMS-QA-REF"}
+unreachable: definite=false err=paystack: unavailable: POST /refund: Post "http://127.0.0.1:1/refund": dial tcp 127.0.0.1:1: connect: connection refused
+```
+
+This shows the corrected wire field (`transaction`), and that an unreachable Paystack is classified as ambiguous (no resend without reconciliation).
+
+**Mutation check:** each fix was reverted in turn, and the test written for it failed:
+
+| Fix reverted | Test that failed |
+|---|---|
+| Blind requeue on an ambiguous failure | `TestRefund_TimeoutNeverDoubleRefunds` |
+| Oldest-candidate fallback | `TestRefundWebhook_AmbiguousFallbackDeferred` |
+| Amount check removed | `TestRefundWebhook_AmountMismatchRejected` |
+| Error log downgraded | `TestRefundWebhook_FailedAuditsLogsAndKeepsEscrow` |
+
+## Files changed
+
+The diff from `0b955db` to HEAD, excluding generated `internal/db`, is 26 files (+2526/−101). New files:
+- `internal/orders/refunds.go`: release, refund lifecycle, reconciliation, settlement and webhook handlers
+- `internal/orders/refunds_test.go`: 19 tests
+- `internal/http/refunds_test.go`: signed-endpoint routing
+- `migrations/000014_refunds.{up,down}.sql`, `db/queries/refunds.sql`
+- `docs/adr/0027-refund-lifecycle-and-reconciliation.md`
+- `scripts/qa/paystack-refund-stub.py` (moved from the repo root)
+
+## Schema changes
+
+`000014_refunds` adds:
+- the `refunds` table (with `attempted_at`)
+- the partial unique index for full refunds
+- the `orders_refunded_within_base` CHECK
+
+up→down→up passes (`migrations_test` in `make ci`).
+
+## API changes
+
+None. Refunds have no endpoints in 17a. Four webhook event handlers are registered (`refund.processed|failed|pending|processing`).
+
+## Deviations from the spec
+
+All recorded in ADR-0027:
+- Reconciliation before any resend. The spec had said "retry on any error", now corrected in the spec.
+- The job doubles as the settlement path, by polling.
+- Webhook dedupe falls back to `refund_reference`.
+- Refund handlers report `processed` / `ignored` outcomes per ADR-0021.
+
+## Open questions / risks
+
+- **Refund webhook payload shape:** Paystack doesn't publish a webhook schema. Confirm the payload from a live test-mode refund before go-live (ADR-0027 owner action). Settlement doesn't depend on it, because the job polls.
+- **Refunds list lookup:** List Refunds has no transaction filter, so reconciliation pages by date (≤ 10 × 100). That's fine at the expected volume.
+
+## Backlog additions
+
+None.
+
+---
 
 ## Review: 2026-09-27, reviewer: Claude Opus 5.5
 
@@ -110,3 +214,18 @@ Run by the reviewer against the working tree: **passed**, with lint `0 issues`, 
 ### To resubmit
 
 Fix Blockers 1–3 and Majors 4–6 with the listed tests. Keep `make ci` green, commit in steps, write the packet, then request re-review. The reviewer will verify every finding above is resolved.
+
+## Resolution of the review findings
+
+| Finding | Fix | Proving test(s) |
+|---|---|---|
+| **B1** double refund on ambiguous failure | `IsDefiniteRejection`; ambiguous → stay `pending`; reconcile with `ListRefunds` (adopt a unique unclaimed match); resend only after 15 min with nothing at Paystack; `FetchRefund` polling | `TestRefund_TimeoutNeverDoubleRefunds`, `TestRefund_RejectedMarksFailed`, `TestRefund_ProviderErrorRetries` (rewritten), `TestRefund_ReconcileFetchSettlesOrFails`, `TestRefund_GiveUpAfterWindow`, `TestIsDefiniteRejection` |
+| **B2** ambiguous fallback match | Fallback acts only on exactly one candidate, else `ErrAmbiguousRefundMatch` (500 → Paystack retries) | `TestRefundWebhook_AmbiguousFallbackDeferred`, `TestRefundWebhook_FallbackMatchSingleCandidate` |
+| **B3** no amount/currency/base checks | Shared `settleRefund` under the order lock: amount, GHS and `refunded + amount ≤ base`, else `rejected:*` + Error + audit; `CreateRefund` refuses an over-base refund; DB CHECK | `TestRefundWebhook_AmountMismatchRejected` (amount + currency), `TestCreateRefund_CannotExceedBase` |
+| **M4** no Error log on `refund.failed`; off-convention outcomes | `failRefund` logs Error + audit; handlers return ADR-0021 outcomes; malformed → `ErrMalformedEvent` | `TestRefundWebhook_FailedAuditsLogsAndKeepsEscrow`, `TestRefundWebhook_PendingIsInformational` |
+| **M5** webhooks never routed through the endpoint | `orders.RegisterRefundEvents`, used by `cmd/api` and the test fixture | `TestWebhook_RefundEventsRouted` (signed, all four events, no-id payload, replay dedupe) |
+| **M6** process incomplete | Commits in steps, this packet, ADR-0027, plan §6/§8/§9, `AGENTS.md` current state, stub moved to `scripts/qa/` | n/a |
+| **m7** silent skip without a job client | `CreateRefund` errors without one | `TestCreateRefund_RequiresJobClient` |
+| **m8** lost Paystack id is silent | Error log with the Paystack id; reconciliation re-finds it | covered by `TestRefund_TimeoutNeverDoubleRefunds` (adoption path) |
+| *(new)* Create Refund field `reference` | Sends `transaction` (Paystack OpenAPI spec) | `TestPaystackClient_CreateRefund`, manual QA wire capture |
+| *(new)* refund webhooks without `data.id` rejected | Dedupe key falls back to `refund_reference` | `TestWebhook_RefundEventsRouted` (`refund.pending:ref:RF-SECOND`) |
