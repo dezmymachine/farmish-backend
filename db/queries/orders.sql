@@ -171,6 +171,32 @@ RETURNING *;
 -- The auto-complete sweep's timer stop: an open dispute holds the order.
 SELECT * FROM disputes WHERE order_id = $1 AND status = 'open';
 
+-- name: GetDisputeByID :one
+SELECT * FROM disputes WHERE id = $1;
+
+-- name: GetDisputeForUpdate :one
+SELECT * FROM disputes WHERE id = $1 FOR UPDATE;
+
+-- name: ListDisputes :many
+-- The admin review queue, oldest first. A NULL status lists every dispute.
+SELECT * FROM disputes
+WHERE (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
+ORDER BY created_at
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: CountDisputes :one
+SELECT count(*) FROM disputes
+WHERE (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'));
+
+-- name: ResolveDispute :one
+-- Marks an open dispute resolved with its outcome. Returns no row when the
+-- dispute is already resolved: the caller treats that as "already decided".
+UPDATE disputes
+SET status = 'resolved', outcome = $2, refund_pesewas = $3, resolution_note = $4,
+    resolved_by = $5, resolved_at = $6
+WHERE id = $1 AND status = 'open'
+RETURNING *;
+
 -- name: ListUnacceptedPaidOrders :many
 -- Orders whose seller has not accepted within the timeout window, in a
 -- deterministic order. SKIP LOCKED keeps concurrent sweeps from fighting.

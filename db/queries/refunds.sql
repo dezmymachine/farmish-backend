@@ -19,6 +19,23 @@ WHERE order_id = $1 AND status <> 'failed';
 -- name: GetRefundForUpdate :one
 SELECT * FROM refunds WHERE id = $1 FOR UPDATE;
 
+-- name: GetRefundByID :one
+SELECT * FROM refunds WHERE id = $1;
+
+-- name: SetRefundQueuedFromFailed :one
+-- An admin retry: a failed refund goes back to queued with a clean attempt
+-- slate. Returns no row unless the refund is failed: the caller treats that
+-- as "cannot retry". The Paystack id stays linked, so reconciliation never
+-- adopts the failed Paystack record for another row.
+UPDATE refunds SET status = 'queued', failure_reason = NULL, attempted_at = NULL
+WHERE id = $1 AND status = 'failed'
+RETURNING *;
+
+-- name: CountInFlightRefundsForOrder :one
+-- Refunds that may still move money for an order. The escrow release waits
+-- while any exists (Phase 17b partial resolutions).
+SELECT count(*) FROM refunds WHERE order_id = $1 AND status IN ('queued', 'pending');
+
 -- name: GetRefundForUpdateByPaystackRefundID :one
 -- Matches a refund webhook once Paystack's id has been stored by the job.
 SELECT * FROM refunds WHERE paystack_refund_id = $1 FOR UPDATE;

@@ -13,6 +13,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countDisputes = `-- name: CountDisputes :one
+SELECT count(*) FROM disputes
+WHERE ($1::text IS NULL OR status = $1)
+`
+
+func (q *Queries) CountDisputes(ctx context.Context, status *string) (int64, error) {
+	row := q.db.QueryRow(ctx, countDisputes, status)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countOrdersByBuyer = `-- name: CountOrdersByBuyer :one
 SELECT count(*) FROM orders
 WHERE buyer_id = $1 AND ($2::text IS NULL OR status = $2)
@@ -118,6 +130,56 @@ func (q *Queries) GetCheckoutForUpdate(ctx context.Context, id uuid.UUID) (Check
 		&i.PaymentID,
 		&i.Status,
 		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getDisputeByID = `-- name: GetDisputeByID :one
+SELECT id, order_id, opened_by, reason, description, status, outcome, refund_pesewas, resolution_note, resolved_by, resolved_at, created_at, updated_at FROM disputes WHERE id = $1
+`
+
+func (q *Queries) GetDisputeByID(ctx context.Context, id uuid.UUID) (Dispute, error) {
+	row := q.db.QueryRow(ctx, getDisputeByID, id)
+	var i Dispute
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.OpenedBy,
+		&i.Reason,
+		&i.Description,
+		&i.Status,
+		&i.Outcome,
+		&i.RefundPesewas,
+		&i.ResolutionNote,
+		&i.ResolvedBy,
+		&i.ResolvedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getDisputeForUpdate = `-- name: GetDisputeForUpdate :one
+SELECT id, order_id, opened_by, reason, description, status, outcome, refund_pesewas, resolution_note, resolved_by, resolved_at, created_at, updated_at FROM disputes WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetDisputeForUpdate(ctx context.Context, id uuid.UUID) (Dispute, error) {
+	row := q.db.QueryRow(ctx, getDisputeForUpdate, id)
+	var i Dispute
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.OpenedBy,
+		&i.Reason,
+		&i.Description,
+		&i.Status,
+		&i.Outcome,
+		&i.RefundPesewas,
+		&i.ResolutionNote,
+		&i.ResolvedBy,
+		&i.ResolvedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -703,6 +765,54 @@ func (q *Queries) ListCheckoutOrders(ctx context.Context, checkoutID uuid.UUID) 
 	return items, nil
 }
 
+const listDisputes = `-- name: ListDisputes :many
+SELECT id, order_id, opened_by, reason, description, status, outcome, refund_pesewas, resolution_note, resolved_by, resolved_at, created_at, updated_at FROM disputes
+WHERE ($1::text IS NULL OR status = $1)
+ORDER BY created_at
+LIMIT $3 OFFSET $2
+`
+
+type ListDisputesParams struct {
+	Status *string
+	Offset int32
+	Limit  int32
+}
+
+// The admin review queue, oldest first. A NULL status lists every dispute.
+func (q *Queries) ListDisputes(ctx context.Context, arg ListDisputesParams) ([]Dispute, error) {
+	rows, err := q.db.Query(ctx, listDisputes, arg.Status, arg.Offset, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Dispute{}
+	for rows.Next() {
+		var i Dispute
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderID,
+			&i.OpenedBy,
+			&i.Reason,
+			&i.Description,
+			&i.Status,
+			&i.Outcome,
+			&i.RefundPesewas,
+			&i.ResolutionNote,
+			&i.ResolvedBy,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDueDeliveredOrders = `-- name: ListDueDeliveredOrders :many
 SELECT id, checkout_id, buyer_id, seller_id, status, escrow_state, subtotal_pesewas, delivery_fee_pesewas, base_pesewas, commission_rate_bps, commission_pesewas, refunded_pesewas, delivery_method, delivery_address, delivery_region, delivery_district, recipient_name, recipient_phone, tracking_ref, paid_at, accepted_at, shipped_at, delivered_at, completed_at, cancelled_at, auto_complete_at, created_at, updated_at FROM orders
 WHERE status = 'delivered' AND auto_complete_at <= $1::timestamptz
@@ -1263,6 +1373,53 @@ func (q *Queries) ReserveListingStock(ctx context.Context, arg ReserveListingSto
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const resolveDispute = `-- name: ResolveDispute :one
+UPDATE disputes
+SET status = 'resolved', outcome = $2, refund_pesewas = $3, resolution_note = $4,
+    resolved_by = $5, resolved_at = $6
+WHERE id = $1 AND status = 'open'
+RETURNING id, order_id, opened_by, reason, description, status, outcome, refund_pesewas, resolution_note, resolved_by, resolved_at, created_at, updated_at
+`
+
+type ResolveDisputeParams struct {
+	ID             uuid.UUID
+	Outcome        *string
+	RefundPesewas  *int64
+	ResolutionNote *string
+	ResolvedBy     pgtype.UUID
+	ResolvedAt     *time.Time
+}
+
+// Marks an open dispute resolved with its outcome. Returns no row when the
+// dispute is already resolved: the caller treats that as "already decided".
+func (q *Queries) ResolveDispute(ctx context.Context, arg ResolveDisputeParams) (Dispute, error) {
+	row := q.db.QueryRow(ctx, resolveDispute,
+		arg.ID,
+		arg.Outcome,
+		arg.RefundPesewas,
+		arg.ResolutionNote,
+		arg.ResolvedBy,
+		arg.ResolvedAt,
+	)
+	var i Dispute
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.OpenedBy,
+		&i.Reason,
+		&i.Description,
+		&i.Status,
+		&i.Outcome,
+		&i.RefundPesewas,
+		&i.ResolutionNote,
+		&i.ResolvedBy,
+		&i.ResolvedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const restoreListingStock = `-- name: RestoreListingStock :exec

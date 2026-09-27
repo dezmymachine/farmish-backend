@@ -72,6 +72,19 @@ const (
 	RefundStatusFailed    = "failed"
 )
 
+// Dispute statuses stored in disputes.status (Phase 16 opens, 17b resolves).
+const (
+	DisputeStatusOpen     = "open"
+	DisputeStatusResolved = "resolved"
+)
+
+// Dispute outcomes stored in disputes.outcome (Phase 17b).
+const (
+	DisputeOutcomeRefundBuyer   = "refund_buyer"
+	DisputeOutcomeReleaseSeller = "release_seller"
+	DisputeOutcomePartial       = "partial"
+)
+
 var (
 	// ErrNotFound means no order matches, or the caller is not a party to it.
 	// Both read as 404 so order ids cannot be probed.
@@ -84,6 +97,22 @@ var (
 	ErrForbidden = errors.New("actor may not perform this transition")
 	// ErrDisputeExists means the order already has a dispute.
 	ErrDisputeExists = errors.New("order already has a dispute")
+	// ErrDisputeNotFound means no dispute matches, for an admin lookup.
+	ErrDisputeNotFound = errors.New("dispute not found")
+	// ErrDisputeNotOpen means the dispute is already resolved.
+	ErrDisputeNotOpen = errors.New("dispute is not open")
+	// ErrRefundNotFound means no refund matches, for an admin lookup.
+	ErrRefundNotFound = errors.New("refund not found")
+	// ErrRefundNotFailed means only a failed refund may be retried.
+	ErrRefundNotFailed = errors.New("only a failed refund may be retried")
+	// ErrRefundAfterRelease means the refund was refused because escrow had
+	// already been released: an admin handles it outside the system, so it
+	// can never be retried back into the queue.
+	ErrRefundAfterRelease = errors.New("refund was refused after escrow release")
+	// ErrReleaseDeferred means a completed order still has a refund in
+	// flight: the release must wait until it settles. The worker snoozes;
+	// direct callers treat it as "try again later".
+	ErrReleaseDeferred = errors.New("a refund is still in flight")
 )
 
 // InvalidTransitionError carries the from and to the contract's 409 details
@@ -128,6 +157,9 @@ func Seller(id uuid.UUID) Actor { return Actor{Type: ActorSeller, ID: &id} }
 
 // System builds the system actor.
 func System() Actor { return Actor{Type: ActorSystem} }
+
+// Admin builds the admin actor for a user id.
+func Admin(id uuid.UUID) Actor { return Actor{Type: ActorAdmin, ID: &id} }
 
 // Order is a row of the orders table.
 type Order struct {

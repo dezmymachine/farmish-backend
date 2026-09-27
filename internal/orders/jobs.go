@@ -32,7 +32,8 @@ func (ReleaseEscrowArgs) Kind() string { return "orders.release_escrow" }
 
 // ReleaseEscrowWorker posts the escrow release. It is idempotent: a wrong
 // state is a logged no-op, and the ledger's UNIQUE(kind, reference) stops a
-// second posting for the same order.
+// second posting for the same order. While a refund is still in flight (a
+// partial dispute resolution) it snoozes for 10 minutes and tries again.
 type ReleaseEscrowWorker struct {
 	river.WorkerDefaults[ReleaseEscrowArgs]
 	Service *Service
@@ -42,6 +43,11 @@ type ReleaseEscrowWorker struct {
 // Work implements river.Worker.
 func (w *ReleaseEscrowWorker) Work(ctx context.Context, job *river.Job[ReleaseEscrowArgs]) error {
 	posted, err := w.Service.ReleaseEscrow(ctx, job.Args.OrderID)
+	if errors.Is(err, ErrReleaseDeferred) {
+		w.Log.Info("escrow release deferred: a refund is still in flight",
+			slog.String("order_id", job.Args.OrderID.String()))
+		return river.JobSnooze(10 * time.Minute)
+	}
 	if err != nil {
 		return err
 	}

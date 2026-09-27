@@ -95,6 +95,15 @@ func TestSweeps_RiverExecution(t *testing.T) {
 	}
 
 	// Back to delivered and due: the second sweep completes it through River.
+	// The auto-cancel above left a refund in flight for this order; settle it
+	// as failed first (a rejection needs no webhook), or the release the
+	// completion enqueues would rightly wait for it (Phase 17b) and this
+	// sweep test could never see the release post.
+	if _, err := f.pool.Exec(ctx,
+		`UPDATE refunds SET status = 'failed', failure_reason = 'test_rejection' WHERE order_id = $1`,
+		f.orderID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := f.pool.Exec(ctx,
 		`UPDATE orders SET status = 'delivered', escrow_state = 'held', delivered_at = $2, auto_complete_at = $3,
 		   cancelled_at = NULL WHERE id = $1`,

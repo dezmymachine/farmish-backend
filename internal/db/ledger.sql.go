@@ -7,7 +7,9 @@ package db
 
 import (
 	"context"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -127,6 +129,165 @@ func (q *Queries) GetLedgerAccountByCode(ctx context.Context, code string) (Ledg
 	return i, err
 }
 
+const listCompletedWithoutRelease = `-- name: ListCompletedWithoutRelease :many
+SELECT o.id, o.completed_at FROM orders o
+WHERE o.status = 'completed' AND o.completed_at <= $1
+  AND NOT EXISTS (SELECT 1 FROM ledger_transactions t
+                  WHERE t.kind = 'escrow_release' AND t.reference = o.id::text)
+`
+
+type ListCompletedWithoutReleaseRow struct {
+	ID          uuid.UUID
+	CompletedAt *time.Time
+}
+
+// Completed orders past the grace window with no escrow_release posting.
+func (q *Queries) ListCompletedWithoutRelease(ctx context.Context, completedAt *time.Time) ([]ListCompletedWithoutReleaseRow, error) {
+	rows, err := q.db.Query(ctx, listCompletedWithoutRelease, completedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCompletedWithoutReleaseRow{}
+	for rows.Next() {
+		var i ListCompletedWithoutReleaseRow
+		if err := rows.Scan(&i.ID, &i.CompletedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLedgerEntriesForOrder = `-- name: ListLedgerEntriesForOrder :many
+SELECT la.code AS account, le.amount, le.currency,
+       t.kind AS transaction_kind, t.reference AS transaction_reference, le.created_at
+FROM ledger_entries le
+JOIN ledger_accounts la ON la.id = le.account_id
+JOIN ledger_transactions t ON t.id = le.transaction_id
+WHERE le.order_id = $1
+ORDER BY le.created_at, le.id
+`
+
+type ListLedgerEntriesForOrderRow struct {
+	Account              string
+	Amount               int64
+	Currency             string
+	TransactionKind      string
+	TransactionReference string
+	CreatedAt            time.Time
+}
+
+// Every entry tagged with the order, with its transaction, in posting order.
+func (q *Queries) ListLedgerEntriesForOrder(ctx context.Context, orderID pgtype.UUID) ([]ListLedgerEntriesForOrderRow, error) {
+	rows, err := q.db.Query(ctx, listLedgerEntriesForOrder, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLedgerEntriesForOrderRow{}
+	for rows.Next() {
+		var i ListLedgerEntriesForOrderRow
+		if err := rows.Scan(
+			&i.Account,
+			&i.Amount,
+			&i.Currency,
+			&i.TransactionKind,
+			&i.TransactionReference,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPositiveDynamicBalances = `-- name: ListPositiveDynamicBalances :many
+SELECT la.code, COALESCE(SUM(le.amount), 0)::bigint AS balance
+FROM ledger_accounts la
+LEFT JOIN ledger_entries le ON le.account_id = la.id
+WHERE la.code LIKE 'seller_payable:%' OR la.code LIKE 'promo_credits:%'
+GROUP BY la.code
+HAVING COALESCE(SUM(le.amount), 0) > 0
+`
+
+type ListPositiveDynamicBalancesRow struct {
+	Code    string
+	Balance int64
+}
+
+// Seller-payable and promotion-credit accounts whose raw entry sum is
+// positive: displayed as negative balances, which DOMAIN §5.4 forbids.
+func (q *Queries) ListPositiveDynamicBalances(ctx context.Context) ([]ListPositiveDynamicBalancesRow, error) {
+	rows, err := q.db.Query(ctx, listPositiveDynamicBalances)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPositiveDynamicBalancesRow{}
+	for rows.Next() {
+		var i ListPositiveDynamicBalancesRow
+		if err := rows.Scan(&i.Code, &i.Balance); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProcessedRefundsWithoutPosting = `-- name: ListProcessedRefundsWithoutPosting :many
+SELECT r.id FROM refunds r
+WHERE r.status = 'processed'
+  AND NOT EXISTS (SELECT 1 FROM ledger_transactions t
+                  WHERE t.kind = 'order_refund' AND t.reference = r.id::text)
+`
+
+// Processed refunds with no order_refund posting.
+func (q *Queries) ListProcessedRefundsWithoutPosting(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProcessedRefundsWithoutPosting)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const sumHeldOrdersRemainder = `-- name: SumHeldOrdersRemainder :one
+SELECT COALESCE(SUM(base_pesewas - refunded_pesewas), 0)::bigint AS remainder
+FROM orders
+WHERE escrow_state IN ('held', 'refund_pending', 'partially_refunded')
+`
+
+// The escrow the orders say is still held: base minus refunded over every
+// order whose escrow is not yet released or refunded away (DOMAIN §5.4).
+func (q *Queries) SumHeldOrdersRemainder(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, sumHeldOrdersRemainder)
+	var remainder int64
+	err := row.Scan(&remainder)
+	return remainder, err
+}
+
 const sumLedgerAccountBalance = `-- name: SumLedgerAccountBalance :one
 SELECT COALESCE(SUM(le.amount), 0)::bigint AS balance
 FROM ledger_accounts la
@@ -141,4 +302,37 @@ func (q *Queries) SumLedgerAccountBalance(ctx context.Context, code string) (int
 	var balance int64
 	err := row.Scan(&balance)
 	return balance, err
+}
+
+const sumLedgerEntriesByCurrency = `-- name: SumLedgerEntriesByCurrency :many
+SELECT le.currency, COALESCE(SUM(le.amount), 0)::bigint AS total
+FROM ledger_entries le
+GROUP BY le.currency
+`
+
+type SumLedgerEntriesByCurrencyRow struct {
+	Currency string
+	Total    int64
+}
+
+// Every currency's signed total. A clean ledger sums to zero per currency
+// (DOMAIN §5.4); the reconciler reports any remainder.
+func (q *Queries) SumLedgerEntriesByCurrency(ctx context.Context) ([]SumLedgerEntriesByCurrencyRow, error) {
+	rows, err := q.db.Query(ctx, sumLedgerEntriesByCurrency)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumLedgerEntriesByCurrencyRow{}
+	for rows.Next() {
+		var i SumLedgerEntriesByCurrencyRow
+		if err := rows.Scan(&i.Currency, &i.Total); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

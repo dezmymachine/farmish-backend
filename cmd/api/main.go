@@ -102,6 +102,7 @@ func registry(log *slog.Logger, mediaSvc *media.Service, listingsSvc *listings.S
 	payments.RegisterSucceeded(r, paymentsSvc, log)
 	checkout.RegisterJobs(r, checkoutSvc, log)
 	orders.RegisterJobs(r, ordersSvc, log)
+	ledger.RegisterReconcile(r, pool, ledger.New(), log)
 	notify.Register(r, notify.NewWorker(sender, log, pool))
 	return r
 }

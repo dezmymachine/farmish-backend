@@ -19,6 +19,10 @@ type Querier interface {
 	CompleteWebhookEvent(ctx context.Context, arg CompleteWebhookEventParams) error
 	// A listing's category must be a leaf (or a parent with no children).
 	CountCategoryChildren(ctx context.Context, parentID pgtype.UUID) (int64, error)
+	CountDisputes(ctx context.Context, status *string) (int64, error)
+	// Refunds that may still move money for an order. The escrow release waits
+	// while any exists (Phase 17b partial resolutions).
+	CountInFlightRefundsForOrder(ctx context.Context, orderID uuid.UUID) (int64, error)
 	CountListingImages(ctx context.Context, listingID uuid.UUID) (int64, error)
 	CountOrdersByBuyer(ctx context.Context, arg CountOrdersByBuyerParams) (int64, error)
 	CountOrdersBySeller(ctx context.Context, arg CountOrdersBySellerParams) (int64, error)
@@ -55,6 +59,8 @@ type Querier interface {
 	GetCheckoutByID(ctx context.Context, id uuid.UUID) (Checkout, error)
 	GetCheckoutByIdempotencyKey(ctx context.Context, arg GetCheckoutByIdempotencyKeyParams) (Checkout, error)
 	GetCheckoutForUpdate(ctx context.Context, id uuid.UUID) (Checkout, error)
+	GetDisputeByID(ctx context.Context, id uuid.UUID) (Dispute, error)
+	GetDisputeForUpdate(ctx context.Context, id uuid.UUID) (Dispute, error)
 	// An account row by its unique code.
 	GetLedgerAccountByCode(ctx context.Context, code string) (LedgerAccount, error)
 	GetListingByID(ctx context.Context, id uuid.UUID) (Listing, error)
@@ -92,6 +98,7 @@ type Querier interface {
 	// Snapshot locks for pricing, taken in ascending listing-id order by the
 	// caller to avoid deadlocks between concurrent checkouts.
 	GetQuoteListingForUpdate(ctx context.Context, arg GetQuoteListingForUpdateParams) ([]GetQuoteListingForUpdateRow, error)
+	GetRefundByID(ctx context.Context, id uuid.UUID) (Refund, error)
 	GetRefundForUpdate(ctx context.Context, id uuid.UUID) (Refund, error)
 	// Matches a refund webhook once Paystack's id has been stored by the job.
 	GetRefundForUpdateByPaystackRefundID(ctx context.Context, paystackRefundID *string) (Refund, error)
@@ -153,6 +160,10 @@ type Querier interface {
 	// Every category override plus the default row, for server-side commission
 	// resolution. DOMAIN §2.1 snapshots the resolved rate on each order.
 	ListCommissionConfigs(ctx context.Context) ([]ListCommissionConfigsRow, error)
+	// Completed orders past the grace window with no escrow_release posting.
+	ListCompletedWithoutRelease(ctx context.Context, completedAt *time.Time) ([]ListCompletedWithoutReleaseRow, error)
+	// The admin review queue, oldest first. A NULL status lists every dispute.
+	ListDisputes(ctx context.Context, arg ListDisputesParams) ([]Dispute, error)
 	// Delivered orders past their auto-complete deadline, for the sweep to finish.
 	// The open-dispute exclusion lives in the sweep's per-order check under the
 	// row lock, so a dispute opened mid-sweep is still honoured.
@@ -168,6 +179,8 @@ type Querier interface {
 	// refunds still in flight. A multi-seller checkout shares one reference, so
 	// the caller must only act when exactly one row matches (ADR-0027).
 	ListInFlightRefundsByReference(ctx context.Context, arg ListInFlightRefundsByReferenceParams) ([]Refund, error)
+	// Every entry tagged with the order, with its transaction, in posting order.
+	ListLedgerEntriesForOrder(ctx context.Context, orderID pgtype.UUID) ([]ListLedgerEntriesForOrderRow, error)
 	ListListingAttributes(ctx context.Context, listingID uuid.UUID) ([]ListListingAttributesRow, error)
 	// Read-only join so the owner's view can carry each object's key (and hence
 	// its public URL).
@@ -185,6 +198,11 @@ type Querier interface {
 	ListOrdersBySeller(ctx context.Context, arg ListOrdersBySellerParams) ([]ListOrdersBySellerRow, error)
 	// Cleanup sweep: pending rows older than the cutoff, oldest first.
 	ListPendingMediaBefore(ctx context.Context, arg ListPendingMediaBeforeParams) ([]MediaObject, error)
+	// Seller-payable and promotion-credit accounts whose raw entry sum is
+	// positive: displayed as negative balances, which DOMAIN §5.4 forbids.
+	ListPositiveDynamicBalances(ctx context.Context) ([]ListPositiveDynamicBalancesRow, error)
+	// Processed refunds with no order_refund posting.
+	ListProcessedRefundsWithoutPosting(ctx context.Context) ([]uuid.UUID, error)
 	// The server-side snapshot a quote may use. Prices come only from this query:
 	// cart lines carry quantities, never prices. Active is evaluated against the
 	// caller's clock, which tests control; the pricing function itself stays pure.
@@ -210,6 +228,9 @@ type Querier interface {
 	// Atomically decrements stock only while enough remains. Zero affected rows is
 	// ErrInsufficientStock; the caller's transaction rolls back.
 	ReserveListingStock(ctx context.Context, arg ReserveListingStockParams) (int64, error)
+	// Marks an open dispute resolved with its outcome. Returns no row when the
+	// dispute is already resolved: the caller treats that as "already decided".
+	ResolveDispute(ctx context.Context, arg ResolveDisputeParams) (Dispute, error)
 	// The exact inverse of a reservation, from the stored order items rather than
 	// the request, so a restored checkout can never drift.
 	RestoreListingStock(ctx context.Context, arg RestoreListingStockParams) error
@@ -262,6 +283,11 @@ type Querier interface {
 	// Only from pending with no Paystack refund: reconciliation proved Paystack
 	// holds nothing for this attempt, so sending again cannot double-refund.
 	SetRefundQueuedForRetry(ctx context.Context, id uuid.UUID) error
+	// An admin retry: a failed refund goes back to queued with a clean attempt
+	// slate. Returns no row unless the refund is failed: the caller treats that
+	// as "cannot retry". The Paystack id stays linked, so reconciliation never
+	// adopts the failed Paystack record for another row.
+	SetRefundQueuedFromFailed(ctx context.Context, id uuid.UUID) (Refund, error)
 	// Any status except processed may still move; processed is final, so a
 	// replayed webhook or a job retry can never reopen a settled refund.
 	SetRefundStatus(ctx context.Context, arg SetRefundStatusParams) error
@@ -277,9 +303,15 @@ type Querier interface {
 	// proved it wrong. From any other state it is a no-op that returns no row.
 	SettlePaymentSuccess(ctx context.Context, arg SettlePaymentSuccessParams) (Payment, error)
 	SlugExists(ctx context.Context, slug string) (bool, error)
+	// The escrow the orders say is still held: base minus refunded over every
+	// order whose escrow is not yet released or refunded away (DOMAIN §5.4).
+	SumHeldOrdersRemainder(ctx context.Context) (int64, error)
 	// The account balance is derived from its entries. A code with no entries has
 	// a zero balance, so this always returns a row for an existing account.
 	SumLedgerAccountBalance(ctx context.Context, code string) (int64, error)
+	// Every currency's signed total. A clean ledger sums to zero per currency
+	// (DOMAIN §5.4); the reconciler reports any remainder.
+	SumLedgerEntriesByCurrency(ctx context.Context) ([]SumLedgerEntriesByCurrencyRow, error)
 	// Every refund that has or may still move money (all but failed ones). New
 	// refunds must keep this within the order's base.
 	SumOutstandingRefundsForOrder(ctx context.Context, orderID uuid.UUID) (int64, error)

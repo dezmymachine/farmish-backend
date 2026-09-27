@@ -58,6 +58,8 @@ tags:
     description: Presigned uploads to object storage.
   - name: listings
     description: Seller listings. Public browsing is Phase 12.
+  - name: admin
+    description: Admin dispute resolution and order inspection.
 paths:
   /healthz:
     get:
@@ -267,6 +269,175 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SellerProfileAdmin"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/disputes:
+    get:
+      tags: [admin]
+      operationId: listAdminDisputes
+      summary: List disputes for review
+      description: |
+        Open disputes oldest first. An optional status filters to open or
+        resolved cases.
+      x-farmish-role: admin
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/DisputeStatus"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: A page of disputes with their orders.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DisputeAdminList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/disputes/{id}:
+    get:
+      tags: [admin]
+      operationId: getAdminDispute
+      summary: Get one dispute with its order
+      description: The dispute plus the full order detail and its events.
+      x-farmish-role: admin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The dispute with its order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DisputeAdmin"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/disputes/{id}/resolve:
+    post:
+      tags: [admin]
+      operationId: resolveDispute
+      summary: Resolve a dispute
+      description: |
+        Refund the buyer in full, release the held escrow to the seller, or
+        refund part and release the remainder. A partial resolution needs a
+        refundAmount below the order's remaining escrow; the release waits
+        until the partial refund is processed. Resolving twice is a 409.
+      x-farmish-role: admin
+      x-farmish-rate-limit: sensitive
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveDisputeRequest"
+      responses:
+        "200":
+          description: The resolved dispute with its order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DisputeAdmin"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/orders/{id}:
+    get:
+      tags: [admin]
+      operationId: getAdminOrder
+      summary: Get one order with contacts and ledger
+      description: |
+        The order detail plus both parties' contact fields and the ledger
+        entries posted for the order.
+      x-farmish-role: admin
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: The order, admin-shaped.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOrderDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/refunds/{id}/retry:
+    post:
+      tags: [admin]
+      operationId: retryRefund
+      summary: Retry a failed refund
+      description: |
+        A failed refund goes back to queued and its Paystack call is
+        re-enqueued. Anything not failed, or a refund refused after release,
+        is a 409.
+      x-farmish-role: admin
+      x-farmish-rate-limit: sensitive
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The re-queued refund.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refund"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -3230,3 +3401,152 @@ components:
           format: int64
           minimum: 0
           description: Total matching items across all pages.
+    DisputeStatus:
+      type: string
+      description: A dispute's lifecycle status.
+      enum: [open, resolved]
+    DisputeOutcome:
+      type: string
+      description: How an admin resolved a dispute.
+      enum: [refund_buyer, release_seller, partial]
+    DisputeAdmin:
+      type: object
+      description: One dispute with its order detail and events.
+      required: [id, orderId, status, reason, description, openedBy, createdAt, order]
+      properties:
+        id:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/DisputeStatus"
+        reason:
+          type: string
+          enum: [not_received, not_as_described, damaged, wrong_item, other]
+        description:
+          type: string
+        openedBy:
+          type: string
+          format: uuid
+        outcome:
+          $ref: "#/components/schemas/DisputeOutcome"
+        refundAmount:
+          $ref: "#/components/schemas/Money"
+          description: The refunded amount, when the outcome refunds anything.
+        resolutionNote:
+          type: string
+        resolvedBy:
+          type: string
+          format: uuid
+        resolvedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        order:
+          $ref: "#/components/schemas/OrderDetail"
+    DisputeAdminList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DisputeAdmin"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
+    ResolveDisputeRequest:
+      type: object
+      additionalProperties: false
+      required: [outcome, note]
+      properties:
+        outcome:
+          $ref: "#/components/schemas/DisputeOutcome"
+        refundAmount:
+          $ref: "#/components/schemas/Money"
+          description: Required for a partial resolution, forbidden otherwise.
+        note:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    OrderPartyContact:
+      type: object
+      description: One party's contact fields, admin only.
+      required: [userId]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+          description: E.164, when the account has one.
+    LedgerEntryView:
+      type: object
+      description: One ledger entry posted for the order.
+      required: [account, amount, transactionKind, transactionReference, createdAt]
+      properties:
+        account:
+          type: string
+        amount:
+          $ref: "#/components/schemas/Money"
+        transactionKind:
+          type: string
+        transactionReference:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    AdminOrderDetail:
+      type: object
+      description: One order with both parties' contacts and its ledger entries.
+      required: [order, buyer, seller, ledgerEntries]
+      properties:
+        order:
+          $ref: "#/components/schemas/OrderDetail"
+        buyer:
+          $ref: "#/components/schemas/OrderPartyContact"
+        seller:
+          $ref: "#/components/schemas/OrderPartyContact"
+        ledgerEntries:
+          type: array
+          items:
+            $ref: "#/components/schemas/LedgerEntryView"
+    Refund:
+      type: object
+      description: One buyer refund and its Paystack progress.
+      required: [id, orderId, amount, reason, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        amount:
+          $ref: "#/components/schemas/Money"
+        reason:
+          type: string
+          enum: [seller_rejected, buyer_cancelled, seller_timeout, stock_unavailable, dispute_refund, dispute_partial]
+        status:
+          type: string
+          enum: [queued, pending, processed, failed]
+        failureReason:
+          type: string
+        paystackRefundId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time

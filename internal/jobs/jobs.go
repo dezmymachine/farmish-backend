@@ -63,6 +63,32 @@ func (r *Registry) Every(interval time.Duration, newArgs func() river.JobArgs, r
 	))
 }
 
+// Schedule enqueues newArgs on a custom schedule, such as DailyAt. Only the
+// elected leader schedules, like Every.
+func (r *Registry) Schedule(schedule river.PeriodicSchedule, newArgs func() river.JobArgs, runOnStart bool) {
+	r.periodic = append(r.periodic, river.NewPeriodicJob(
+		schedule,
+		func() (river.JobArgs, *river.InsertOpts) { return newArgs(), nil },
+		&river.PeriodicJobOpts{RunOnStart: runOnStart},
+	))
+}
+
+// DailyAt runs once a day at the given wall-clock time in Loc.
+type DailyAt struct {
+	Hour, Min int
+	Loc       *time.Location
+}
+
+// Next returns the next occurrence after current.
+func (d DailyAt) Next(current time.Time) time.Time {
+	inLoc := current.In(d.Loc)
+	next := time.Date(inLoc.Year(), inLoc.Month(), inLoc.Day(), d.Hour, d.Min, 0, 0, d.Loc)
+	if !next.After(current) {
+		next = next.Add(24 * time.Hour)
+	}
+	return next
+}
+
 // Options configures a Client.
 type Options struct {
 	// Work makes the client fetch and run jobs (RUN_MODE all|worker). When

@@ -58,6 +58,19 @@ func (q *Queries) AddOrderRefundedPesewas(ctx context.Context, arg AddOrderRefun
 	return i, err
 }
 
+const countInFlightRefundsForOrder = `-- name: CountInFlightRefundsForOrder :one
+SELECT count(*) FROM refunds WHERE order_id = $1 AND status IN ('queued', 'pending')
+`
+
+// Refunds that may still move money for an order. The escrow release waits
+// while any exists (Phase 17b partial resolutions).
+func (q *Queries) CountInFlightRefundsForOrder(ctx context.Context, orderID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countInFlightRefundsForOrder, orderID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getPaymentReferenceForOrder = `-- name: GetPaymentReferenceForOrder :one
 SELECT p.reference FROM payments p
 JOIN checkouts c ON c.payment_id = p.id
@@ -71,6 +84,28 @@ func (q *Queries) GetPaymentReferenceForOrder(ctx context.Context, id uuid.UUID)
 	var reference string
 	err := row.Scan(&reference)
 	return reference, err
+}
+
+const getRefundByID = `-- name: GetRefundByID :one
+SELECT id, order_id, amount_pesewas, reason, status, paystack_refund_id, failure_reason, attempted_at, created_at, updated_at FROM refunds WHERE id = $1
+`
+
+func (q *Queries) GetRefundByID(ctx context.Context, id uuid.UUID) (Refund, error) {
+	row := q.db.QueryRow(ctx, getRefundByID, id)
+	var i Refund
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.AmountPesewas,
+		&i.Reason,
+		&i.Status,
+		&i.PaystackRefundID,
+		&i.FailureReason,
+		&i.AttemptedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getRefundForUpdate = `-- name: GetRefundForUpdate :one
@@ -332,6 +367,34 @@ UPDATE refunds SET status = 'queued' WHERE id = $1 AND status = 'pending' AND pa
 func (q *Queries) SetRefundQueuedForRetry(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, setRefundQueuedForRetry, id)
 	return err
+}
+
+const setRefundQueuedFromFailed = `-- name: SetRefundQueuedFromFailed :one
+UPDATE refunds SET status = 'queued', failure_reason = NULL, attempted_at = NULL
+WHERE id = $1 AND status = 'failed'
+RETURNING id, order_id, amount_pesewas, reason, status, paystack_refund_id, failure_reason, attempted_at, created_at, updated_at
+`
+
+// An admin retry: a failed refund goes back to queued with a clean attempt
+// slate. Returns no row unless the refund is failed: the caller treats that
+// as "cannot retry". The Paystack id stays linked, so reconciliation never
+// adopts the failed Paystack record for another row.
+func (q *Queries) SetRefundQueuedFromFailed(ctx context.Context, id uuid.UUID) (Refund, error) {
+	row := q.db.QueryRow(ctx, setRefundQueuedFromFailed, id)
+	var i Refund
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.AmountPesewas,
+		&i.Reason,
+		&i.Status,
+		&i.PaystackRefundID,
+		&i.FailureReason,
+		&i.AttemptedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const setRefundStatus = `-- name: SetRefundStatus :exec

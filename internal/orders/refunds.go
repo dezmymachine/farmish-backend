@@ -141,8 +141,26 @@ func (s *Service) ReleaseEscrow(ctx context.Context, orderID uuid.UUID) (posted 
 			return fmt.Errorf("lock order: %w", err)
 		}
 		order := fromRow(row)
-		if order.Status != StatusCompleted ||
-			(order.EscrowState != EscrowHeld && order.EscrowState != EscrowPartiallyRefunded) {
+		if order.Status != StatusCompleted {
+			return nil
+		}
+		switch order.EscrowState {
+		case EscrowHeld, EscrowPartiallyRefunded, EscrowRefundPending:
+		default:
+			return nil
+		}
+		inFlight, err := q.CountInFlightRefundsForOrder(ctx, orderID)
+		if err != nil {
+			return fmt.Errorf("count in-flight refunds: %w", err)
+		}
+		if inFlight > 0 {
+			// A partial dispute resolution enqueues the refund before the
+			// release: the release waits until the refund settles, and the
+			// worker turns this into a snooze. Returning the sentinel (rather
+			// than a silent no-op) keeps a stuck release visible.
+			return fmt.Errorf("%w: order %s has %d refund(s) in flight", ErrReleaseDeferred, orderID, inFlight)
+		}
+		if order.EscrowState == EscrowRefundPending {
 			return nil
 		}
 		remainingBase, commission, err := RemainingRelease(order)

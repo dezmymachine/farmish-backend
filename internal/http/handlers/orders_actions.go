@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/dezmymachine/farmish-backend/internal/db"
 	"github.com/dezmymachine/farmish-backend/internal/http/api"
 	"github.com/dezmymachine/farmish-backend/internal/http/apierror"
 	"github.com/dezmymachine/farmish-backend/internal/orders"
@@ -24,6 +25,18 @@ type OrderActions interface {
 	Cancel(ctx context.Context, buyerID, orderID uuid.UUID, reason string) (orders.Order, error)
 	ConfirmReceipt(ctx context.Context, buyerID, orderID uuid.UUID) (orders.Order, error)
 	Dispute(ctx context.Context, buyerID, orderID uuid.UUID, reason, description string) (orders.Order, error)
+	// ListDisputes returns the admin review queue, oldest first.
+	ListDisputes(ctx context.Context, status string, limit, offset int32) ([]orders.DisputeView, int64, error)
+	// GetDispute returns one dispute with its order.
+	GetDispute(ctx context.Context, disputeID uuid.UUID) (orders.DisputeView, error)
+	// Resolve decides an open dispute. refundAmount is required for partial
+	// and forbidden otherwise; nil means the client sent none.
+	Resolve(ctx context.Context, adminID, disputeID uuid.UUID, outcome string, refundAmount *int64, note string) (orders.DisputeView, error)
+	// RetryRefund re-queues a failed refund's Paystack call.
+	RetryRefund(ctx context.Context, adminID, refundID uuid.UUID) (db.Refund, error)
+	// GetAdminOrder returns an order with both parties' contacts and its
+	// ledger entries.
+	GetAdminOrder(ctx context.Context, orderID uuid.UUID) (orders.AdminOrder, error)
 }
 
 // orderError classifies a transition error once, so every endpoint answers
@@ -57,9 +70,33 @@ func (s Server) classifyOrderError(err error) (orderError, bool) {
 		return orderError{status: 404, body: api.Error{Error: api.ErrorBody{
 			Code: apierror.CodeNotFound, Message: "Order not found",
 		}}}, true
+	case errors.Is(err, orders.ErrDisputeNotFound):
+		return orderError{status: 404, body: api.Error{Error: api.ErrorBody{
+			Code: apierror.CodeNotFound, Message: "Dispute not found",
+		}}}, true
+	case errors.Is(err, orders.ErrRefundNotFound):
+		return orderError{status: 404, body: api.Error{Error: api.ErrorBody{
+			Code: apierror.CodeNotFound, Message: "Refund not found",
+		}}}, true
 	case errors.Is(err, orders.ErrDisputeExists):
 		return orderError{status: 409, body: api.Error{Error: api.ErrorBody{
 			Code: apierror.CodeConflict, Message: "This order already has a dispute",
+		}}}, true
+	case errors.Is(err, orders.ErrDisputeNotOpen):
+		return orderError{status: 409, body: api.Error{Error: api.ErrorBody{
+			Code: apierror.CodeConflict, Message: "This dispute is already resolved",
+		}}}, true
+	case errors.Is(err, orders.ErrRefundNotFailed):
+		return orderError{status: 409, body: api.Error{Error: api.ErrorBody{
+			Code: apierror.CodeConflict, Message: "Only a failed refund may be retried",
+		}}}, true
+	case errors.Is(err, orders.ErrRefundAfterRelease):
+		return orderError{status: 409, body: api.Error{Error: api.ErrorBody{
+			Code: apierror.CodeConflict, Message: "This refund was refused after release and needs manual handling",
+		}}}, true
+	case errors.Is(err, orders.ErrRefundExceedsBase):
+		return orderError{status: 409, body: api.Error{Error: api.ErrorBody{
+			Code: apierror.CodeConflict, Message: "This refund would exceed what the buyer paid",
 		}}}, true
 	}
 	return orderError{}, false

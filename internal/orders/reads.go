@@ -80,13 +80,36 @@ func (s *Service) Get(ctx context.Context, callerID, orderID uuid.UUID) (Detail,
 	if row.BuyerID != callerID && row.SellerID != callerID {
 		return Detail{}, false, fmt.Errorf("%w: %s", ErrNotFound, orderID)
 	}
-	items, err := db.New(s.pool).ListOrderItemsByOrder(ctx, orderID)
+	detail, err := s.detailFromRow(ctx, row)
 	if err != nil {
-		return Detail{}, false, fmt.Errorf("list order items: %w", err)
+		return Detail{}, false, err
 	}
-	events, err := db.New(s.pool).ListOrderEvents(ctx, orderID)
+	return detail, row.SellerID == callerID, nil
+}
+
+// detailUnchecked returns one order's detail without the party check, for the
+// admin surfaces (disputes, admin order view). Callers must require the admin
+// role before calling it.
+func (s *Service) detailUnchecked(ctx context.Context, orderID uuid.UUID) (Detail, error) {
+	row, err := db.New(s.pool).GetOrderDetail(ctx, orderID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Detail{}, fmt.Errorf("%w: %s", ErrNotFound, orderID)
+	}
 	if err != nil {
-		return Detail{}, false, fmt.Errorf("list order events: %w", err)
+		return Detail{}, fmt.Errorf("get order detail: %w", err)
+	}
+	return s.detailFromRow(ctx, row)
+}
+
+// detailFromRow builds the detail both Get and detailUnchecked share.
+func (s *Service) detailFromRow(ctx context.Context, row db.GetOrderDetailRow) (Detail, error) {
+	items, err := db.New(s.pool).ListOrderItemsByOrder(ctx, row.ID)
+	if err != nil {
+		return Detail{}, fmt.Errorf("list order items: %w", err)
+	}
+	events, err := db.New(s.pool).ListOrderEvents(ctx, row.ID)
+	if err != nil {
+		return Detail{}, fmt.Errorf("list order events: %w", err)
 	}
 	detail := Detail{
 		Summary: Summary{
@@ -126,7 +149,7 @@ func (s *Service) Get(ctx context.Context, callerID, orderID uuid.UUID) (Detail,
 			Note: event.Note, CreatedAt: event.CreatedAt,
 		})
 	}
-	return detail, row.SellerID == callerID, nil
+	return detail, nil
 }
 
 // listSummaries maps the buyer-list rows onto the domain summary.
