@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -280,14 +281,16 @@ func (s *Service) HandleWebhook(ctx context.Context, raw []byte) error {
 	// replayed by Paystack, or synthesised by the verify fallback) collides.
 	// Refund webhooks may carry no top-level id; their refund_reference is the
 	// per-refund identity instead (ADR-0027). Transfer webhooks key on our
-	// unique reference, which Paystack echoes back (Phase 18b).
+	// unique reference, which Paystack echoes back (Phase 18b). Other events
+	// still require an id: a reference-only charge or refund body is
+	// malformed, as before.
 	var eventKey string
 	switch {
 	case len(identity.ID) != 0 && string(identity.ID) != "null":
 		eventKey = event.Event + ":" + string(identity.ID)
 	case identity.RefundReference != "":
 		eventKey = event.Event + ":ref:" + identity.RefundReference
-	case identity.Reference != "":
+	case strings.HasPrefix(event.Event, "transfer.") && identity.Reference != "":
 		eventKey = event.Event + ":ref:" + identity.Reference
 	default:
 		return fmt.Errorf("%w: data has no id", ErrMalformedEvent)
