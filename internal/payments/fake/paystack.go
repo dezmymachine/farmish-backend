@@ -36,6 +36,21 @@ type Provider struct {
 	// read by FetchRefund/ListRefunds. Tests may edit statuses with
 	// SetRefundStatus.
 	Refunds []payments.Refund
+	// ResolveResult and ResolveErr answer ResolveAccount.
+	ResolveResult payments.Account
+	ResolveErr    error
+	// Resolved keeps every ResolveInput, so a test can assert on the
+	// normalized number and bank code that were sent.
+	Resolved []payments.ResolveInput
+	// BanksResult and BanksErr answer ListBanks. A nil BanksResult keeps the
+	// canned single bank.
+	BanksResult []payments.Bank
+	BanksErr    error
+	// RecipientResult and RecipientErr answer CreateTransferRecipient.
+	RecipientResult payments.TransferRecipient
+	RecipientErr    error
+	// Recipients keeps every TransferRecipientInput.
+	Recipients []payments.TransferRecipientInput
 	// FetchErr and ListErr make FetchRefund/ListRefunds fail.
 	FetchErr error
 	ListErr  error
@@ -177,6 +192,13 @@ func (p *Provider) ResolveAccount(ctx context.Context, in payments.ResolveInput)
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.Calls = append(p.Calls, "ResolveAccount")
+	p.Resolved = append(p.Resolved, in)
+	if p.ResolveErr != nil {
+		return payments.Account{}, p.ResolveErr
+	}
+	if p.ResolveResult.AccountName != "" {
+		return p.ResolveResult, nil
+	}
 	return payments.Account{AccountName: "FAKE HOLDER"}, nil
 }
 
@@ -185,6 +207,15 @@ func (p *Provider) ListBanks(ctx context.Context, in payments.ListBanksInput) ([
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.Calls = append(p.Calls, "ListBanks")
+	if p.ListErr != nil {
+		return nil, p.ListErr
+	}
+	if p.BanksErr != nil {
+		return nil, p.BanksErr
+	}
+	if p.BanksResult != nil {
+		return p.BanksResult, nil
+	}
 	return []payments.Bank{{Name: "Fake Bank", Code: "fake", Type: in.Type}}, nil
 }
 
@@ -193,6 +224,13 @@ func (p *Provider) CreateTransferRecipient(ctx context.Context, in payments.Tran
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.Calls = append(p.Calls, "CreateTransferRecipient")
+	p.Recipients = append(p.Recipients, in)
+	if p.RecipientErr != nil {
+		return payments.TransferRecipient{}, p.RecipientErr
+	}
+	if p.RecipientResult.RecipientCode != "" {
+		return p.RecipientResult, nil
+	}
 	return payments.TransferRecipient{RecipientCode: "RCP_FAKE"}, nil
 }
 

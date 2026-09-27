@@ -29,6 +29,9 @@ const (
 	// CodePaymentProvider is a 502: the payment provider could not be reached
 	// or refused. No money moved, and the buyer can retry.
 	CodePaymentProvider = "payment_provider_error"
+	// CodeAccountUnresolvable is a 422: Paystack could not resolve the
+	// payout account the seller gave.
+	CodeAccountUnresolvable = "account_unresolvable"
 )
 
 // New returns an envelope with code and message. Strict handlers use it to

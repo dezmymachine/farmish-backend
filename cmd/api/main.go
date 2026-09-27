@@ -31,6 +31,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/notify"
 	"github.com/dezmymachine/farmish-backend/internal/orders"
 	"github.com/dezmymachine/farmish-backend/internal/payments"
+	"github.com/dezmymachine/farmish-backend/internal/payouts"
 	"github.com/dezmymachine/farmish-backend/internal/promotions"
 	"github.com/dezmymachine/farmish-backend/internal/ratelimit"
 	"github.com/dezmymachine/farmish-backend/internal/redisx"
@@ -195,6 +196,10 @@ func run() error {
 	// payments owns event dispatch but not the escrow domain, so the handlers
 	// are registered here, once ordersSvc exists and before any worker runs.
 	orders.RegisterRefundEvents(paymentsSvc, ordersSvc)
+	// Seller payout accounts (Phase 18a) resolve through Paystack like the
+	// refund flow does, with their own client.
+	payoutsSvc := payouts.New(pool, crypter, payments.NewPaystackClient(cfg.Paystack.SecretKey, cfg.Paystack.BaseURL), sellersSvc)
+	payoutsSvc.AttachLogger(log)
 	notifySender := notify.SMS(notify.LogOnly{Log: log})
 	if cfg.Notify.SMSEnabled {
 		notifySender = notify.NewMNotify(cfg.Notify.APIKey, cfg.Notify.Sender, "")
@@ -214,6 +219,7 @@ func run() error {
 	paymentsSvc.AttachJobClient(jobClient)
 	checkoutSvc.AttachJobClient(jobClient)
 	ordersSvc.AttachJobClient(jobClient)
+	payoutsSvc.AttachJobClient(jobClient)
 
 	if cfg.RunMode.WorksJobs() {
 		// Not the signal context: cancelling Start's context would abort running
@@ -261,6 +267,7 @@ func run() error {
 			Checkout:      checkoutSvc,
 			Orders:        ordersSvc,
 			OrderActions:  ordersSvc,
+			Payouts:       payoutsSvc,
 			Turnstile:     turnstile.New(cfg.TurnstileSecret),
 			IPLimiter:     ipLimiter,
 			SharedLimiter: shared,

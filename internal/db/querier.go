@@ -88,6 +88,8 @@ type Querier interface {
 	GetPaymentReferenceForOrder(ctx context.Context, id uuid.UUID) (string, error)
 	// A buyer retrying after a failed attempt needs to find the earlier rows.
 	GetPaymentsByPurposeRef(ctx context.Context, arg GetPaymentsByPurposeRefParams) ([]Payment, error)
+	// The seller's current payout account, if they set one.
+	GetPayoutAccountBySeller(ctx context.Context, sellerID uuid.UUID) (SellerPayoutAccount, error)
 	GetPromotionConfig(ctx context.Context, tier string) (PromotionConfig, error)
 	// One listing with its category, its active promotion and the seller's safe
 	// profile fields. Never selects contact or identity data. The caller decides
@@ -271,6 +273,9 @@ type Querier interface {
 	// Stored after InitializeTransaction, which happens outside the insert's
 	// transaction: the provider call must never hold a database transaction open.
 	SetPaymentAuthorizationURL(ctx context.Context, arg SetPaymentAuthorizationURLParams) (Payment, error)
+	// An admin approves a needs_review account. Returns no row unless the
+	// account is waiting for review: the caller treats that as "cannot approve".
+	SetPayoutAccountVerified(ctx context.Context, arg SetPayoutAccountVerifiedParams) (SellerPayoutAccount, error)
 	SetRefundFailed(ctx context.Context, arg SetRefundFailedParams) error
 	SetRefundPaystackID(ctx context.Context, arg SetRefundPaystackIDParams) error
 	// The job is about to call Paystack: committed before the call, so a crash
@@ -328,6 +333,10 @@ type Querier interface {
 	// Seed upsert: updates only when something changed (the WHERE guard keeps a
 	// repeat run from touching updated_at). Returns no row when unchanged.
 	UpsertCategoryBySlug(ctx context.Context, arg UpsertCategoryBySlugParams) (Category, error)
+	// Records the resolved account. On a repeat setup the row already exists:
+	// the caller sets cooldown_until (now + 48h) itself, and passes NULL for a
+	// first setup.
+	UpsertPayoutAccount(ctx context.Context, arg UpsertPayoutAccountParams) (SellerPayoutAccount, error)
 	// Seed upsert: updates only when something changed (the WHERE guard keeps a
 	// repeat run from touching updated_at). Returns no row when unchanged.
 	UpsertPromotionConfig(ctx context.Context, arg UpsertPromotionConfigParams) (PromotionConfig, error)

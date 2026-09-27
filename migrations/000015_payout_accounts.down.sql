@@ -1,0 +1,2 @@
+DROP TRIGGER seller_payout_accounts_set_updated_at ON seller_payout_accounts;
+DROP TABLE seller_payout_accounts;

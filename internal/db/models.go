@@ -372,6 +372,22 @@ type RiverQueue struct {
 	UpdatedAt time.Time
 }
 
+type SellerPayoutAccount struct {
+	SellerID          uuid.UUID
+	Type              string
+	BankCode          string
+	BankName          string
+	AccountNumberEnc  string
+	AccountNumberMask string
+	AccountName       string
+	RecipientCode     string
+	Status            string
+	VerifiedAt        *time.Time
+	CooldownUntil     *time.Time
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
 type SellerProfile struct {
 	UserID             uuid.UUID
 	BusinessName       string

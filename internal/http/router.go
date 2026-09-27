@@ -50,6 +50,8 @@ type Deps struct {
 	Orders handlers.OrderStore
 	// OrderActions moves an order through DOMAIN §4's table.
 	OrderActions handlers.OrderActions
+	// Payouts owns seller payout accounts.
+	Payouts handlers.PayoutStore
 	// IPLimiter backs the per-IP flood limit. It stays in-process on purpose:
 	// free, instant, and a flood can't burn the metered Redis quota.
 	// Defaults to ratelimit.Memory.
@@ -143,7 +145,7 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 	server := handlers.Server{
 		DB: deps.DB, Users: deps.Users, Sellers: deps.Sellers, Catalog: deps.Catalog,
 		Media: deps.Media, Listings: deps.Listings, PublicListings: deps.PublicListings,
-		Views: deps.Views, ViewerHash: deps.ViewerHash, Payments: deps.Payments, Promotions: deps.Promotions, Checkout: deps.Checkout, Orders: deps.Orders, OrderActions: deps.OrderActions, Log: log,
+		Views: deps.Views, ViewerHash: deps.ViewerHash, Payments: deps.Payments, Promotions: deps.Promotions, Checkout: deps.Checkout, Orders: deps.Orders, OrderActions: deps.OrderActions, Payouts: deps.Payouts, Log: log,
 	}
 	api.RegisterHandlersWithOptions(r, strictServer(server), api.GinServerOptions{
 		ErrorHandler: func(c *gin.Context, err error, _ int) { requestError(c, err) },

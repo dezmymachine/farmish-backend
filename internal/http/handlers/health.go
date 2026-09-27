@@ -52,6 +52,8 @@ type Server struct {
 	Orders OrderStore
 	// OrderActions moves an order through DOMAIN §4's table.
 	OrderActions OrderActions
+	// Payouts owns seller payout accounts.
+	Payouts PayoutStore
 	// Views enqueues the listing view count. Nil disables counting, which
 	// keeps the read path working without a job queue.
 	Views listings.ViewCounter

@@ -60,6 +60,8 @@ tags:
     description: Seller listings. Public browsing is Phase 12.
   - name: admin
     description: Admin dispute resolution and order inspection.
+  - name: payouts
+    description: Seller payout accounts. Payout execution is Phase 18b.
 paths:
   /healthz:
     get:
@@ -440,6 +442,121 @@ paths:
                 $ref: "#/components/schemas/Refund"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/payouts/banks:
+    get:
+      tags: [payouts]
+      operationId: listPayoutBanks
+      summary: List payout banks
+      description: |
+        Paystack's banks for one account type, cached server-side for an
+        hour. Without a type, both lists come back, mobile money first.
+      parameters:
+        - name: type
+          in: query
+          schema:
+            $ref: "#/components/schemas/PayoutAccountType"
+      responses:
+        "200":
+          description: The banks.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/seller/payout-account:
+    get:
+      tags: [payouts]
+      operationId: getMyPayoutAccount
+      summary: Get my payout account
+      description: The caller's masked payout account. Sellers without a seller profile get 403.
+      responses:
+        "200":
+          description: The masked payout account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayoutAccount"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    put:
+      tags: [payouts]
+      operationId: setMyPayoutAccount
+      summary: Set my payout account
+      description: |
+        Resolves the account with Paystack, name-checks it against the
+        seller's business and display names, encrypts it and creates the
+        transfer recipient. Needs a fresh sign-in (step-up): a sign-in older
+        than 5 minutes gets 401 `reauth_required`. Changing an existing
+        account starts a 48h payout cooldown and sends a security SMS.
+      x-farmish-step-up: true
+      x-farmish-rate-limit: sensitive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetPayoutAccountRequest"
+      responses:
+        "200":
+          description: The masked payout account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayoutAccount"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "502":
+          $ref: "#/components/responses/PaymentProviderError"
+  /v1/admin/payout-accounts/{sellerId}/approve:
+    post:
+      tags: [payouts]
+      operationId: approvePayoutAccount
+      summary: Approve a payout account
+      description: Moves a `needs_review` account to `verified`. Audited.
+      x-farmish-role: admin
+      parameters:
+        - name: sellerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The verified payout account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayoutAccount"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1900,6 +2017,12 @@ components:
             $ref: "#/components/schemas/Error"
     Unavailable:
       description: A dependency is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unprocessable:
+      description: The request was understood but a provider check failed (e.g. a payout account Paystack cannot resolve).
       content:
         application/json:
           schema:
@@ -3550,3 +3673,64 @@ components:
         updatedAt:
           type: string
           format: date-time
+    PayoutAccountType:
+      type: string
+      description: A payout account type.
+      enum: [mobile_money, ghipss]
+    PayoutAccount:
+      type: object
+      description: A seller's masked payout account. The full number never leaves the server.
+      required: [type, bankCode, bankName, accountNumberMasked, accountName, status]
+      properties:
+        type:
+          $ref: "#/components/schemas/PayoutAccountType"
+        bankCode:
+          type: string
+        bankName:
+          type: string
+        accountNumberMasked:
+          type: string
+          description: Stars plus the last 4 digits, e.g. `******4567`.
+        accountName:
+          type: string
+          description: The holder name, as resolved by Paystack.
+        status:
+          type: string
+          enum: [verified, needs_review]
+        cooldownUntil:
+          type: string
+          format: date-time
+          description: No payout runs to a changed account before this time.
+    SetPayoutAccountRequest:
+      type: object
+      additionalProperties: false
+      required: [type, bankCode, accountNumber]
+      properties:
+        type:
+          $ref: "#/components/schemas/PayoutAccountType"
+        bankCode:
+          type: string
+          minLength: 1
+          maxLength: 20
+        accountNumber:
+          type: string
+          minLength: 9
+          maxLength: 24
+          pattern: '^[+0-9][0-9 +\-]*$'
+          description: Digits, with an optional leading + and spaces or dashes, 10-20 digits after normalisation.
+    BankItem:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+    BankList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/BankItem"
