@@ -12,6 +12,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/audit"
 	"github.com/dezmymachine/farmish-backend/internal/database"
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
+	"github.com/dezmymachine/farmish-backend/internal/metrics"
 )
 
 // accraLocation is Africa/Accra for the daily reconciliation run. Accra stays
@@ -51,6 +52,7 @@ func (w *ReconcileWorker) Work(ctx context.Context, _ *river.Job[ReconcileArgs])
 	if err != nil {
 		return err
 	}
+	metrics.LedgerReconcileViolations.Set(float64(len(report.Violations)))
 	if report.Clean() {
 		return nil
 	}

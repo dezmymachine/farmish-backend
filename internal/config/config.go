@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"net"
 	"net/netip"
 	"os"
 	"strconv"
@@ -25,6 +27,14 @@ const (
 	EnvTest        Env = "test"
 	EnvStaging     Env = "staging"
 	EnvProduction  Env = "production"
+)
+
+const (
+	// DefaultMetricsAddr keeps /metrics on loopback until a deploy opts in to
+	// a private address.
+	DefaultMetricsAddr = "127.0.0.1:9090"
+	// ProductionPaystackURL is the only Paystack endpoint production may use.
+	ProductionPaystackURL = "https://api.paystack.co"
 )
 
 // RunMode selects what a process runs (RUN_MODE).
@@ -80,6 +90,10 @@ type Config struct {
 	Fulfilment Fulfilment
 	// Notify configures transactional SMS (Phase 16).
 	Notify Notify
+	// MetricsAddr is where the private /metrics listener binds
+	// (METRICS_ADDR, host:port). Empty disables it. It is never the public
+	// port: the public router serves no metrics route.
+	MetricsAddr string
 }
 
 // Fulfilment holds the order state machine's timers (DOMAIN §3).
@@ -112,6 +126,9 @@ type Notify struct {
 	// SMSEnabled is true.
 	APIKey string
 	Sender string
+	// LowBalance is the SMS credit level under which the daily balance check
+	// logs an Error (MNOTIFY_LOW_BALANCE). It only matters with SMS enabled.
+	LowBalance float64
 }
 
 // Paystack configures the Paystack API.
@@ -215,6 +232,7 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 		RunMode:         RunAll,
 		RedisTimeout:    200 * time.Millisecond,
 		JobsMaxWorkers:  10,
+		MetricsAddr:     DefaultMetricsAddr,
 		DB: DB{
 			URL:              required("DATABASE_URL"),
 			MaxConns:         10,
@@ -234,6 +252,24 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 			errs = append(errs, fmt.Errorf("PORT must be an integer in 1..65535, got %q", v))
 		} else {
 			cfg.Port = p
+		}
+	}
+
+	if v, ok := lookup("METRICS_ADDR"); ok {
+		v = strings.TrimSpace(v)
+		switch {
+		case strings.EqualFold(v, "off"), v == "":
+			cfg.MetricsAddr = ""
+		default:
+			if _, port, err := net.SplitHostPort(v); err != nil {
+				errs = append(errs, fmt.Errorf("METRICS_ADDR must be host:port or off, got %q", v))
+			} else if p, err := strconv.Atoi(port); err != nil || p < 1 || p > 65535 {
+				errs = append(errs, fmt.Errorf("METRICS_ADDR port must be in 1..65535, got %q", v))
+			} else if port == strconv.Itoa(cfg.Port) && !strings.HasPrefix(v, "127.") {
+				errs = append(errs, errors.New("METRICS_ADDR must not use the public PORT"))
+			} else {
+				cfg.MetricsAddr = v
+			}
 		}
 	}
 
@@ -409,12 +445,17 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 	cfg.Paystack = Paystack{
 		SecretKey:   required("PAYSTACK_SECRET_KEY"),
 		PublicKey:   required("PAYSTACK_PUBLIC_KEY"),
-		BaseURL:     "https://api.paystack.co",
+		BaseURL:     ProductionPaystackURL,
 		CallbackURL: required("PAYSTACK_CALLBACK_URL"),
 		FeeBps:      195,
 	}
 	if v := get("PAYSTACK_BASE_URL"); v != "" {
 		cfg.Paystack.BaseURL = strings.TrimRight(v, "/")
+	}
+	// A stub Paystack (the load-test server) must never take real payments'
+	// place: production talks to Paystack or refuses to boot.
+	if cfg.Env == EnvProduction && cfg.Paystack.BaseURL != ProductionPaystackURL {
+		errs = append(errs, fmt.Errorf("PAYSTACK_BASE_URL must be %s when APP_ENV=production", ProductionPaystackURL))
 	}
 	wantSecret, wantPublic := "sk_test_", "pk_test_"
 	if deployed {
@@ -499,7 +540,7 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 
 	// Transactional SMS. Off unless explicitly enabled: development and test
 	// use the LogOnly sender, which never sends a real message.
-	cfg.Notify = Notify{Sender: "Farmish"}
+	cfg.Notify = Notify{Sender: "Farmish", LowBalance: 200}
 	if v := get("NOTIFY_SMS_ENABLED"); v != "" {
 		enabled, err := strconv.ParseBool(v)
 		if err != nil {
@@ -511,6 +552,14 @@ func FromLookup(lookup func(string) (string, bool)) (Config, error) {
 	cfg.Notify.APIKey = get("MNOTIFY_API_KEY")
 	if v := get("MNOTIFY_SENDER"); v != "" {
 		cfg.Notify.Sender = v
+	}
+	if v := get("MNOTIFY_LOW_BALANCE"); v != "" {
+		low, err := strconv.ParseFloat(v, 64)
+		if err != nil || low < 0 || math.IsNaN(low) || math.IsInf(low, 0) {
+			errs = append(errs, fmt.Errorf("MNOTIFY_LOW_BALANCE must be a number of SMS credits, 0 or more, got %q", v))
+		} else {
+			cfg.Notify.LowBalance = low
+		}
 	}
 	if cfg.Notify.SMSEnabled {
 		if cfg.Notify.APIKey == "" {

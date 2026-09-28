@@ -17,6 +17,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/db"
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
 	"github.com/dezmymachine/farmish-backend/internal/ledger"
+	"github.com/dezmymachine/farmish-backend/internal/metrics"
 	"github.com/dezmymachine/farmish-backend/internal/money"
 	"github.com/dezmymachine/farmish-backend/internal/notify"
 	"github.com/dezmymachine/farmish-backend/internal/payments"
@@ -118,7 +119,11 @@ func (s *Service) CreateRefund(ctx context.Context, tx pgx.Tx, orderID uuid.UUID
 	if _, err := s.jobs.InsertTx(ctx, tx, RefundArgs{RefundID: refund.ID}, jobs.Unique()); err != nil {
 		return fmt.Errorf("enqueue refund: %w", err)
 	}
-	return nil
+	metrics.RefundsTotal.WithLabelValues(metrics.StatusQueued).Inc()
+	return audit.Record(ctx, tx, audit.Event{
+		Action: "refund.queued", TargetType: "refund", TargetID: refund.ID.String(),
+		Metadata: map[string]any{"order_id": orderID.String(), "amount_pesewas": amount, "reason": reason},
+	})
 }
 
 // ReleaseEscrow posts the seller's earnings and the platform's commission for
@@ -503,6 +508,13 @@ func (s *Service) settleRefund(ctx context.Context, tx pgx.Tx, refund db.Refund,
 	if err := q.SetOrderEscrowState(ctx, db.SetOrderEscrowStateParams{ID: updated.ID, EscrowState: state}); err != nil {
 		return "", fmt.Errorf("set escrow state: %w", err)
 	}
+	metrics.RefundsTotal.WithLabelValues(metrics.StatusProcessed).Inc()
+	if err := audit.Record(ctx, tx, audit.Event{
+		Action: "refund.processed", TargetType: "refund", TargetID: settled.ID.String(),
+		Metadata: map[string]any{"order_id": settled.OrderID.String(), "amount_pesewas": settled.AmountPesewas},
+	}); err != nil {
+		return "", err
+	}
 	if s.jobs != nil {
 		if _, err := s.jobs.InsertTx(ctx, tx, notify.SMSArgs{
 			UserID: updated.BuyerID, Template: notify.TemplateOrderRefundedBuyer,
@@ -520,6 +532,7 @@ func (s *Service) failRefund(ctx context.Context, tx pgx.Tx, refund db.Refund, r
 	if err := db.New(tx).SetRefundFailed(ctx, db.SetRefundFailedParams{ID: refund.ID, FailureReason: &reason}); err != nil {
 		return fmt.Errorf("mark refund failed: %w", err)
 	}
+	metrics.RefundsTotal.WithLabelValues(metrics.StatusFailed).Inc()
 	if err := audit.Record(ctx, tx, audit.Event{
 		Action: action, TargetType: "refund", TargetID: refund.ID.String(),
 		Metadata: map[string]any{"order_id": refund.OrderID.String(), "amount_pesewas": refund.AmountPesewas, "reason": reason},

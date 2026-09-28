@@ -16,6 +16,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/db"
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
 	"github.com/dezmymachine/farmish-backend/internal/ledger"
+	"github.com/dezmymachine/farmish-backend/internal/metrics"
 	"github.com/dezmymachine/farmish-backend/internal/money"
 	"github.com/dezmymachine/farmish-backend/internal/notify"
 	"github.com/dezmymachine/farmish-backend/internal/payments"
@@ -99,6 +100,13 @@ func (s *Service) ExecuteSeller(ctx context.Context, sellerID uuid.UUID) (*Payou
 		}
 		if _, err := s.jobs.InsertTx(ctx, tx, SendArgs{PayoutID: row.ID}, jobs.Unique()); err != nil {
 			return fmt.Errorf("enqueue payout send: %w", err)
+		}
+		metrics.PayoutsTotal.WithLabelValues(metrics.StatusQueued).Inc()
+		if err := audit.Record(ctx, tx, audit.Event{
+			Action: "payout.created", TargetType: "payout", TargetID: row.ID.String(),
+			Metadata: map[string]any{"seller_id": sellerID.String(), "amount_pesewas": available},
+		}); err != nil {
+			return err
 		}
 		payout := fromPayoutRow(row)
 		queued = &payout
@@ -317,6 +325,13 @@ func (s *Service) settleSuccess(ctx context.Context, tx pgx.Tx, payout db.Payout
 	if postErr != nil && !errors.Is(postErr, ledger.ErrDuplicate) {
 		return "", fmt.Errorf("post payout succeeded: %w", postErr)
 	}
+	metrics.PayoutsTotal.WithLabelValues(metrics.StatusSucceeded).Inc()
+	if err := audit.Record(ctx, tx, audit.Event{
+		Action: "payout.succeeded", TargetType: "payout", TargetID: settled.ID.String(),
+		Metadata: map[string]any{"seller_id": settled.SellerID.String(), "amount_pesewas": settled.AmountPesewas},
+	}); err != nil {
+		return "", err
+	}
 	amountText, err := money.FormatGHS(settled.AmountPesewas)
 	if err != nil {
 		return "", fmt.Errorf("format payout amount: %w", err)
@@ -356,6 +371,8 @@ func (s *Service) failPayout(ctx context.Context, tx pgx.Tx, payout db.Payout, s
 	if postErr != nil && !errors.Is(postErr, ledger.ErrDuplicate) {
 		return fmt.Errorf("post payout failed: %w", postErr)
 	}
+	metrics.PayoutsTotal.WithLabelValues(payoutMetricStatus(status)).Inc()
+	metrics.PayoutFailures.Inc()
 	if err := audit.Record(ctx, tx, audit.Event{
 		Action: "payout.failed", TargetType: "payout", TargetID: payout.ID.String(),
 		Metadata: map[string]any{
@@ -626,4 +643,13 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n]
+}
+
+// payoutMetricStatus maps a terminal failure status onto the two label values
+// payouts_total carries for it; anything unexpected counts as failed.
+func payoutMetricStatus(status string) string {
+	if status == PayoutReversed {
+		return metrics.StatusReversed
+	}
+	return metrics.StatusFailed
 }

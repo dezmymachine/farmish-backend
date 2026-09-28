@@ -576,3 +576,76 @@ func TestConfig_FulfilmentAndNotify(t *testing.T) {
 		t.Fatalf("enabled SMS = %+v, %v", cfg.Notify, err)
 	}
 }
+
+func TestConfig_MetricsAddr(t *testing.T) {
+	cfg, err := FromLookup(lookup(base(nil)))
+	if err != nil || cfg.MetricsAddr != "127.0.0.1:9090" {
+		t.Fatalf("default MetricsAddr = %q, %v; want loopback:9090", cfg.MetricsAddr, err)
+	}
+	for _, tt := range []struct{ in, want string }{
+		{"0.0.0.0:9100", "0.0.0.0:9100"},
+		{"[::]:9100", "[::]:9100"},
+		{"off", ""},
+		{"OFF", ""},
+		{"", ""},
+	} {
+		cfg, err := FromLookup(lookup(merge(base(nil), map[string]string{"METRICS_ADDR": tt.in})))
+		if err != nil || cfg.MetricsAddr != tt.want {
+			t.Errorf("METRICS_ADDR=%q: got %q, %v; want %q", tt.in, cfg.MetricsAddr, err, tt.want)
+		}
+	}
+	for name, in := range map[string]string{
+		"no port":         "127.0.0.1",
+		"port zero":       "127.0.0.1:0",
+		"port too big":    "127.0.0.1:70000",
+		"not a number":    "127.0.0.1:http",
+		"public port too": "0.0.0.0:8080",
+	} {
+		_, err := FromLookup(lookup(merge(base(nil), map[string]string{"METRICS_ADDR": in})))
+		if err == nil || !strings.Contains(err.Error(), "METRICS_ADDR") {
+			t.Errorf("%s (%q): err = %v, want a METRICS_ADDR error", name, in, err)
+		}
+	}
+}
+
+func TestConfig_ProductionRefusesStubPaystack(t *testing.T) {
+	prod := merge(base(nil), map[string]string{
+		"APP_ENV": "production", "FIREBASE_CREDENTIALS_JSON": `{"type":"service_account","project_id":"farmish-prod"}`,
+		"FIREBASE_PROJECT_ID": "farmish-prod", "TURNSTILE_SECRET": "0x4real",
+		"DATA_ENCRYPTION_KEY": "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
+		"PAYSTACK_SECRET_KEY": "sk_live_x", "PAYSTACK_PUBLIC_KEY": "pk_live_x",
+	})
+	for k, v := range r2() {
+		prod[k] = v
+	}
+	stub := merge(prod, map[string]string{"PAYSTACK_BASE_URL": "http://paystack-stub:9999"})
+	if _, err := FromLookup(lookup(stub)); err == nil || !strings.Contains(err.Error(), "PAYSTACK_BASE_URL must be https://api.paystack.co") {
+		t.Fatalf("err = %v, want the production Paystack URL rule", err)
+	}
+	if _, err := FromLookup(lookup(merge(prod, map[string]string{"PAYSTACK_BASE_URL": "https://api.paystack.co/"}))); err != nil {
+		t.Fatalf("the real URL must pass in production: %v", err)
+	}
+	// Development may point anywhere: that is how the load test runs.
+	if _, err := FromLookup(lookup(merge(base(nil), map[string]string{"PAYSTACK_BASE_URL": "http://127.0.0.1:9999"}))); err != nil {
+		t.Fatalf("development must allow a stub: %v", err)
+	}
+}
+
+func TestConfig_MNotifyLowBalance(t *testing.T) {
+	cfg, err := FromLookup(lookup(base(nil)))
+	if err != nil || cfg.Notify.LowBalance != 200 {
+		t.Fatalf("default LowBalance = %v, %v; want 200", cfg.Notify.LowBalance, err)
+	}
+	for in, want := range map[string]float64{"0": 0, "50": 50, "12.5": 12.5} {
+		cfg, err := FromLookup(lookup(merge(base(nil), map[string]string{"MNOTIFY_LOW_BALANCE": in})))
+		if err != nil || cfg.Notify.LowBalance != want {
+			t.Errorf("MNOTIFY_LOW_BALANCE=%s: got %v, %v; want %v", in, cfg.Notify.LowBalance, err, want)
+		}
+	}
+	for _, in := range []string{"-1", "lots", "NaN", "Inf"} {
+		_, err := FromLookup(lookup(merge(base(nil), map[string]string{"MNOTIFY_LOW_BALANCE": in})))
+		if err == nil || !strings.Contains(err.Error(), "MNOTIFY_LOW_BALANCE") {
+			t.Errorf("MNOTIFY_LOW_BALANCE=%s: err = %v, want a validation error", in, err)
+		}
+	}
+}

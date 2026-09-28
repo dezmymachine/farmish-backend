@@ -17,6 +17,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/database"
 	"github.com/dezmymachine/farmish-backend/internal/db"
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
+	"github.com/dezmymachine/farmish-backend/internal/metrics"
 	"github.com/dezmymachine/farmish-backend/internal/validation"
 )
 
@@ -240,11 +241,13 @@ func providerFailureReason(err error) string {
 // no longer pending (a webhook may have won the race).
 func (s *Service) markFailed(ctx context.Context, id uuid.UUID, reason string) error {
 	return database.InTx(ctx, s.pool, func(tx pgx.Tx) error {
-		if _, err := db.New(tx).MarkPaymentFailed(ctx, db.MarkPaymentFailedParams{
+		failed, err := db.New(tx).MarkPaymentFailed(ctx, db.MarkPaymentFailedParams{
 			ID: id, FailureReason: optionalString(reason),
-		}); err != nil {
+		})
+		if err != nil {
 			return fmt.Errorf("mark payment failed: %w", err)
 		}
+		metrics.PaymentsTotal.WithLabelValues(failed.Purpose, metrics.StatusFailed).Inc()
 		return nil
 	})
 }
@@ -384,6 +387,7 @@ func (s *Service) onChargeSuccess(ctx context.Context, tx pgx.Tx, data json.RawM
 			slog.Int64("expected_pesewas", current.Charge),
 			slog.Int64("received_pesewas", charge.Amount),
 			slog.String("currency", charge.Currency))
+		metrics.PaymentAmountMismatch.Inc()
 		if err := audit.Record(ctx, tx, audit.Event{
 			Action: "payment.amount_mismatch", TargetType: "payment", TargetID: current.ID.String(),
 			Metadata: map[string]any{
@@ -423,7 +427,16 @@ func (s *Service) onChargeSuccess(ctx context.Context, tx pgx.Tx, data json.RawM
 			return "", fmt.Errorf("enqueue payments.succeeded: %w", err)
 		}
 	}
-	_ = settled
+	metrics.PaymentsTotal.WithLabelValues(current.Purpose, metrics.StatusSucceeded).Inc()
+	if err := audit.Record(ctx, tx, audit.Event{
+		Action: "payment.succeeded", TargetType: "payment", TargetID: settled.ID.String(),
+		Metadata: map[string]any{
+			"reference": current.Reference, "purpose": current.Purpose,
+			"charge_pesewas": current.Charge, "currency": current.Currency,
+		},
+	}); err != nil {
+		return "", err
+	}
 	s.log.Info("payment settled",
 		slog.String("reference", current.Reference), slog.String("purpose", current.Purpose),
 		slog.Int64("charge_pesewas", current.Charge), slog.Int64("paystack_fee_pesewas", charge.Fees))
@@ -470,6 +483,7 @@ func (s *Service) onChargeFailed(ctx context.Context, tx pgx.Tx, data json.RawMe
 	}); err != nil {
 		return "", fmt.Errorf("mark payment failed: %w", err)
 	}
+	metrics.PaymentsTotal.WithLabelValues(payment.Purpose, metrics.StatusFailed).Inc()
 	return OutcomeProcessed, nil
 }
 
@@ -548,6 +562,11 @@ func (s *Service) markAbandoned(ctx context.Context, payment Payment, status, re
 		}
 		if err != nil {
 			return fmt.Errorf("mark payment %s: %w", status, err)
+		}
+		if status == StatusFailed {
+			metrics.PaymentsTotal.WithLabelValues(payment.Purpose, metrics.StatusFailed).Inc()
+		} else {
+			metrics.PaymentsTotal.WithLabelValues(payment.Purpose, metrics.StatusAbandoned).Inc()
 		}
 		return nil
 	})

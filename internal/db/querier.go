@@ -29,6 +29,9 @@ type Querier interface {
 	// Refunds that may still move money for an order. The escrow release waits
 	// while any exists (Phase 17b partial resolutions).
 	CountInFlightRefundsForOrder(ctx context.Context, orderID uuid.UUID) (int64, error)
+	// Feeds the jobs_queue_depth metric (Phase 21). River's state column is an
+	// enum, so cast it for a plain string in Go.
+	CountJobsByState(ctx context.Context) ([]CountJobsByStateRow, error)
 	CountListingImages(ctx context.Context, listingID uuid.UUID) (int64, error)
 	CountOrdersByBuyer(ctx context.Context, arg CountOrdersByBuyerParams) (int64, error)
 	CountOrdersBySeller(ctx context.Context, arg CountOrdersBySellerParams) (int64, error)

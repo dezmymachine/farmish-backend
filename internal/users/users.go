@@ -156,17 +156,30 @@ func (s *Service) SetSellerVerified(ctx context.Context, id uuid.UUID, verified 
 // Firebase custom claim. The database write is authoritative; if the claim
 // update fails the error is returned and re-running is safe.
 func (s *Service) SetRole(ctx context.Context, id uuid.UUID, role string, claims auth.ClaimsSetter) (User, error) {
-	if role != RoleUser && role != RoleAdmin {
-		return User{}, fmt.Errorf("unknown role %q", role)
-	}
-	u, err := s.one(s.q.SetUserRole(ctx, db.SetUserRoleParams{ID: id, Role: role}))
+	u, err := s.SetRoleDB(ctx, id, role)
 	if err != nil {
 		return User{}, err
 	}
-	if err := claims.SetRoleClaim(ctx, u.FirebaseUID, role); err != nil {
-		return u, fmt.Errorf("role saved, but syncing the Firebase claim failed (re-run to retry): %w", err)
+	return u, SyncRoleClaim(ctx, u, claims)
+}
+
+// SetRoleDB writes users.role only. Callers that must audit the change (the
+// operator CLI) run it in the same transaction as the audit row, then call
+// SyncRoleClaim after the commit: the Firebase call is an external API and
+// never belongs inside a database transaction.
+func (s *Service) SetRoleDB(ctx context.Context, id uuid.UUID, role string) (User, error) {
+	if role != RoleUser && role != RoleAdmin {
+		return User{}, fmt.Errorf("unknown role %q", role)
 	}
-	return u, nil
+	return s.one(s.q.SetUserRole(ctx, db.SetUserRoleParams{ID: id, Role: role}))
+}
+
+// SyncRoleClaim mirrors u.Role into the Firebase custom claim.
+func SyncRoleClaim(ctx context.Context, u User, claims auth.ClaimsSetter) error {
+	if err := claims.SetRoleClaim(ctx, u.FirebaseUID, u.Role); err != nil {
+		return fmt.Errorf("role saved, but syncing the Firebase claim failed (re-run to retry): %w", err)
+	}
+	return nil
 }
 
 func (s *Service) one(row db.User, err error) (User, error) {

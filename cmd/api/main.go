@@ -31,6 +31,8 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/media"
 	"github.com/dezmymachine/farmish-backend/internal/messaging"
 	"github.com/dezmymachine/farmish-backend/internal/messaging/realtime"
+	"github.com/dezmymachine/farmish-backend/internal/metrics"
+	"github.com/dezmymachine/farmish-backend/internal/metrics/collect"
 	"github.com/dezmymachine/farmish-backend/internal/notify"
 	"github.com/dezmymachine/farmish-backend/internal/orders"
 	"github.com/dezmymachine/farmish-backend/internal/payments"
@@ -95,7 +97,7 @@ func sharedLimiter(ctx context.Context, cfg config.Config, log *slog.Logger) (ra
 // media storage is configured (it is required when deployed).
 func registry(log *slog.Logger, mediaSvc *media.Service, listingsSvc *listings.Service,
 	paymentsSvc *payments.Service, checkoutSvc *checkout.Service, ordersSvc *orders.Service,
-	payoutsSvc *payouts.Service, sender notify.SMS, pool *pgxpool.Pool,
+	payoutsSvc *payouts.Service, sender notify.SMS, smsLowBalance float64, pool *pgxpool.Pool,
 ) *jobs.Registry {
 	r := jobs.NewRegistry()
 	jobs.Register(r, &jobs.NoopWorker{Log: log})
@@ -110,6 +112,11 @@ func registry(log *slog.Logger, mediaSvc *media.Service, listingsSvc *listings.S
 	payouts.RegisterJobs(r, payoutsSvc, log)
 	ledger.RegisterReconcile(r, pool, ledger.New(), log)
 	notify.Register(r, notify.NewWorker(sender, log, pool))
+	// Only the real gateway has a balance to check; the log-only sender in
+	// development and test does not.
+	if gateway, ok := sender.(*notify.MNotify); ok {
+		notify.RegisterBalanceCheck(r, &notify.CheckBalanceWorker{Checker: gateway, LowBelow: smsLowBalance, Log: log})
+	}
 	return r
 }
 
@@ -157,6 +164,25 @@ func run() error {
 		}
 	}()
 	log.Info("database connected", "max_conns", cfg.DB.MaxConns)
+
+	// Metrics (Phase 21) go on a private listener in every run mode: workers
+	// have the job and payout counters. Bound before anything else starts, so
+	// a taken port fails boot.
+	if err := collect.RegisterDatabase(pool, log); err != nil {
+		return fmt.Errorf("register metrics: %w", err)
+	}
+	// Its own cancel: an early error return must stop the listener too,
+	// not wait for a signal that never comes.
+	metricsCtx, stopMetrics := context.WithCancel(ctx)
+	metricsDone, err := metrics.Start(metricsCtx, cfg.MetricsAddr, drain, log)
+	if err != nil {
+		stopMetrics()
+		return err
+	}
+	defer func() {
+		stopMetrics()
+		<-metricsDone
+	}()
 
 	// Firebase, media storage and the domain services are needed by both the
 	// job workers (the orphan sweep, the expiry sweep) and the API, so they
@@ -225,7 +251,7 @@ func run() error {
 		log.Info("transactional SMS enabled", "sender", cfg.Notify.Sender)
 	}
 
-	jobClient, err := jobs.NewClient(pool, registry(log, mediaSvc, listingsSvc, paymentsSvc, checkoutSvc, ordersSvc, payoutsSvc, notifySender, pool), log, jobs.Options{
+	jobClient, err := jobs.NewClient(pool, registry(log, mediaSvc, listingsSvc, paymentsSvc, checkoutSvc, ordersSvc, payoutsSvc, notifySender, cfg.Notify.LowBalance, pool), log, jobs.Options{
 		Work:       cfg.RunMode.WorksJobs(),
 		MaxWorkers: cfg.JobsMaxWorkers,
 	})
@@ -243,6 +269,9 @@ func run() error {
 	supplySvc.AttachJobClient(jobClient)
 
 	if cfg.RunMode.WorksJobs() {
+		// Subscribe before Start so no early completion goes uncounted.
+		stopWatch := collect.WatchJobs(ctx, jobClient)
+		defer stopWatch()
 		// Not the signal context: cancelling Start's context would abort running
 		// jobs immediately. Shutdown goes through jobs.Stop (soft, then hard).
 		if err := jobClient.Start(context.WithoutCancel(ctx)); err != nil {

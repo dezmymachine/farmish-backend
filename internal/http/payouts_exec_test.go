@@ -7,7 +7,6 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -71,7 +70,7 @@ func newExecPayoutFixture(t *testing.T) *execPayoutFixture {
 		provider: provider, books: ledger.New(), now: time.Now().UTC().Truncate(time.Second),
 		sellers: sellersSvc,
 	}
-	log := slog.New(slog.DiscardHandler)
+	log := testLogger()
 	pay := payouts.New(pool, crypter, provider, sellersSvc)
 	pay.Now = func() time.Time { return f.now }
 	pay.AttachLedger(f.books)

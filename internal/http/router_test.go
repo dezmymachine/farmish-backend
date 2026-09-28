@@ -79,7 +79,10 @@ func newTestRouterWithConfig(t *testing.T, deps Deps, cfg config.Config) *gin.En
 		deps.Turnstile = noTurnstile{}
 	}
 	out := io.Discard
-	if os.Getenv("QA_DEBUG_LOG") != "" {
+	switch {
+	case testLogOut != nil:
+		out = testLogOut
+	case os.Getenv("QA_DEBUG_LOG") != "":
 		out = os.Stdout
 	}
 	r, err := NewRouter(cfg, logger.New(out, "debug"), deps)

@@ -68,7 +68,7 @@ func (m *MNotify) Send(ctx context.Context, toE164, message string) error {
 
 	resp, err := m.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("mnotify: send: %w", err)
+		return fmt.Errorf("mnotify: send: %w", withoutURL(err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
@@ -97,4 +97,15 @@ func localGhanaNumber(e164 string) string {
 		return "0" + strings.TrimPrefix(e164, "+233")
 	}
 	return e164
+}
+
+// withoutURL drops the request URL from a transport error. net/http's
+// *url.Error prints the full URL, and mNotify's API key travels in the query
+// string, so wrapping the raw error would put the key into whatever logs it.
+func withoutURL(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return urlErr.Err
+	}
+	return err
 }

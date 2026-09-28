@@ -19,6 +19,9 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/jackc/pgx/v5"
+
+	"github.com/dezmymachine/farmish-backend/internal/audit"
 	"github.com/dezmymachine/farmish-backend/internal/auth"
 	"github.com/dezmymachine/farmish-backend/internal/config"
 	"github.com/dezmymachine/farmish-backend/internal/database"
@@ -78,8 +81,25 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	u, err = svc.SetRole(ctx, u.ID, role, fb)
+	// The role change and its audit row commit together; the Firebase claim
+	// is mirrored after, because an external call never runs inside a
+	// transaction. Re-running is safe.
+	previous := u.Role
+	err = database.InTx(ctx, pool, func(tx pgx.Tx) error {
+		var err error
+		u, err = users.New(tx).SetRoleDB(ctx, u.ID, role)
+		if err != nil {
+			return err
+		}
+		return audit.Record(ctx, tx, audit.Event{
+			Action: "user.role_change", TargetType: "user", TargetID: u.ID.String(),
+			Metadata: map[string]any{"previous_role": previous, "role": role, "via": "cmd/admin"},
+		})
+	})
 	if err != nil {
+		return err
+	}
+	if err := users.SyncRoleClaim(ctx, u, fb); err != nil {
 		return err
 	}
 	fmt.Printf("ok: user %s (firebase uid %s) now has role %q\n", u.ID, u.FirebaseUID, u.Role)

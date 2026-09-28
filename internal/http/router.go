@@ -133,7 +133,7 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 		return nil, err
 	}
 
-	r := newEngine(log, clientIPResolver(cfg))
+	r := newEngine(cfg, log)
 	// Order matters:
 	//   - CORS answers preflights first, and its headers reach 429s too.
 	//   - The per-IP limit runs before any expensive work (probes exempt).
@@ -169,7 +169,7 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 // NewProbeRouter serves only /healthz and /readyz, for RUN_MODE=worker
 // processes that need platform health checks but must not expose the API.
 func NewProbeRouter(cfg config.Config, log *slog.Logger, db handlers.Pinger) *gin.Engine {
-	r := newEngine(log, clientIPResolver(cfg))
+	r := newEngine(cfg, log)
 	s := strictServer(handlers.Server{DB: db})
 	r.GET("/healthz", s.GetHealthz)
 	r.GET("/readyz", s.GetReadyz)
@@ -178,7 +178,7 @@ func NewProbeRouter(cfg config.Config, log *slog.Logger, db handlers.Pinger) *gi
 
 // newEngine returns a Gin engine with the middleware and fallbacks every
 // router shares.
-func newEngine(log *slog.Logger, ips middleware.ClientIPResolver) *gin.Engine {
+func newEngine(cfg config.Config, log *slog.Logger) *gin.Engine {
 	// Release mode everywhere: debug mode prints non-JSON banners to stdout.
 	gin.SetMode(gin.ReleaseMode)
 
@@ -191,7 +191,13 @@ func newEngine(log *slog.Logger, ips middleware.ClientIPResolver) *gin.Engine {
 	r.ContextWithFallback = true
 
 	// AccessLog sits outside Recovery so recovered panics are logged as 500s.
-	r.Use(middleware.RequestID(log), middleware.ClientIP(ips), middleware.AccessLog(), middleware.Recovery())
+	//
+	// Metrics wraps Recovery too, so a recovered panic counts as a 500. The
+	// security headers are set before the handler runs, which puts them on
+	// every response, errors and preflights included.
+	hsts := cfg.Env == config.EnvStaging || cfg.Env == config.EnvProduction
+	r.Use(middleware.RequestID(log), middleware.ClientIP(clientIPResolver(cfg)), middleware.AccessLog(),
+		middleware.Metrics("/healthz", "/readyz"), middleware.Recovery(), middleware.SecurityHeaders(hsts))
 
 	r.NoRoute(func(c *gin.Context) {
 		apierror.Abort(c, http.StatusNotFound, apierror.CodeNotFound, "Resource not found")

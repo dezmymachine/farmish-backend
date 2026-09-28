@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/dezmymachine/farmish-backend/internal/audit"
 	"github.com/dezmymachine/farmish-backend/internal/database"
 	"github.com/dezmymachine/farmish-backend/internal/db"
 	"github.com/dezmymachine/farmish-backend/internal/validation"
@@ -117,15 +118,19 @@ func (s *Service) Dispute(ctx context.Context, buyerID, orderID uuid.UUID, reaso
 		return moved, err
 	}
 	return moved, database.InTx(ctx, s.pool, func(tx pgx.Tx) error {
-		if _, err := db.New(tx).InsertDispute(ctx, db.InsertDisputeParams{
+		dispute, err := db.New(tx).InsertDispute(ctx, db.InsertDisputeParams{
 			OrderID: orderID, OpenedBy: buyerID, Reason: reason, Description: trimmed,
-		}); err != nil {
+		})
+		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return ErrDisputeExists
 			}
 			return fmt.Errorf("insert dispute: %w", err)
 		}
-		return nil
+		return audit.Record(ctx, tx, audit.Event{
+			ActorID: &buyerID, Action: "dispute.opened", TargetType: "dispute", TargetID: dispute.ID.String(),
+			Metadata: map[string]any{"order_id": orderID.String(), "reason": reason},
+		})
 	})
 }
 

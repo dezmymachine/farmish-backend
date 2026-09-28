@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/dezmymachine/farmish-backend/internal/http/apierror"
+	"github.com/dezmymachine/farmish-backend/internal/metrics"
 	"github.com/dezmymachine/farmish-backend/internal/ratelimit"
 	"github.com/dezmymachine/farmish-backend/internal/users"
 	"github.com/dezmymachine/farmish-backend/pkg/logger"
@@ -136,6 +137,7 @@ func limit(c *gin.Context, l ratelimit.Limiter, rule ratelimit.Rule, key string)
 		return true
 	}
 	c.Header("Retry-After", ceilSeconds(d.RetryAfter))
+	metrics.RateLimitDenied.WithLabelValues(rule.Name).Inc()
 	logger.FromContext(c.Request.Context()).Info("rate limited", slog.String("rule", rule.Name))
 	apierror.Abort(c, http.StatusTooManyRequests, apierror.CodeRateLimited, "Too many requests; slow down and retry later")
 	return false

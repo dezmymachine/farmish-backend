@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -66,7 +65,7 @@ func newCheckoutFixtureWithLimits(t *testing.T, limits *middleware.RateLimits) *
 	store := mediatest.R2(t)
 	sellersSvc := sellers.New(pool, nil, nil)
 	listingsSvc := listings.New(pool, catalog.New(pool), media.New(pool, store), sellersSvc)
-	log := slog.New(slog.DiscardHandler)
+	log := testLogger()
 	provider := fake.New()
 	paymentsSvc := payments.New(pool, provider, log, paystackFeeBps, "https://farmish.gh/payments/status")
 	ordersSvc := orders.NewService(pool, 48*time.Hour, 3*24*time.Hour)

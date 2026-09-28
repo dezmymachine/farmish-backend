@@ -9,6 +9,39 @@ import (
 	"context"
 )
 
+const countJobsByState = `-- name: CountJobsByState :many
+SELECT state::text AS state, count(*)::bigint AS jobs
+FROM river_job
+GROUP BY state
+`
+
+type CountJobsByStateRow struct {
+	State string
+	Jobs  int64
+}
+
+// Feeds the jobs_queue_depth metric (Phase 21). River's state column is an
+// enum, so cast it for a plain string in Go.
+func (q *Queries) CountJobsByState(ctx context.Context) ([]CountJobsByStateRow, error) {
+	rows, err := q.db.Query(ctx, countJobsByState)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountJobsByStateRow{}
+	for rows.Next() {
+		var i CountJobsByStateRow
+		if err := rows.Scan(&i.State, &i.Jobs); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listExtensions = `-- name: ListExtensions :many
 SELECT extname::text AS name
 FROM pg_catalog.pg_extension

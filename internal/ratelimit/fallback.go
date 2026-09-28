@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"sync/atomic"
 	"time"
+
+	"github.com/dezmymachine/farmish-backend/internal/metrics"
 )
 
 // Fallback asks Primary (a shared Redis limiter) within Timeout, and on any
@@ -33,6 +35,7 @@ func (f *Fallback) Allow(ctx context.Context, rule Rule, key string) (Decision, 
 	if err == nil {
 		return d, nil
 	}
+	metrics.RateLimitFallback.Inc()
 	if now := time.Now().UnixNano(); now-f.lastLog.Load() >= int64(fallbackLogEvery) {
 		f.lastLog.Store(now)
 		f.Log.Warn("shared rate limiter unavailable; using in-process limits",
