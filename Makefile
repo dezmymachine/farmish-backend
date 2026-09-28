@@ -5,6 +5,7 @@ GOVULNCHECK_VERSION   := v1.8.0
 SQLC_VERSION          := 1.31.1
 OAPI_CODEGEN_VERSION  := v2.8.0
 REDOCLY_VERSION       := 2.54.3
+K6_VERSION            := 2.3.0
 BIN_DIR   := $(CURDIR)/bin
 GOLANGCI  := $(BIN_DIR)/golangci-lint
 GOVULN    := $(BIN_DIR)/govulncheck
@@ -26,7 +27,7 @@ REDOCLY   := docker run --rm -u $$(id -u):$$(id -g) -v $(CURDIR):/spec -w /spec 
 SQLC      := docker run --rm -u $$(id -u):$$(id -g) -v $(CURDIR):/src -w /src sqlc/sqlc:$(SQLC_VERSION)
 
 .DEFAULT_GOAL := help
-.PHONY: help run build test lint fmt fmt-check tidy tidy-check vuln docker-build smoke ci tools \
+.PHONY: help run build test lint fmt fmt-check tidy tidy-check vuln docker-build smoke loadtest ci tools \
         db-up db-down db-reset migrate-up migrate-down migrate-version migrate-new sqlc sqlc-check \
         generate generate-check api-lint auth-up redis-up rustfs-up grant-admin revoke-admin
 
@@ -70,6 +71,9 @@ docker-build: ## Build the Docker image ($(IMAGE))
 
 smoke: docker-build db-up auth-up redis-up ## Run the image against compose Postgres; check probes + SIGTERM
 	./scripts/smoke.sh $(IMAGE)
+
+loadtest: db-up auth-up redis-up ## k6 smoke load test against a local API + Paystack stub (thresholds in loadtest/*.js)
+	./scripts/loadtest.sh grafana/k6:$(K6_VERSION)
 
 db-up: ## Start compose Postgres and wait until healthy
 	docker compose up -d --wait postgres

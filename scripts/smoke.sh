@@ -4,6 +4,8 @@
 #   2. /healthz and /readyz return 200 {"status":"ok"}
 #   2b. /v1/me: 401 without a token, 200 with an Auth-emulator token
 #   2c. shared rate limits run on Redis
+#   2d. /metrics answers on the private listener only, with the request counted;
+#       the public port serves no /metrics and sets the security headers
 #   3. cut the DB network: /readyz returns 503, /healthz stays 200
 #   4. SIGTERM exits 0 with the graceful-shutdown log
 # Usage: scripts/smoke.sh <image>   (needs `make db-up auth-up redis-up`)
@@ -16,6 +18,8 @@ net="farmish-backend"
 db="farmish_smoke"
 db_url="postgres://farmish:farmish@postgres:5432/${db}?sslmode=disable"
 base="http://127.0.0.1:${port}"
+metrics_port="${SMOKE_METRICS_PORT:-19098}"
+metrics_base="http://127.0.0.1:${metrics_port}"
 
 psql() { docker compose exec -T postgres psql -U farmish -d farmish -v ON_ERROR_STOP=1 -qAtc "$1"; }
 cleanup() {
@@ -44,7 +48,8 @@ docker run --rm --network "$net" -e DATABASE_URL="$db_url" --entrypoint /migrate
 # separately so it can be cut later without losing the port.
 # DATA_ENCRYPTION_KEY is the dev-only key from .env.example (config refuses it
 # outside dev/test; keep in sync with config.DevDataEncryptionKey).
-docker create --name "$name" -p "127.0.0.1:${port}:8080" \
+docker create --name "$name" -p "127.0.0.1:${port}:8080" -p "127.0.0.1:${metrics_port}:9090" \
+  -e METRICS_ADDR=0.0.0.0:9090 \
   -e APP_ENV=test -e CORS_ORIGINS=http://localhost:3000 -e DATABASE_URL="$db_url" \
   -e FIREBASE_PROJECT_ID=demo-farmish -e FIREBASE_AUTH_EMULATOR_HOST=firebase-auth:9099 \
   -e TURNSTILE_SECRET=1x0000000000000000000000000000000AA -e REDIS_URL=redis://redis:6379 \
@@ -74,6 +79,18 @@ logs="$(docker logs "$name" 2>&1)"
 grep -q '"shared":"redis"' <<<"$logs" || fail "shared rate limiter is not on Redis"
 grep -q '"msg":"redis connected"' <<<"$logs" || fail "API did not connect to Redis"
 
+# The private listener counts the requests above by route template, and the
+# public port has no such route.
+scrape="$(curl -fsS -m 5 "${metrics_base}/metrics")" || fail "metrics listener is not answering"
+grep -q '^http_requests_total{method="GET",route="/v1/me",status="200"} 1' <<<"$scrape" || fail "http_requests_total did not count GET /v1/me"
+grep -q '^db_pool_total_conns' <<<"$scrape" || fail "db pool metrics are missing"
+expect /metrics 404
+headers="$(curl -sS -m 5 -D - -o /dev/null "${base}/healthz")"
+for h in 'x-content-type-options: nosniff' 'x-frame-options: DENY' 'referrer-policy: no-referrer'; do
+  grep -qi "^${h}" <<<"$headers" || fail "/healthz is missing the header ${h}"
+done
+! grep -qi '^strict-transport-security' <<<"$headers" || fail "HSTS must not be set outside staging and production"
+
 docker network disconnect "$net" "$name"
 expect /readyz 503
 expect /healthz 200 '{"status":"ok"}'
@@ -84,4 +101,4 @@ code="$(docker inspect -f '{{.State.ExitCode}}' "$name")"
 docker logs "$name" >/dev/null 2>&1 || true
 grep -q '"msg":"http server stopped"' <<<"$(docker logs "$name" 2>&1)" || fail "no graceful shutdown log"
 
-echo "smoke: migrate ok, /healthz ok, redis limits ok, /v1/me 401 -> 200 with token, /readyz 200 -> 503 on DB loss, graceful shutdown ok"
+echo "smoke: migrate ok, /healthz ok, redis limits ok, private /metrics ok, security headers ok, /v1/me 401 -> 200 with token, /readyz 200 -> 503 on DB loss, graceful shutdown ok"
