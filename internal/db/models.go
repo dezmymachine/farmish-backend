@@ -119,6 +119,18 @@ type CommissionConfig struct {
 	UpdatedAt  time.Time
 }
 
+type Conversation struct {
+	ID               uuid.UUID
+	ListingID        uuid.UUID
+	BuyerID          uuid.UUID
+	SellerID         uuid.UUID
+	OrderID          pgtype.UUID
+	LastMessageAt    *time.Time
+	BuyerLastReadAt  *time.Time
+	SellerLastReadAt *time.Time
+	CreatedAt        time.Time
+}
+
 type Dispute struct {
 	ID             uuid.UUID
 	OrderID        uuid.UUID
@@ -225,6 +237,14 @@ type MediaObject struct {
 	Status      string
 	CreatedAt   time.Time
 	AttachedAt  *time.Time
+}
+
+type Message struct {
+	ID             uuid.UUID
+	ConversationID uuid.UUID
+	SenderID       uuid.UUID
+	Body           string
+	CreatedAt      time.Time
 }
 
 type Order struct {

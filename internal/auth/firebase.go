@@ -91,6 +91,7 @@ func identityFromToken(tok *fbauth.Token) Identity {
 		Name:          str("name"),
 		Provider:      tok.Firebase.SignInProvider,
 		AuthTime:      time.Unix(tok.AuthTime, 0),
+		Expires:       time.Unix(tok.Expires, 0),
 	}
 }
 

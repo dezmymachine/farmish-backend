@@ -17,6 +17,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/http/handlers"
 	"github.com/dezmymachine/farmish-backend/internal/http/middleware"
 	"github.com/dezmymachine/farmish-backend/internal/listings"
+	"github.com/dezmymachine/farmish-backend/internal/messaging/realtime"
 	"github.com/dezmymachine/farmish-backend/internal/ratelimit"
 	"github.com/dezmymachine/farmish-backend/internal/turnstile"
 	"github.com/dezmymachine/farmish-backend/pkg/logger"
@@ -52,6 +53,11 @@ type Deps struct {
 	OrderActions handlers.OrderActions
 	// Payouts owns seller payout accounts.
 	Payouts handlers.PayoutStore
+	// Messages owns buyer-seller conversations.
+	Messages handlers.MessageStore
+	// Hub routes realtime messaging frames. Nil disables /v1/ws (worker
+	// mode serves probes only).
+	Hub *realtime.Hub
 	// IPLimiter backs the per-IP flood limit. It stays in-process on purpose:
 	// free, instant, and a flood can't burn the metered Redis quota.
 	// Defaults to ratelimit.Memory.
@@ -145,11 +151,14 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 	server := handlers.Server{
 		DB: deps.DB, Users: deps.Users, Sellers: deps.Sellers, Catalog: deps.Catalog,
 		Media: deps.Media, Listings: deps.Listings, PublicListings: deps.PublicListings,
-		Views: deps.Views, ViewerHash: deps.ViewerHash, Payments: deps.Payments, Promotions: deps.Promotions, Checkout: deps.Checkout, Orders: deps.Orders, OrderActions: deps.OrderActions, Payouts: deps.Payouts, Log: log,
+		Views: deps.Views, ViewerHash: deps.ViewerHash, Payments: deps.Payments, Promotions: deps.Promotions, Checkout: deps.Checkout, Orders: deps.Orders, OrderActions: deps.OrderActions, Payouts: deps.Payouts, Messages: deps.Messages, Log: log,
 	}
 	api.RegisterHandlersWithOptions(r, strictServer(server), api.GinServerOptions{
 		ErrorHandler: func(c *gin.Context, err error, _ int) { requestError(c, err) },
 	})
+	if deps.Hub != nil {
+		r.GET("/v1/ws", realtimeRoute(deps.Hub, deps.Verifier, deps.Users, cfg.CORSOrigins, log))
+	}
 	return r, nil
 }
 

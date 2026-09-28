@@ -20,6 +20,7 @@ type Querier interface {
 	CountAdminPayouts(ctx context.Context, arg CountAdminPayoutsParams) (int64, error)
 	// A listing's category must be a leaf (or a parent with no children).
 	CountCategoryChildren(ctx context.Context, parentID pgtype.UUID) (int64, error)
+	CountConversationsByParticipant(ctx context.Context, buyerID uuid.UUID) (int64, error)
 	CountDisputes(ctx context.Context, status *string) (int64, error)
 	CountInFlightPayoutsForSeller(ctx context.Context, sellerID uuid.UUID) (int64, error)
 	// Refunds that may still move money for an order. The escrow release waits
@@ -32,6 +33,9 @@ type Querier interface {
 	CountSearchListings(ctx context.Context, arg CountSearchListingsParams) (int64, error)
 	CountSellerListings(ctx context.Context, arg CountSellerListingsParams) (int64, error)
 	CountSellerProfilesByStatus(ctx context.Context, verificationStatus string) (int64, error)
+	// The caller's unread: others' messages newer than their read marker, or all
+	// of them when they never marked read.
+	CountUnread(ctx context.Context, arg CountUnreadParams) (int64, error)
 	// Creates an account, or returns no row when code already exists. Dynamic
 	// seller and promotion-credit accounts use this path; the caller selects the
 	// existing row after losing the race.
@@ -62,8 +66,15 @@ type Querier interface {
 	GetCheckoutByID(ctx context.Context, id uuid.UUID) (Checkout, error)
 	GetCheckoutByIdempotencyKey(ctx context.Context, arg GetCheckoutByIdempotencyKeyParams) (Checkout, error)
 	GetCheckoutForUpdate(ctx context.Context, id uuid.UUID) (Checkout, error)
+	GetConversationByID(ctx context.Context, id uuid.UUID) (Conversation, error)
+	// The duplicate-start match: one conversation per (listing, buyer).
+	GetConversationByListingBuyer(ctx context.Context, arg GetConversationByListingBuyerParams) (Conversation, error)
+	GetConversationForUpdate(ctx context.Context, id uuid.UUID) (Conversation, error)
 	GetDisputeByID(ctx context.Context, id uuid.UUID) (Dispute, error)
 	GetDisputeForUpdate(ctx context.Context, id uuid.UUID) (Dispute, error)
+	// The newest message of a conversation, for summaries. Returns no row when
+	// the conversation has no messages yet.
+	GetLastMessage(ctx context.Context, conversationID uuid.UUID) (Message, error)
 	// An account row by its unique code.
 	GetLedgerAccountByCode(ctx context.Context, code string) (LedgerAccount, error)
 	GetListingByID(ctx context.Context, id uuid.UUID) (Listing, error)
@@ -75,6 +86,10 @@ type Querier interface {
 	// whatsapp_e164 are the seller's own values: they leave the building only
 	// when the matching show_* flag is true.
 	GetListingContactDetails(ctx context.Context, id uuid.UUID) (GetListingContactDetailsRow, error)
+	// The listing a conversation starts from: its seller, status and title for
+	// the checks and the summary. Expired counts as inactive: the public reads
+	// filter expires_at the same way.
+	GetListingForMessaging(ctx context.Context, arg GetListingForMessagingParams) (GetListingForMessagingRow, error)
 	GetMediaObject(ctx context.Context, id uuid.UUID) (MediaObject, error)
 	// The auto-complete sweep's timer stop: an open dispute holds the order.
 	GetOpenDisputeByOrder(ctx context.Context, orderID uuid.UUID) (Dispute, error)
@@ -125,6 +140,9 @@ type Querier interface {
 	// A checkout holds reserved stock and one payment while the buyer pays. The
 	// unique (buyer_id, idempotency_key) is what makes POST /v1/checkout replayable.
 	InsertCheckout(ctx context.Context, arg InsertCheckoutParams) (Checkout, error)
+	// Opens a conversation. Returns no row when this buyer already has one for
+	// the listing: the caller appends to the existing row instead.
+	InsertConversation(ctx context.Context, arg InsertConversationParams) (Conversation, error)
 	// Returns no row when the order already has a dispute: the buyer cannot open
 	// a second case (the unique order_id enforces it).
 	InsertDispute(ctx context.Context, arg InsertDisputeParams) (Dispute, error)
@@ -136,6 +154,7 @@ type Querier interface {
 	// one active from the replacement time onward.
 	InsertListingPromotion(ctx context.Context, arg InsertListingPromotionParams) (ListingPromotion, error)
 	InsertMediaObject(ctx context.Context, arg InsertMediaObjectParams) (MediaObject, error)
+	InsertMessage(ctx context.Context, arg InsertMessageParams) (Message, error)
 	// The commission rate and amount are the resolved, snapshotted values from
 	// pricing: later config edits never touch an existing order.
 	InsertOrder(ctx context.Context, arg InsertOrderParams) (Order, error)
@@ -177,6 +196,8 @@ type Querier interface {
 	ListCommissionConfigs(ctx context.Context) ([]ListCommissionConfigsRow, error)
 	// Completed orders past the grace window with no escrow_release posting.
 	ListCompletedWithoutRelease(ctx context.Context, completedAt *time.Time) ([]ListCompletedWithoutReleaseRow, error)
+	// The caller's conversations on either side, newest activity first.
+	ListConversationsByParticipant(ctx context.Context, arg ListConversationsByParticipantParams) ([]Conversation, error)
 	// The admin review queue, oldest first. A NULL status lists every dispute.
 	ListDisputes(ctx context.Context, arg ListDisputesParams) ([]Dispute, error)
 	// Delivered orders past their auto-complete deadline, for the sweep to finish.
@@ -202,6 +223,10 @@ type Querier interface {
 	ListListingImages(ctx context.Context, listingID uuid.UUID) ([]ListListingImagesRow, error)
 	// One listing's promotion history, newest effective window first.
 	ListListingPromotions(ctx context.Context, listingID uuid.UUID) ([]ListingPromotion, error)
+	// Newest first, before an optional cursor (created_at, id): every row is
+	// strictly older than the cursor, so pages never duplicate or skip, even
+	// under concurrent inserts.
+	ListMessages(ctx context.Context, arg ListMessagesParams) ([]Message, error)
 	ListOrderEvents(ctx context.Context, orderID uuid.UUID) ([]OrderEvent, error)
 	// The stock a checkout reserved, for restoring it exactly on expiry or
 	// provider failure. Ordered by listing id, the same order used to reserve.
@@ -245,6 +270,9 @@ type Querier interface {
 	LockPromotionCredits(ctx context.Context, dollar_1 string) (interface{}, error)
 	MarkPaymentAbandoned(ctx context.Context, arg MarkPaymentAbandonedParams) (Payment, error)
 	MarkPaymentFailed(ctx context.Context, arg MarkPaymentFailedParams) (Payment, error)
+	// Publishes a realtime event inside the caller's transaction: it fires at
+	// commit, so a rolled-back write emits nothing.
+	NotifyMessagingEvent(ctx context.Context, pgNotify string) (interface{}, error)
 	// Whether a Paystack refund id already belongs to one of our rows, so
 	// reconciliation never adopts the same Paystack refund twice.
 	PaystackRefundIDLinked(ctx context.Context, paystackRefundID *string) (bool, error)
@@ -273,6 +301,11 @@ type Querier interface {
 	SearchListings(ctx context.Context, arg SearchListingsParams) ([]SearchListingsRow, error)
 	SetCheckoutPayment(ctx context.Context, arg SetCheckoutPaymentParams) error
 	SetCheckoutStatus(ctx context.Context, arg SetCheckoutStatusParams) error
+	SetConversationLastMessage(ctx context.Context, arg SetConversationLastMessageParams) error
+	// Marks the caller's side read. The column is chosen by the caller from the
+	// party they proved, never from the request.
+	SetConversationRead(ctx context.Context, arg SetConversationReadParams) error
+	SetConversationReadSeller(ctx context.Context, arg SetConversationReadSellerParams) error
 	// Only published_at / expires_at are set when they are given (publish sets
 	// both; mark-sold and archive leave them alone).
 	SetListingStatus(ctx context.Context, arg SetListingStatusParams) (Listing, error)

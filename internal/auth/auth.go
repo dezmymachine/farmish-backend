@@ -22,6 +22,7 @@ type Identity struct {
 	Name          string
 	Provider      string // firebase.sign_in_provider, e.g. "phone", "password", "google.com"
 	AuthTime      time.Time
+	Expires       time.Time // the token's exp claim: realtime sockets re-auth past it
 }
 
 // Verifier verifies a raw ID token.

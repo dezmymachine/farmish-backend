@@ -62,6 +62,8 @@ tags:
     description: Admin dispute resolution and order inspection.
   - name: payouts
     description: Seller payout accounts. Payout execution is Phase 18b.
+  - name: messaging
+    description: Buyer-seller conversations. Realtime push over WebSocket, Phase 19.
 paths:
   /healthz:
     get:
@@ -538,6 +540,169 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "502":
           $ref: "#/components/responses/PaymentProviderError"
+  /v1/conversations:
+    post:
+      tags: [messaging]
+      operationId: startConversation
+      summary: Start a conversation
+      description: |
+        Opens the buyer's conversation for a listing and appends the first
+        message, or appends to the existing one (200 with the same id).
+        Sellers cannot message their own listing; inactive listings are 404.
+      x-farmish-rate-limit: messaging
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartConversationRequest"
+      responses:
+        "201":
+          description: A new conversation with its first message.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "200":
+          description: The existing conversation with the appended message.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    get:
+      tags: [messaging]
+      operationId: listConversations
+      summary: List my conversations
+      description: Newest activity first, with the caller's unread count per row.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: A page of conversation summaries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/conversations/{id}/messages:
+    get:
+      tags: [messaging]
+      operationId: listMessages
+      summary: Get message history
+      description: Newest first, before an opaque cursor. Non-participants get 403.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: before
+          in: query
+          description: An opaque cursor from an earlier page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        "200":
+          description: A page of messages.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    post:
+      tags: [messaging]
+      operationId: sendMessage
+      summary: Send a message
+      description: Appends to a conversation the caller participates in.
+      x-farmish-rate-limit: messaging
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageRequest"
+      responses:
+        "201":
+          description: The sent message.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/conversations/{id}/read:
+    post:
+      tags: [messaging]
+      operationId: markConversationRead
+      summary: Mark a conversation read
+      description: Sets the caller's read marker to now.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Marked read.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /v1/seller/balance:
     get:
       tags: [payouts]
@@ -3843,6 +4008,184 @@ components:
         paidOut:
           $ref: "#/components/schemas/Money"
           description: The total successfully paid out.
+    StartConversationRequest:
+      type: object
+      additionalProperties: false
+      required: [listingId, message]
+      properties:
+        listingId:
+          type: string
+          format: uuid
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    SendMessageRequest:
+      type: object
+      additionalProperties: false
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    Message:
+      type: object
+      required: [id, conversationId, senderId, body, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversationId:
+          type: string
+          format: uuid
+        senderId:
+          type: string
+          format: uuid
+        body:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    MessageList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        nextCursor:
+          type: string
+          description: Pass as `before` for the next page; absent on the last page.
+    Conversation:
+      type: object
+      description: One conversation with its appended message. Participants learn each other through summaries.
+      required: [id, listingId, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        listingId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        lastMessage:
+          $ref: "#/components/schemas/Message"
+    ConversationCounterpart:
+      type: object
+      required: [userId, name]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        name:
+          type: string
+    ConversationListingRef:
+      type: object
+      required: [id, slug, title]
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        title:
+          type: string
+        coverImageUrl:
+          type: string
+    ConversationLastMessage:
+      type: object
+      required: [body, createdAt, fromMe]
+      properties:
+        body:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        fromMe:
+          type: boolean
+    ConversationSummary:
+      type: object
+      required: [id, listing, counterpart, unreadCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        listing:
+          $ref: "#/components/schemas/ConversationListingRef"
+        counterpart:
+          $ref: "#/components/schemas/ConversationCounterpart"
+        lastMessage:
+          $ref: "#/components/schemas/ConversationLastMessage"
+        unreadCount:
+          type: integer
+          format: int64
+          minimum: 0
+    ConversationList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationSummary"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
+    RealtimeReady:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [ready]
+    RealtimeMessageCreated:
+      type: object
+      required: [type, conversationId, message]
+      properties:
+        type:
+          type: string
+          enum: [message.created]
+        conversationId:
+          type: string
+          format: uuid
+        message:
+          $ref: "#/components/schemas/Message"
+    RealtimeConversationRead:
+      type: object
+      required: [type, conversationId]
+      properties:
+        type:
+          type: string
+          enum: [conversation.read]
+        conversationId:
+          type: string
+          format: uuid
+        readAt:
+          type: string
+          format: date-time
+        byMe:
+          type: boolean
+    RealtimeResync:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [resync]
+    RealtimeEvent:
+      oneOf:
+        - $ref: "#/components/schemas/RealtimeReady"
+        - $ref: "#/components/schemas/RealtimeMessageCreated"
+        - $ref: "#/components/schemas/RealtimeConversationRead"
+        - $ref: "#/components/schemas/RealtimeResync"
+      discriminator:
+        propertyName: type
     PayoutAccountType:
       type: string
       description: A payout account type.

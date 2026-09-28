@@ -28,6 +28,8 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/ledger"
 	"github.com/dezmymachine/farmish-backend/internal/listings"
 	"github.com/dezmymachine/farmish-backend/internal/media"
+	"github.com/dezmymachine/farmish-backend/internal/messaging"
+	"github.com/dezmymachine/farmish-backend/internal/messaging/realtime"
 	"github.com/dezmymachine/farmish-backend/internal/notify"
 	"github.com/dezmymachine/farmish-backend/internal/orders"
 	"github.com/dezmymachine/farmish-backend/internal/payments"
@@ -207,6 +209,10 @@ func run() error {
 	// payments owns event dispatch but not the payout domain, so the
 	// handlers are registered here, before any worker runs.
 	payouts.RegisterTransferEvents(paymentsSvc, payoutsSvc)
+	// Messaging (Phase 19): the REST source of truth. The hub and its
+	// listener are built with the router below, wherever the API serves.
+	messagingSvc := messaging.New(pool, usersSvc, sellersSvc, mediaSvc)
+	messagingSvc.AttachLogger(log)
 	notifySender := notify.SMS(notify.LogOnly{Log: log})
 	if cfg.Notify.SMSEnabled {
 		notifySender = notify.NewMNotify(cfg.Notify.APIKey, cfg.Notify.Sender, "")
@@ -227,6 +233,7 @@ func run() error {
 	checkoutSvc.AttachJobClient(jobClient)
 	ordersSvc.AttachJobClient(jobClient)
 	payoutsSvc.AttachJobClient(jobClient)
+	messagingSvc.AttachJobClient(jobClient)
 
 	if cfg.RunMode.WorksJobs() {
 		// Not the signal context: cancelling Start's context would abort running
@@ -248,6 +255,7 @@ func run() error {
 	}
 
 	var router http.Handler
+	var hub *realtime.Hub
 	if cfg.RunMode.ServesAPI() {
 		ipLimiter := ratelimit.NewMemory()
 		go ipLimiter.RunSweeper(ctx, time.Minute)
@@ -256,6 +264,17 @@ func run() error {
 			return err
 		}
 		defer closeShared()
+		// Messaging realtime (Phase 19): the LISTEN listener tails the same
+		// transaction that writes, so it runs wherever the API serves.
+		hub = realtime.NewHub(realtime.DefaultOptions(), log)
+		listener := realtime.NewListener(pool, hub, log)
+		go func() {
+			// The signal context stops the listener on SIGTERM; the hub
+			// itself closes through the HTTP shutdown hook below.
+			if err := listener.Run(ctx); err != nil {
+				log.Error("messaging listener stopped", slog.String("error", err.Error()))
+			}
+		}()
 		router, err = httpapi.NewRouter(cfg, log, httpapi.Deps{
 			DB:             pool,
 			Verifier:       firebase,
@@ -275,6 +294,8 @@ func run() error {
 			Orders:        ordersSvc,
 			OrderActions:  ordersSvc,
 			Payouts:       payoutsSvc,
+			Messages:      messagingSvc,
+			Hub:           hub,
 			Turnstile:     turnstile.New(cfg.TurnstileSecret),
 			IPLimiter:     ipLimiter,
 			SharedLimiter: shared,
@@ -292,5 +313,13 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", addr, err)
 	}
-	return httpapi.Serve(ctx, httpapi.NewServer(addr, router), ln, drain, log)
+	srv := httpapi.NewServer(addr, router)
+	if hub != nil {
+		// Hijacked sockets outlive http.Server.Shutdown: close them here
+		// first, inside the drain budget Shutdown enforces.
+		srv.RegisterOnShutdown(func() {
+			hub.Close(realtime.CloseGoingAway, "server shutting down")
+		})
+	}
+	return httpapi.Serve(ctx, srv, ln, drain, log)
 }

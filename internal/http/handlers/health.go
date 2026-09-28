@@ -54,6 +54,8 @@ type Server struct {
 	OrderActions OrderActions
 	// Payouts owns seller payout accounts.
 	Payouts PayoutStore
+	// Messages owns buyer-seller conversations.
+	Messages MessageStore
 	// Views enqueues the listing view count. Nil disables counting, which
 	// keeps the read path working without a job queue.
 	Views listings.ViewCounter

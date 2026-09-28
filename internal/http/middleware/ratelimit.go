@@ -43,6 +43,8 @@ func DefaultRateLimits() RateLimits {
 		Operation: map[string]ratelimit.Rule{
 			// Writes that cost money or notify people, and anonymous forms.
 			"sensitive": {Name: "sensitive", Limit: 10, Period: time.Minute, Burst: 5},
+			// Buyer-seller chat writes.
+			"messaging": {Name: "messaging", Limit: 30, Period: time.Minute, Burst: 10},
 		},
 	}
 }
