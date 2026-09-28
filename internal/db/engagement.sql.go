@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const bumpFavoriteCount = `-- name: BumpFavoriteCount :exec
@@ -32,6 +33,18 @@ SELECT count(*) FROM favorites WHERE user_id = $1
 
 func (q *Queries) CountFavoritesByUser(ctx context.Context, userID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countFavoritesByUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countReports = `-- name: CountReports :one
+SELECT count(*) FROM reports
+WHERE ($1::text IS NULL OR status = $1)
+`
+
+func (q *Queries) CountReports(ctx context.Context, status *string) (int64, error) {
+	row := q.db.QueryRow(ctx, countReports, status)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -95,6 +108,54 @@ func (q *Queries) GetListingForFavorite(ctx context.Context, id uuid.UUID) (uuid
 	return id_2, err
 }
 
+const getReportByID = `-- name: GetReportByID :one
+SELECT id, reporter_id, listing_id, reported_user_id, reason, description, status, action, resolution_note, resolved_by, resolved_at, created_at FROM reports WHERE id = $1
+`
+
+func (q *Queries) GetReportByID(ctx context.Context, id uuid.UUID) (Report, error) {
+	row := q.db.QueryRow(ctx, getReportByID, id)
+	var i Report
+	err := row.Scan(
+		&i.ID,
+		&i.ReporterID,
+		&i.ListingID,
+		&i.ReportedUserID,
+		&i.Reason,
+		&i.Description,
+		&i.Status,
+		&i.Action,
+		&i.ResolutionNote,
+		&i.ResolvedBy,
+		&i.ResolvedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getReportForUpdate = `-- name: GetReportForUpdate :one
+SELECT id, reporter_id, listing_id, reported_user_id, reason, description, status, action, resolution_note, resolved_by, resolved_at, created_at FROM reports WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetReportForUpdate(ctx context.Context, id uuid.UUID) (Report, error) {
+	row := q.db.QueryRow(ctx, getReportForUpdate, id)
+	var i Report
+	err := row.Scan(
+		&i.ID,
+		&i.ReporterID,
+		&i.ListingID,
+		&i.ReportedUserID,
+		&i.Reason,
+		&i.Description,
+		&i.Status,
+		&i.Action,
+		&i.ResolutionNote,
+		&i.ResolvedBy,
+		&i.ResolvedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getReviewByID = `-- name: GetReviewByID :one
 SELECT id, order_id, listing_id, seller_id, reviewer_id, rating, comment, hidden_at, created_at, updated_at FROM reviews WHERE id = $1
 `
@@ -135,6 +196,49 @@ func (q *Queries) InsertFavorite(ctx context.Context, arg InsertFavoriteParams) 
 	row := q.db.QueryRow(ctx, insertFavorite, arg.UserID, arg.ListingID)
 	var i Favorite
 	err := row.Scan(&i.UserID, &i.ListingID, &i.CreatedAt)
+	return i, err
+}
+
+const insertReport = `-- name: InsertReport :one
+INSERT INTO reports (reporter_id, listing_id, reported_user_id, reason, description)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (reporter_id, (coalesce(listing_id, reported_user_id))) WHERE status = 'open' DO NOTHING
+RETURNING id, reporter_id, listing_id, reported_user_id, reason, description, status, action, resolution_note, resolved_by, resolved_at, created_at
+`
+
+type InsertReportParams struct {
+	ReporterID     uuid.UUID
+	ListingID      pgtype.UUID
+	ReportedUserID pgtype.UUID
+	Reason         string
+	Description    *string
+}
+
+// Records a report. Returns no row when the reporter already has an open
+// report on the same target: the caller treats that as already_reported.
+func (q *Queries) InsertReport(ctx context.Context, arg InsertReportParams) (Report, error) {
+	row := q.db.QueryRow(ctx, insertReport,
+		arg.ReporterID,
+		arg.ListingID,
+		arg.ReportedUserID,
+		arg.Reason,
+		arg.Description,
+	)
+	var i Report
+	err := row.Scan(
+		&i.ID,
+		&i.ReporterID,
+		&i.ListingID,
+		&i.ReportedUserID,
+		&i.Reason,
+		&i.Description,
+		&i.Status,
+		&i.Action,
+		&i.ResolutionNote,
+		&i.ResolvedBy,
+		&i.ResolvedAt,
+		&i.CreatedAt,
+	)
 	return i, err
 }
 
@@ -276,6 +380,53 @@ func (q *Queries) ListFavoriteListings(ctx context.Context, arg ListFavoriteList
 	return items, nil
 }
 
+const listReports = `-- name: ListReports :many
+SELECT id, reporter_id, listing_id, reported_user_id, reason, description, status, action, resolution_note, resolved_by, resolved_at, created_at FROM reports
+WHERE ($1::text IS NULL OR status = $1)
+ORDER BY created_at
+LIMIT $3 OFFSET $2
+`
+
+type ListReportsParams struct {
+	Status *string
+	Offset int32
+	Limit  int32
+}
+
+// The admin moderation queue, oldest first, with an optional status filter.
+func (q *Queries) ListReports(ctx context.Context, arg ListReportsParams) ([]Report, error) {
+	rows, err := q.db.Query(ctx, listReports, arg.Status, arg.Offset, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Report{}
+	for rows.Next() {
+		var i Report
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReporterID,
+			&i.ListingID,
+			&i.ReportedUserID,
+			&i.Reason,
+			&i.Description,
+			&i.Status,
+			&i.Action,
+			&i.ResolutionNote,
+			&i.ResolvedBy,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVisibleReviewsByListing = `-- name: ListVisibleReviewsByListing :many
 SELECT id, order_id, listing_id, seller_id, reviewer_id, rating, comment, hidden_at, created_at, updated_at FROM reviews
 WHERE listing_id = $1 AND hidden_at IS NULL
@@ -318,6 +469,50 @@ func (q *Queries) ListVisibleReviewsByListing(ctx context.Context, arg ListVisib
 		return nil, err
 	}
 	return items, nil
+}
+
+const resolveReport = `-- name: ResolveReport :one
+UPDATE reports
+SET status = $2, action = $3, resolution_note = $4, resolved_by = $5, resolved_at = $6
+WHERE id = $1 AND status = 'open'
+RETURNING id, reporter_id, listing_id, reported_user_id, reason, description, status, action, resolution_note, resolved_by, resolved_at, created_at
+`
+
+type ResolveReportParams struct {
+	ID             uuid.UUID
+	Status         string
+	Action         *string
+	ResolutionNote *string
+	ResolvedBy     pgtype.UUID
+	ResolvedAt     *time.Time
+}
+
+// Marks an open report decided. Returns no row when already resolved.
+func (q *Queries) ResolveReport(ctx context.Context, arg ResolveReportParams) (Report, error) {
+	row := q.db.QueryRow(ctx, resolveReport,
+		arg.ID,
+		arg.Status,
+		arg.Action,
+		arg.ResolutionNote,
+		arg.ResolvedBy,
+		arg.ResolvedAt,
+	)
+	var i Report
+	err := row.Scan(
+		&i.ID,
+		&i.ReporterID,
+		&i.ListingID,
+		&i.ReportedUserID,
+		&i.Reason,
+		&i.Description,
+		&i.Status,
+		&i.Action,
+		&i.ResolutionNote,
+		&i.ResolvedBy,
+		&i.ResolvedAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const sellerRating = `-- name: SellerRating :one

@@ -19,6 +19,7 @@ type Querier interface {
 	BumpFavoriteCount(ctx context.Context, arg BumpFavoriteCountParams) error
 	CompleteWebhookEvent(ctx context.Context, arg CompleteWebhookEventParams) error
 	CountAdminPayouts(ctx context.Context, arg CountAdminPayoutsParams) (int64, error)
+	CountAllSupplyRequests(ctx context.Context, status *string) (int64, error)
 	// A listing's category must be a leaf (or a parent with no children).
 	CountCategoryChildren(ctx context.Context, parentID pgtype.UUID) (int64, error)
 	CountConversationsByParticipant(ctx context.Context, buyerID uuid.UUID) (int64, error)
@@ -32,9 +33,11 @@ type Querier interface {
 	CountOrdersByBuyer(ctx context.Context, arg CountOrdersByBuyerParams) (int64, error)
 	CountOrdersBySeller(ctx context.Context, arg CountOrdersBySellerParams) (int64, error)
 	CountPayoutsBySeller(ctx context.Context, sellerID uuid.UUID) (int64, error)
+	CountReports(ctx context.Context, status *string) (int64, error)
 	CountSearchListings(ctx context.Context, arg CountSearchListingsParams) (int64, error)
 	CountSellerListings(ctx context.Context, arg CountSellerListingsParams) (int64, error)
 	CountSellerProfilesByStatus(ctx context.Context, verificationStatus string) (int64, error)
+	CountSupplyRequestsByUser(ctx context.Context, arg CountSupplyRequestsByUserParams) (int64, error)
 	// The caller's unread: others' messages newer than their read marker, or all
 	// of them when they never marked read.
 	CountUnread(ctx context.Context, arg CountUnreadParams) (int64, error)
@@ -135,9 +138,15 @@ type Querier interface {
 	GetRefundForUpdate(ctx context.Context, id uuid.UUID) (Refund, error)
 	// Matches a refund webhook once Paystack's id has been stored by the job.
 	GetRefundForUpdateByPaystackRefundID(ctx context.Context, paystackRefundID *string) (Refund, error)
+	GetReportByID(ctx context.Context, id uuid.UUID) (Report, error)
+	GetReportForUpdate(ctx context.Context, id uuid.UUID) (Report, error)
 	GetReviewByID(ctx context.Context, id uuid.UUID) (Review, error)
 	GetSellerProfile(ctx context.Context, userID uuid.UUID) (SellerProfile, error)
 	GetSellerProfileForUpdate(ctx context.Context, userID uuid.UUID) (SellerProfile, error)
+	// Items must name a parent category: children are rejected by the caller.
+	GetSupplyCategoryBySlug(ctx context.Context, slug string) (Category, error)
+	GetSupplyRequestByID(ctx context.Context, id uuid.UUID) (SupplyRequest, error)
+	GetSupplyRequestForUpdate(ctx context.Context, id uuid.UUID) (SupplyRequest, error)
 	GetUserByFirebaseUID(ctx context.Context, firebaseUid string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	IncrementListingContactCount(ctx context.Context, id uuid.UUID) error
@@ -187,9 +196,18 @@ type Querier interface {
 	// partial unique index is the idempotency guard, and the caller treats a
 	// missing row as "already recorded".
 	InsertRefund(ctx context.Context, arg InsertRefundParams) (Refund, error)
+	// Records a report. Returns no row when the reporter already has an open
+	// report on the same target: the caller treats that as already_reported.
+	InsertReport(ctx context.Context, arg InsertReportParams) (Report, error)
 	// Records a review. Returns no row when this reviewer already reviewed this
 	// listing in this order: the caller treats that as already_reviewed.
 	InsertReview(ctx context.Context, arg InsertReviewParams) (Review, error)
+	// Records a supply request with its generated number. A number collision
+	// returns no row (the UNIQUE is the retry signal); anything else errors.
+	InsertSupplyRequest(ctx context.Context, arg InsertSupplyRequestParams) (SupplyRequest, error)
+	// The append-only transition trail: every move writes exactly one row.
+	InsertSupplyRequestEvent(ctx context.Context, arg InsertSupplyRequestEventParams) error
+	InsertSupplyRequestItem(ctx context.Context, arg InsertSupplyRequestItemParams) error
 	// Returns no row if a concurrent request created the user first.
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
 	// Returns no row when (provider, event_key) already exists: that is a replay,
@@ -200,6 +218,7 @@ type Querier interface {
 	ListActivePromotionConfigs(ctx context.Context) ([]PromotionConfig, error)
 	// Every payout, newest first, with optional status and seller filters.
 	ListAdminPayouts(ctx context.Context, arg ListAdminPayoutsParams) ([]Payout, error)
+	ListAllSupplyRequests(ctx context.Context, arg ListAllSupplyRequestsParams) ([]SupplyRequest, error)
 	ListAttributesByCategory(ctx context.Context, categoryID uuid.UUID) ([]CategoryAttribute, error)
 	// A category filter on a parent slug must include its children (DOMAIN §9);
 	// on a child slug it returns just that child.
@@ -272,11 +291,16 @@ type Querier interface {
 	// caller's clock, which tests control; the pricing function itself stays pure.
 	ListQuoteListings(ctx context.Context, arg ListQuoteListingsParams) ([]ListQuoteListingsRow, error)
 	ListRefundsByOrder(ctx context.Context, orderID uuid.UUID) ([]Refund, error)
+	// The admin moderation queue, oldest first, with an optional status filter.
+	ListReports(ctx context.Context, arg ListReportsParams) ([]Report, error)
 	ListSellerListings(ctx context.Context, arg ListSellerListingsParams) ([]Listing, error)
 	// Admin review queue: oldest submission first.
 	ListSellerProfilesByStatus(ctx context.Context, arg ListSellerProfilesByStatusParams) ([]ListSellerProfilesByStatusRow, error)
 	// Pending payouts sent longer ago than the cutoff, for the reconciler.
 	ListStuckPendingPayouts(ctx context.Context, arg ListStuckPendingPayoutsParams) ([]Payout, error)
+	ListSupplyRequestEvents(ctx context.Context, supplyRequestID uuid.UUID) ([]SupplyRequestEvent, error)
+	ListSupplyRequestItems(ctx context.Context, supplyRequestID uuid.UUID) ([]SupplyRequestItem, error)
+	ListSupplyRequestsByUser(ctx context.Context, arg ListSupplyRequestsByUserParams) ([]SupplyRequest, error)
 	// Orders whose seller has not accepted within the timeout window, in a
 	// deterministic order. SKIP LOCKED keeps concurrent sweeps from fighting.
 	ListUnacceptedPaidOrders(ctx context.Context, arg ListUnacceptedPaidOrdersParams) ([]Order, error)
@@ -303,6 +327,8 @@ type Querier interface {
 	// Marks an open dispute resolved with its outcome. Returns no row when the
 	// dispute is already resolved: the caller treats that as "already decided".
 	ResolveDispute(ctx context.Context, arg ResolveDisputeParams) (Dispute, error)
+	// Marks an open report decided. Returns no row when already resolved.
+	ResolveReport(ctx context.Context, arg ResolveReportParams) (Report, error)
 	// The exact inverse of a reservation, from the stored order items rather than
 	// the request, so a restored checkout can never drift.
 	RestoreListingStock(ctx context.Context, arg RestoreListingStockParams) error
@@ -392,6 +418,9 @@ type Querier interface {
 	SetSellerIdentity(ctx context.Context, arg SetSellerIdentityParams) (SellerProfile, error)
 	// Records an admin verification decision (reviewed_at = now()).
 	SetSellerVerification(ctx context.Context, arg SetSellerVerificationParams) (SellerProfile, error)
+	// Moves a request guarded by its current status: no row means the move is
+	// illegal from where the request actually is.
+	SetSupplyRequestStatus(ctx context.Context, arg SetSupplyRequestStatusParams) (SupplyRequest, error)
 	SetUserRole(ctx context.Context, arg SetUserRoleParams) (User, error)
 	SetUserSellerVerified(ctx context.Context, arg SetUserSellerVerifiedParams) (User, error)
 	// The single writer of success. It fires from pending, or from abandoned when

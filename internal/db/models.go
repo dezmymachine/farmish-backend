@@ -370,6 +370,21 @@ type Refund struct {
 	UpdatedAt        time.Time
 }
 
+type Report struct {
+	ID             uuid.UUID
+	ReporterID     uuid.UUID
+	ListingID      pgtype.UUID
+	ReportedUserID pgtype.UUID
+	Reason         string
+	Description    *string
+	Status         string
+	Action         *string
+	ResolutionNote *string
+	ResolvedBy     pgtype.UUID
+	ResolvedAt     *time.Time
+	CreatedAt      time.Time
+}
+
 type Review struct {
 	ID         uuid.UUID
 	OrderID    uuid.UUID
@@ -461,6 +476,40 @@ type SellerProfile struct {
 	RejectionReason    *string
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+}
+
+type SupplyRequest struct {
+	ID              uuid.UUID
+	RequestNumber   string
+	UserID          uuid.UUID
+	DeliveryName    *string
+	DeliveryPhone   *string
+	DeliveryAddress *string
+	ExpectedDate    pgtype.Date
+	Notes           *string
+	Status          string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+type SupplyRequestEvent struct {
+	ID              int64
+	SupplyRequestID uuid.UUID
+	FromStatus      *string
+	ToStatus        string
+	ActorID         pgtype.UUID
+	Note            *string
+	CreatedAt       time.Time
+}
+
+type SupplyRequestItem struct {
+	ID              uuid.UUID
+	SupplyRequestID uuid.UUID
+	CategoryID      uuid.UUID
+	ProductName     string
+	Quantity        int32
+	Unit            string
+	SortOrder       int32
 }
 
 type User struct {

@@ -81,3 +81,35 @@ SELECT * FROM favorites WHERE user_id = $1 AND listing_id = $2;
 -- Existence gate for favorites: any listing may be favourited, including
 -- inactive ones (they show flagged).
 SELECT id FROM listings WHERE id = $1;
+
+-- name: InsertReport :one
+-- Records a report. Returns no row when the reporter already has an open
+-- report on the same target: the caller treats that as already_reported.
+INSERT INTO reports (reporter_id, listing_id, reported_user_id, reason, description)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (reporter_id, (coalesce(listing_id, reported_user_id))) WHERE status = 'open' DO NOTHING
+RETURNING *;
+
+-- name: GetReportByID :one
+SELECT * FROM reports WHERE id = $1;
+
+-- name: GetReportForUpdate :one
+SELECT * FROM reports WHERE id = $1 FOR UPDATE;
+
+-- name: ListReports :many
+-- The admin moderation queue, oldest first, with an optional status filter.
+SELECT * FROM reports
+WHERE (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
+ORDER BY created_at
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: CountReports :one
+SELECT count(*) FROM reports
+WHERE (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'));
+
+-- name: ResolveReport :one
+-- Marks an open report decided. Returns no row when already resolved.
+UPDATE reports
+SET status = $2, action = $3, resolution_note = $4, resolved_by = $5, resolved_at = $6
+WHERE id = $1 AND status = 'open'
+RETURNING *;
