@@ -69,8 +69,8 @@ ORDER BY created_at DESC, id DESC LIMIT 1;
 -- filter expires_at the same way.
 SELECT l.id, l.seller_id, l.status, l.title, l.slug,
        (l.status = 'active' AND l.expires_at > sqlc.arg('now')::timestamptz)::bool AS active,
-       (SELECT m.key FROM listing_images li JOIN media_objects m ON m.id = li.media_id
-         WHERE li.listing_id = l.id ORDER BY li.sort_order LIMIT 1) AS cover_key
+       COALESCE((SELECT m.key FROM listing_images li JOIN media_objects m ON m.id = li.media_id
+         WHERE li.listing_id = l.id ORDER BY li.sort_order LIMIT 1), '') AS cover_key
 FROM listings l WHERE l.id = $1;
 
 -- name: NotifyMessagingEvent :one

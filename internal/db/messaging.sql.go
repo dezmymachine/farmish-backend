@@ -137,8 +137,8 @@ func (q *Queries) GetLastMessage(ctx context.Context, conversationID uuid.UUID) 
 const getListingForMessaging = `-- name: GetListingForMessaging :one
 SELECT l.id, l.seller_id, l.status, l.title, l.slug,
        (l.status = 'active' AND l.expires_at > $2::timestamptz)::bool AS active,
-       (SELECT m.key FROM listing_images li JOIN media_objects m ON m.id = li.media_id
-         WHERE li.listing_id = l.id ORDER BY li.sort_order LIMIT 1) AS cover_key
+       COALESCE((SELECT m.key FROM listing_images li JOIN media_objects m ON m.id = li.media_id
+         WHERE li.listing_id = l.id ORDER BY li.sort_order LIMIT 1), '') AS cover_key
 FROM listings l WHERE l.id = $1
 `
 
@@ -154,7 +154,7 @@ type GetListingForMessagingRow struct {
 	Title    string
 	Slug     string
 	Active   bool
-	CoverKey string
+	CoverKey interface{}
 }
 
 // The listing a conversation starts from: its seller, status and title for
