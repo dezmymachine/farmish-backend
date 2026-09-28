@@ -314,7 +314,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 ### Phase 20a: Reviews & favorites · [spec](docs/phases/phase-20a.md)
 - **Depends on:** 16
 - **Done when:** a review without a completed order is rejected, uniqueness is tested, and favourites are idempotent with an exact counter.
-- [ ] Phase 20a
+- [x] Phase 20a
 
 ### Phase 20b: Reports & supply requests · [spec](docs/phases/phase-20b.md)
 - **Depends on:** 16, 9
@@ -377,6 +377,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-27 | Phase 18a: step-up-gated payout accounts resolved and name-checked via Paystack, encrypted at rest, masked in every response, 48h cooldown on change, admin approve for needs_review, hourly in-memory bank cache; any resolve error is 422, provider outages are 502 | ADR-0029 |
 | 2026-09-27 | Phase 18b: batched payout execution with verify-before-retry sends, late-success-to-admin, fresh-row admin retries, transfer-reference webhook keying scoped to transfer events, GHS text formatting without floats | ADR-0030 |
 | 2026-09-28 | Phase 19: REST writes plus push-only sockets (first-frame auth, pg_notify fan-out in-tx, Broadcast resync, gorilla with CVE watch, raw route outside codegen, empty-Origin allowed) | ADR-0031 |
+| 2026-09-28 | Phase 20a: order-bound reviews with buyer/stranger separation, terminal audited hides, idempotent favorites with exact counters, ratings on public surfaces | ADR-0032 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
@@ -405,6 +406,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-27 | 18a | Phase 18a commits | `make ci` green. Step-up-gated payout accounts (MoMo/GhIPSS) with Paystack resolve, token-overlap name check, AES-256-GCM storage, masked responses, 48h change cooldown, admin approve and a cached banks list. CI caught nothing new; manual QA against the running API plus emulator verified step-up 401 live, 403/404/422/502 shapes and zero PII in logs. The shared dev DB needed `migrate-up` to 15 before the new endpoints stopped 500ing. See ADR-0029 and `docs/reviews/phase-18a.md` |
 | 2026-09-27 | 18b | Phase 18b commits | `make ci` green. Daily batched payouts from `seller_payable` via Paystack Transfers: per-seller execute with advisory lock and `payout_initiated` posting, send with verify-before-retry, webhook settlement with late-success-to-admin, daily stuck reconciliation, seller balance/history and admin list/retry. Full CI caught an over-broad webhook keying change (scoped to transfer events, ADR-0030). Manual QA proved balance/history/retry shapes plus the signed webhook accept and `rejected:unknown_reference` recording. See ADR-0030 and `docs/reviews/phase-18b.md` |
 | 2026-09-28 | 19 | Phase 19 commits | `make ci` green. Buyer-seller conversations (REST: start/list/history/send/read with cursor pagination, unread counts, throttled SMS nudges) plus push-only WebSocket delivery (first-frame auth, participant-only fan-out via pg_notify, resync, slow-consumer drops, expiry, caps, 1001 shutdown). CI caught nothing new after the keying-scope lesson of 18b. Manual QA with real sockets proved ready, live message.created both sides, read events with byMe, origin refusal and SIGTERM drop with clean shutdown. See ADR-0031 and `docs/reviews/phase-19.md` |
+| 2026-09-28 | 20a | Phase 20a commits | `make ci` green. Order-bound reviews (completed-only, unique per order/listing/reviewer, hidden excluded from aggregates), idempotent favorites with exact counters incl. concurrent adds, seller ratings on public surfaces. Manual QA against the running API verified create/duplicate-409, public list with summary, idempotent favorite 204s with counter 1, flagged unavailable, hide with exclusion, and zero PII in logs. See ADR-0032 and `docs/reviews/phase-20a.md` |
 
 ## 10. Backlog (not scheduled)
 - Document the River test-fixture full-registry rule in `docs/ENGINEERING_GUIDE.md`: a `Work:true` test client whose registry lacks a worker kind its flow enqueues stalls the available job (seen with `notify.sms` on River v0.47.0). Found in Phase 16
