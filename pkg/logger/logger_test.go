@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"testing"
 )
 
@@ -41,5 +42,13 @@ func TestContextRoundTrip(t *testing.T) {
 	l := New(&bytes.Buffer{}, "info")
 	if FromContext(WithContext(context.Background(), l)) != l {
 		t.Error("logger not recovered from context")
+	}
+}
+
+func TestNew_RedactsSecrets(t *testing.T) {
+	var buf bytes.Buffer
+	New(&buf, "info").Info("sign-in", "phone", "+233241234567", "note", "call +233241234567")
+	if s := buf.String(); strings.Contains(s, "241234567") {
+		t.Errorf("phone leaked into log: %s", s)
 	}
 }

@@ -7,12 +7,16 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+
+	"github.com/dezmymachine/farmish-backend/pkg/redact"
 )
 
 // New returns a JSON slog.Logger writing to w at the given level
-// ("debug", "info", "warn", "error"; anything else means info).
+// ("debug", "info", "warn", "error"; anything else means info). Every record
+// passes through redact.Handler, so credentials and personal data cannot
+// reach w even when a call site forgets to mask them.
 func New(w io.Writer, level string) *slog.Logger {
-	return slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: ParseLevel(level)}))
+	return slog.New(redact.NewHandler(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: ParseLevel(level)})))
 }
 
 // ParseLevel maps a level name to a slog.Level, defaulting to info.

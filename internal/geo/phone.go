@@ -6,6 +6,8 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+
+	"github.com/dezmymachine/farmish-backend/pkg/redact"
 )
 
 // ErrInvalidPhone is returned when input is not a Ghanaian E.164 number.
@@ -41,9 +43,4 @@ func NormalizeGhanaPhone(s string) (string, error) {
 
 // MaskPhone hides the middle digits for logs: +233241234567 becomes
 // +233*****4567. It never panics; short input returns a fixed mask.
-func MaskPhone(e164 string) string {
-	if len(e164) < 8 {
-		return "****"
-	}
-	return e164[:4] + "*****" + e164[len(e164)-4:]
-}
+func MaskPhone(e164 string) string { return redact.Phone(e164) }
