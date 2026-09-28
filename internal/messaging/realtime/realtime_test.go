@@ -2,6 +2,7 @@ package realtime_test
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -150,7 +151,7 @@ func TestRealtime_SlowConsumerDropped(t *testing.T) {
 	buyer, seller := uuid.New(), uuid.New()
 	h.auth.users["buyer"] = buyer
 	h.auth.users["seller"] = seller
-	h.dial(t, "buyer") // never reads again
+	slow := h.dial(t, "buyer") // never reads again
 
 	conversationID := uuid.New()
 	dropped := false
@@ -164,18 +165,29 @@ func TestRealtime_SlowConsumerDropped(t *testing.T) {
 	if !dropped {
 		t.Fatal("slow buyer never dropped")
 	}
+	// The drop unregisters first; the 1013 frame follows from the writer.
+	_ = slow.SetReadDeadline(time.Now().Add(5 * time.Second))
+	for {
+		_, _, err := slow.ReadMessage()
+		if err == nil {
+			continue
+		}
+		var closeErr *websocket.CloseError
+		if !errors.As(err, &closeErr) || closeErr.Code != realtime.CloseTryAgain {
+			t.Errorf("drop code = %v, want 1013", err)
+		}
+		break
+	}
 
-	// A healthy client is unaffected by another's drop: it receives every
-	// frame under a gentle load.
+	// A healthy client is unaffected by another's drop: publish and read in
+	// lockstep so its unit buffer never fills.
 	healthy := h.dial(t, "seller")
+	_ = healthy.SetReadDeadline(time.Now().Add(5 * time.Second))
 	for i := 0; i < 5; i++ {
-		h.hub.Publish([]uuid.UUID{buyer, seller}, realtime.Frame{
+		h.hub.Publish([]uuid.UUID{seller}, realtime.Frame{
 			Type: "message.created", ConversationID: &conversationID,
 			Message: &realtime.Message{ID: uuid.New(), ConversationID: conversationID, Body: "hello"},
 		})
-	}
-	_ = healthy.SetReadDeadline(time.Now().Add(5 * time.Second))
-	for i := 0; i < 5; i++ {
 		var frame map[string]any
 		if err := healthy.ReadJSON(&frame); err != nil {
 			t.Fatalf("healthy read %d: %v", i, err)

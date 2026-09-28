@@ -197,9 +197,11 @@ func (h *Hub) Publish(userIDs []uuid.UUID, frame Frame) {
 		}
 	}
 	h.mu.Unlock()
+	// Only the writer sends the 1013 frame: removing here would close the
+	// TCP connection under it and the client would see an abnormal closure
+	// instead of the code. The writer unregisters itself after flushing.
 	for _, c := range slow {
 		c.requestClose(CloseTryAgain, "slow consumer, reconnect")
-		h.remove(c)
 	}
 }
 
@@ -225,9 +227,11 @@ func (h *Hub) Broadcast(frame Frame) {
 		}
 	}
 	h.mu.Unlock()
+	// Only the writer sends the 1013 frame: removing here would close the
+	// TCP connection under it and the client would see an abnormal closure
+	// instead of the code. The writer unregisters itself after flushing.
 	for _, c := range slow {
 		c.requestClose(CloseTryAgain, "slow consumer, reconnect")
-		h.remove(c)
 	}
 }
 
