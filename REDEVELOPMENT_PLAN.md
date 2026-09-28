@@ -309,7 +309,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 ### Phase 19: Messaging · [spec](docs/phases/phase-19.md)
 - **Depends on:** 11, 16
 - **Done when:** a non-participant gets 403, cursor pagination works, a duplicate conversation returns the existing one, and the messaging rate limit and SMS throttling work.
-- [ ] Phase 19
+- [x] Phase 19
 
 ### Phase 20a: Reviews & favorites · [spec](docs/phases/phase-20a.md)
 - **Depends on:** 16
@@ -376,6 +376,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-27 | Phase 17b: dispute resolution through `orders.Transition` (admin actor); release defers on in-flight refunds with a 10-minute River snooze; admin retries enqueue without job uniqueness (a unique insert would be swallowed by the first attempt's job row); daily 03:00 Africa/Accra reconciliation via a custom `jobs.DailyAt` River schedule (no cron helper in River v0.47); `DisputeAdmin` embeds the seller-shaped order, `AdminOrderDetail` wraps it with contacts plus ledger entries | ADR-0028 |
 | 2026-09-27 | Phase 18a: step-up-gated payout accounts resolved and name-checked via Paystack, encrypted at rest, masked in every response, 48h cooldown on change, admin approve for needs_review, hourly in-memory bank cache; any resolve error is 422, provider outages are 502 | ADR-0029 |
 | 2026-09-27 | Phase 18b: batched payout execution with verify-before-retry sends, late-success-to-admin, fresh-row admin retries, transfer-reference webhook keying scoped to transfer events, GHS text formatting without floats | ADR-0030 |
+| 2026-09-28 | Phase 19: REST writes plus push-only sockets (first-frame auth, pg_notify fan-out in-tx, Broadcast resync, gorilla with CVE watch, raw route outside codegen, empty-Origin allowed) | ADR-0031 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
@@ -403,6 +404,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-27 | 17b | Phase 17b commits | `make ci` green. Dispute resolution for the three outcomes through `orders.Transition` with audit and dual SMS, failed-refund admin retry, admin order view with contacts and ledger entries, and the daily `ledger.reconcile` detector. Full CI caught two real issues before merge: the retry enqueue skipped as a River-unique duplicate (fixed to non-unique, pinned by a row-count test) and the validation endpoint test tripping the sensitive rate limit. Manual QA against the running API plus emulator verified 401/403/200, 404s and the 400 validation shape. See ADR-0028 and `docs/reviews/phase-17b.md` |
 | 2026-09-27 | 18a | Phase 18a commits | `make ci` green. Step-up-gated payout accounts (MoMo/GhIPSS) with Paystack resolve, token-overlap name check, AES-256-GCM storage, masked responses, 48h change cooldown, admin approve and a cached banks list. CI caught nothing new; manual QA against the running API plus emulator verified step-up 401 live, 403/404/422/502 shapes and zero PII in logs. The shared dev DB needed `migrate-up` to 15 before the new endpoints stopped 500ing. See ADR-0029 and `docs/reviews/phase-18a.md` |
 | 2026-09-27 | 18b | Phase 18b commits | `make ci` green. Daily batched payouts from `seller_payable` via Paystack Transfers: per-seller execute with advisory lock and `payout_initiated` posting, send with verify-before-retry, webhook settlement with late-success-to-admin, daily stuck reconciliation, seller balance/history and admin list/retry. Full CI caught an over-broad webhook keying change (scoped to transfer events, ADR-0030). Manual QA proved balance/history/retry shapes plus the signed webhook accept and `rejected:unknown_reference` recording. See ADR-0030 and `docs/reviews/phase-18b.md` |
+| 2026-09-28 | 19 | Phase 19 commits | `make ci` green. Buyer-seller conversations (REST: start/list/history/send/read with cursor pagination, unread counts, throttled SMS nudges) plus push-only WebSocket delivery (first-frame auth, participant-only fan-out via pg_notify, resync, slow-consumer drops, expiry, caps, 1001 shutdown). CI caught nothing new after the keying-scope lesson of 18b. Manual QA with real sockets proved ready, live message.created both sides, read events with byMe, origin refusal and SIGTERM drop with clean shutdown. See ADR-0031 and `docs/reviews/phase-19.md` |
 
 ## 10. Backlog (not scheduled)
 - Document the River test-fixture full-registry rule in `docs/ENGINEERING_GUIDE.md`: a `Work:true` test client whose registry lacks a worker kind its flow enqueues stalls the available job (seen with `notify.sms` on River v0.47.0). Found in Phase 16
