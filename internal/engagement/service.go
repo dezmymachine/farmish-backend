@@ -34,6 +34,8 @@ var (
 	ErrAlreadyReviewed = errors.New("this listing was already reviewed in this order")
 	// ErrListingNotInOrder means the listing is not one of the order's items.
 	ErrListingNotInOrder = errors.New("listing is not part of this order")
+	// ErrAlreadyHidden means the review is already hidden.
+	ErrAlreadyHidden = errors.New("review is already hidden")
 )
 
 // OrderStore is the part of the order surface reviews need: the buyer's
@@ -203,13 +205,20 @@ func (s *Service) HideReview(ctx context.Context, adminID, reviewID uuid.UUID, r
 	}
 	var hidden db.Review
 	err := database.InTx(ctx, s.pool, func(tx pgx.Tx) error {
+		existing, err := db.New(tx).GetReviewByID(ctx, reviewID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("%w: %s", ErrNotFound, reviewID)
+		}
+		if err != nil {
+			return fmt.Errorf("get review: %w", err)
+		}
+		if existing.HiddenAt != nil {
+			return ErrAlreadyHidden
+		}
 		now := s.Now()
 		row, err := db.New(tx).SetReviewHidden(ctx, db.SetReviewHiddenParams{
 			ID: reviewID, HiddenAt: &now,
 		})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("%w: %s", ErrNotFound, reviewID)
-		}
 		if err != nil {
 			return fmt.Errorf("hide review: %w", err)
 		}
