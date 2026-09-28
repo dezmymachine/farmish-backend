@@ -23,6 +23,11 @@ const (
 	TemplatePayoutSent            = "payout_sent"
 	TemplatePayoutFailed          = "payout_failed"
 	TemplateMessageReceived       = "message_received"
+	TemplateSupplyRequestPending    = "supply_request_pending"
+	TemplateSupplyRequestConfirmed  = "supply_request_confirmed"
+	TemplateSupplyRequestProcessing = "supply_request_processing"
+	TemplateSupplyRequestDelivered  = "supply_request_delivered"
+	TemplateSupplyRequestCancelled  = "supply_request_cancelled"
 )
 
 // templates renders every message. Values are order facts the recipient
@@ -44,6 +49,11 @@ var templates = map[string]string{
 	TemplatePayoutSent:            "Farmish: GHS {{.amount}} sent to your payout account.",
 	TemplatePayoutFailed:          "Farmish: your payout of GHS {{.amount}} failed. The amount is back in your balance.",
 	TemplateMessageReceived:       "Farmish: you have a new message about {{.title}}.",
+	TemplateSupplyRequestPending:    "Farmish: supply request {{.number}} received. We will confirm it shortly.",
+	TemplateSupplyRequestConfirmed:  "Farmish: supply request {{.number}} confirmed.",
+	TemplateSupplyRequestProcessing: "Farmish: supply request {{.number}} is being processed.",
+	TemplateSupplyRequestDelivered:  "Farmish: supply request {{.number}} delivered.",
+	TemplateSupplyRequestCancelled:  "Farmish: supply request {{.number}} cancelled.",
 }
 
 // Render renders a template with the given values, truncated to one SMS.

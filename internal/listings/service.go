@@ -871,3 +871,15 @@ func randomSuffix() string {
 	}
 	return string(b)
 }
+
+// SuspendInTx moves any listing to suspended inside the caller's
+// transaction (admin moderation, Phase 20b). Already-suspended rows stay
+// suspended: the write is idempotent, and the caller owns the audit event.
+func (s *Service) SuspendInTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+	if _, err := db.New(tx).SetListingStatus(ctx, db.SetListingStatusParams{ID: id, Status: StatusSuspended}); errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("%w: %s", ErrNotFound, id)
+	} else if err != nil {
+		return fmt.Errorf("suspend listing: %w", err)
+	}
+	return nil
+}
