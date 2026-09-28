@@ -146,11 +146,14 @@ type Service struct {
 	log   *slog.Logger
 	// Now is the clock, injectable so date and number tests never sleep.
 	Now func() time.Time
+	// number generates request numbers; newRequestNumber by default,
+	// replaceable in tests to force collisions.
+	number func(time.Time) (string, error)
 }
 
 // New returns the service.
 func New(pool *pgxpool.Pool, users UserStore) *Service {
-	return &Service{pool: pool, users: users, Now: time.Now}
+	return &Service{pool: pool, users: users, Now: time.Now, number: newRequestNumber}
 }
 
 // AttachJobClient gives the service the client it needs to enqueue status
@@ -172,7 +175,7 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in Input) (Reque
 	}
 	var created Request
 	for attempt := 0; attempt < numberAttempts; attempt++ {
-		number, err := newRequestNumber(s.Now())
+		number, err := s.number(s.Now())
 		if err != nil {
 			return Request{}, err
 		}
@@ -297,15 +300,14 @@ func (s *Service) validate(ctx context.Context, userID uuid.UUID, in Input) ([]v
 		invalid.Add("deliveryAddress", "must be at most 300 characters")
 	}
 	var expectedDate pgtype.Date
-	if strings.TrimSpace(in.ExpectedDate) != "" {
-		day, err := time.Parse("2006-01-02", strings.TrimSpace(in.ExpectedDate))
-		if err != nil {
-			invalid.Add("expectedDate", "must be YYYY-MM-DD")
-		} else if day.Before(today(s.Now())) {
-			invalid.Add("expectedDate", "must be today or later")
-		} else {
-			expectedDate = pgtype.Date{Time: day, Valid: true}
-		}
+	switch day, err := time.Parse("2006-01-02", strings.TrimSpace(in.ExpectedDate)); {
+	case strings.TrimSpace(in.ExpectedDate) == "":
+	case err != nil:
+		invalid.Add("expectedDate", "must be YYYY-MM-DD")
+	case day.Before(today(s.Now())):
+		invalid.Add("expectedDate", "must be today or later")
+	default:
+		expectedDate = pgtype.Date{Time: day, Valid: true}
 	}
 	notes := strings.TrimSpace(in.Notes)
 	if len(notes) > 1000 {
@@ -521,10 +523,10 @@ func (s *Service) Transition(ctx context.Context, actorID uuid.UUID, admin bool,
 		if err != nil {
 			return fmt.Errorf("lock supply request: %w", err)
 		}
-		if !admin && row.UserID != actorID {
+		if row.UserID != actorID && !admin {
 			return fmt.Errorf("%w: %s", ErrNotFound, requestID)
 		}
-		if !admin && !(row.Status == StatusPending && to == StatusCancelled) {
+		if !admin && (row.Status != StatusPending || to != StatusCancelled) {
 			return ErrInvalidTransition
 		}
 		if admin && !allowed(row.Status, to) {
@@ -589,7 +591,7 @@ func fromRow(r db.SupplyRequest) Request {
 		ID: r.ID, RequestNumber: r.RequestNumber, UserID: r.UserID,
 		DeliveryName: r.DeliveryName, DeliveryPhone: r.DeliveryPhone,
 		DeliveryAddress: r.DeliveryAddress,
-		Notes: r.Notes, Status: r.Status, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+		Notes:           r.Notes, Status: r.Status, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	}
 	if r.ExpectedDate.Valid {
 		day := r.ExpectedDate.Time
