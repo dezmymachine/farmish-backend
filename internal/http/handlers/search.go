@@ -117,7 +117,11 @@ func (s Server) GetPublicListing(ctx context.Context, req api.GetPublicListingRe
 
 	s.countView(ctx, detail.ID)
 
-	body := toListingDetail(detail)
+	rating, err := s.ratingOf(ctx, detail.SellerID)
+	if err != nil {
+		return nil, err
+	}
+	body := toListingDetail(detail, rating)
 	etag, fresh := weakETag(body, req.Params.IfNoneMatch)
 	if fresh {
 		return api.GetPublicListing304Response{Headers: api.NotModifiedResponseHeaders{
@@ -268,8 +272,9 @@ func derefTime(t *time.Time) time.Time {
 }
 
 // toListingDetail maps the public listing page. seller is the Phase 8
-// PublicSeller projection, which carries a user id and nothing else private.
-func toListingDetail(d listings.PublicDetail) api.ListingDetail {
+// PublicSeller projection, which carries a user id and nothing else private,
+// plus the seller's rating.
+func toListingDetail(d listings.PublicDetail, rating api.SellerRating) api.ListingDetail {
 	delivery := api.ListingDeliveryOptions{
 		Pickup: d.OffersPickup, SellerDelivery: d.OffersSellerDelivery,
 	}
@@ -297,7 +302,7 @@ func toListingDetail(d listings.PublicDetail) api.ListingDetail {
 			UserId: d.SellerPublic.UserID, BusinessName: d.SellerPublic.Name,
 			Region: d.SellerPublic.Region, District: d.SellerPublic.District,
 			Bio: d.SellerPublic.Bio, Verified: d.SellerPublic.Verified,
-			MemberSince: d.SellerPublic.MemberSince,
+			MemberSince: d.SellerPublic.MemberSince, Rating: rating,
 		},
 		PublishedAt: d.PublishedAt, Description: d.Description,
 		QuantityAvailable: d.QuantityAvailable, MinOrderQty: d.MinOrderQty,

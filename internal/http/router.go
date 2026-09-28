@@ -55,6 +55,8 @@ type Deps struct {
 	Payouts handlers.PayoutStore
 	// Messages owns buyer-seller conversations.
 	Messages handlers.MessageStore
+	// Engagement owns reviews and favorites.
+	Engagement handlers.EngagementStore
 	// Hub routes realtime messaging frames. Nil disables /v1/ws (worker
 	// mode serves probes only).
 	Hub *realtime.Hub
@@ -151,7 +153,7 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 	server := handlers.Server{
 		DB: deps.DB, Users: deps.Users, Sellers: deps.Sellers, Catalog: deps.Catalog,
 		Media: deps.Media, Listings: deps.Listings, PublicListings: deps.PublicListings,
-		Views: deps.Views, ViewerHash: deps.ViewerHash, Payments: deps.Payments, Promotions: deps.Promotions, Checkout: deps.Checkout, Orders: deps.Orders, OrderActions: deps.OrderActions, Payouts: deps.Payouts, Messages: deps.Messages, Log: log,
+		Views: deps.Views, ViewerHash: deps.ViewerHash, Payments: deps.Payments, Promotions: deps.Promotions, Checkout: deps.Checkout, Orders: deps.Orders, OrderActions: deps.OrderActions, Payouts: deps.Payouts, Messages: deps.Messages, Engagement: deps.Engagement, Log: log,
 	}
 	api.RegisterHandlersWithOptions(r, strictServer(server), api.GinServerOptions{
 		ErrorHandler: func(c *gin.Context, err error, _ int) { requestError(c, err) },

@@ -36,7 +36,11 @@ func (s Server) ListAdminDisputes(ctx context.Context, req api.ListAdminDisputes
 	}
 	out := make([]api.DisputeAdmin, 0, len(views))
 	for _, view := range views {
-		out = append(out, toDisputeAdmin(view))
+		rating, err := s.ratingOf(ctx, view.Order.SellerID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, toDisputeAdmin(view, rating))
 	}
 	return api.ListAdminDisputes200JSONResponse{
 		Items: out,
@@ -58,7 +62,11 @@ func (s Server) GetAdminDispute(ctx context.Context, req api.GetAdminDisputeRequ
 	if err != nil {
 		return nil, err
 	}
-	return api.GetAdminDispute200JSONResponse(toDisputeAdmin(view)), nil
+	rating, err := s.ratingOf(ctx, view.Order.SellerID)
+	if err != nil {
+		return nil, err
+	}
+	return api.GetAdminDispute200JSONResponse(toDisputeAdmin(view, rating)), nil
 }
 
 // ResolveDispute decides an open dispute: full refund, release, or split.
@@ -104,7 +112,11 @@ func (s Server) ResolveDispute(ctx context.Context, req api.ResolveDisputeReques
 	if err != nil {
 		return nil, err
 	}
-	return api.ResolveDispute200JSONResponse(toDisputeAdmin(view)), nil
+	rating, err := s.ratingOf(ctx, view.Order.SellerID)
+	if err != nil {
+		return nil, err
+	}
+	return api.ResolveDispute200JSONResponse(toDisputeAdmin(view, rating)), nil
 }
 
 // GetAdminOrder returns an order with both parties' contacts and its ledger
@@ -122,7 +134,11 @@ func (s Server) GetAdminOrder(ctx context.Context, req api.GetAdminOrderRequestO
 	if err != nil {
 		return nil, err
 	}
-	return api.GetAdminOrder200JSONResponse(toAdminOrderDetail(order)), nil
+	rating, err := s.ratingOf(ctx, order.Order.SellerID)
+	if err != nil {
+		return nil, err
+	}
+	return api.GetAdminOrder200JSONResponse(toAdminOrderDetail(order, rating)), nil
 }
 
 // RetryRefund re-queues a failed refund's Paystack call.
@@ -153,14 +169,14 @@ func (s Server) RetryRefund(ctx context.Context, req api.RetryRefundRequestObjec
 // toDisputeAdmin maps a dispute view onto the contract. The embedded order is
 // the seller-shaped detail: it carries the commission, the recipient and the
 // events, which is what a resolver needs.
-func toDisputeAdmin(view orders.DisputeView) api.DisputeAdmin {
+func toDisputeAdmin(view orders.DisputeView, rating api.SellerRating) api.DisputeAdmin {
 	out := api.DisputeAdmin{
 		Id: view.Dispute.ID, OrderId: view.Dispute.OrderID,
 		Status:      api.DisputeStatus(view.Dispute.Status),
 		Reason:      api.DisputeAdminReason(view.Dispute.Reason),
 		Description: view.Dispute.Description, OpenedBy: view.Dispute.OpenedBy,
 		CreatedAt: view.Dispute.CreatedAt, UpdatedAt: &view.Dispute.UpdatedAt,
-		Order: toOrderDetail(view.Order, true),
+		Order: toOrderDetail(view.Order, true, rating),
 	}
 	if view.Dispute.Outcome != nil {
 		outcome := api.DisputeOutcome(*view.Dispute.Outcome)
@@ -177,7 +193,7 @@ func toDisputeAdmin(view orders.DisputeView) api.DisputeAdmin {
 }
 
 // toAdminOrderDetail maps an admin order onto the contract.
-func toAdminOrderDetail(order orders.AdminOrder) api.AdminOrderDetail {
+func toAdminOrderDetail(order orders.AdminOrder, rating api.SellerRating) api.AdminOrderDetail {
 	entries := make([]api.LedgerEntryView, 0, len(order.Entries))
 	for _, entry := range order.Entries {
 		entries = append(entries, api.LedgerEntryView{
@@ -187,7 +203,7 @@ func toAdminOrderDetail(order orders.AdminOrder) api.AdminOrderDetail {
 		})
 	}
 	return api.AdminOrderDetail{
-		Order: toOrderDetail(order.Order, true),
+		Order: toOrderDetail(order.Order, true, rating),
 		Buyer: api.OrderPartyContact{
 			UserId: order.Buyer.UserID, DisplayName: order.Buyer.DisplayName,
 			Email: order.Buyer.Email, Phone: order.Buyer.Phone,

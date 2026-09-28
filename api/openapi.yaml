@@ -64,6 +64,8 @@ tags:
     description: Seller payout accounts. Payout execution is Phase 18b.
   - name: messaging
     description: Buyer-seller conversations. Realtime push over WebSocket, Phase 19.
+  - name: engagement
+    description: Reviews, favorites and reports, Phase 20.
 paths:
   /healthz:
     get:
@@ -701,6 +703,175 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/orders/{orderId}/reviews:
+    post:
+      tags: [engagement]
+      operationId: createReview
+      summary: Review a listing I bought
+      description: |
+        Rates a listing from a completed order the caller bought. Anything
+        else is a 409; a listing outside the order is a 400.
+      x-farmish-rate-limit: sensitive
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReviewRequest"
+      responses:
+        "201":
+          description: The created review.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/listings/{slug}/reviews:
+    get:
+      tags: [engagement]
+      operationId: listListingReviews
+      summary: List a listing's reviews
+      description: Visible reviews, newest first, with the seller aggregate.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ListingSlug"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Reviews with the seller aggregate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicReviewList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/me/favorites/{listingId}:
+    put:
+      tags: [engagement]
+      operationId: addFavorite
+      summary: Favourite a listing
+      description: Idempotent; inactive listings favourited too.
+      parameters:
+        - name: listingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Favourited.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    delete:
+      tags: [engagement]
+      operationId: removeFavorite
+      summary: Unfavourite a listing
+      description: Idempotent.
+      parameters:
+        - name: listingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Unfavourited.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/me/favorites:
+    get:
+      tags: [engagement]
+      operationId: listMyFavorites
+      summary: List my favourites
+      description: Newest favourited first, inactive listings included and flagged.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: A page of favourited listings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FavoriteList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/reviews/{id}/hide:
+    post:
+      tags: [engagement]
+      operationId: hideReview
+      summary: Hide a review
+      description: Moderation hide with an audit event. Already hidden is 409.
+      x-farmish-role: admin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HideReviewRequest"
+      responses:
+        "200":
+          description: The hidden review.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /v1/seller/balance:
@@ -2696,7 +2867,7 @@ components:
     PublicSeller:
       type: object
       description: Safe seller projection for anonymous callers.
-      required: [userId, businessName, region, district, verified, memberSince]
+      required: [userId, businessName, region, district, verified, memberSince, rating]
       properties:
         userId:
           type: string
@@ -2716,6 +2887,8 @@ components:
           type: string
           format: date-time
           description: When the seller's user account was created.
+        rating:
+          $ref: "#/components/schemas/SellerRating"
     SellerProfileAdmin:
       type: object
       description: The admin review view, with the owner's contact fields.
@@ -3700,7 +3873,7 @@ components:
         `recipientName`, `recipientPhone`, `commission` and `sellerNet`; the
         buyer additionally sees `seller` (the public profile) and never sees
         the commission.
-      required: [id, checkoutId, buyerId, sellerId, sellerName, status, escrowState, items, subtotal, deliveryFee, base, deliveryMethod, delivery, createdAt, events]
+      required: [id, checkoutId, buyerId, sellerId, sellerName, status, escrowState, items, subtotal, deliveryFee, base, deliveryMethod, delivery, createdAt, events, rating]
       properties:
         id:
           type: string
@@ -3758,6 +3931,9 @@ components:
         seller:
           $ref: "#/components/schemas/PublicSeller"
           description: The seller's public profile. Buyer only.
+        rating:
+          $ref: "#/components/schemas/SellerRating"
+          description: The seller's aggregate over visible reviews.
         createdAt:
           type: string
           format: date-time
@@ -4186,6 +4362,144 @@ components:
         - $ref: "#/components/schemas/RealtimeResync"
       discriminator:
         propertyName: type
+    CreateReviewRequest:
+      type: object
+      additionalProperties: false
+      required: [listingId, rating]
+      properties:
+        listingId:
+          type: string
+          format: uuid
+        rating:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+          maxLength: 1000
+    Review:
+      type: object
+      required: [id, orderId, listingId, rating, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        listingId:
+          type: string
+          format: uuid
+        rating:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    PublicReview:
+      type: object
+      description: "A visible review, safe-projected: no reviewer id, email or phone."
+      required: [id, rating, reviewerName, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        rating:
+          type: integer
+          format: int32
+        reviewerName:
+          type: string
+        comment:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    SellerRating:
+      type: object
+      description: A seller aggregate over visible reviews.
+      required: [average, count]
+      properties:
+        average:
+          type: number
+          description: Mean rating to one decimal; 0 with no reviews.
+          examples: [4.5]
+        count:
+          type: integer
+          format: int64
+          minimum: 0
+    PublicReviewList:
+      type: object
+      required: [items, meta, summary]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicReview"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
+        summary:
+          $ref: "#/components/schemas/SellerRating"
+    HideReviewRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    FavoriteListing:
+      type: object
+      description: A favourited listing. Unavailable ones are not browsable.
+      required: [id, slug, title, price, unit, region, district, itemState, category, promoted, seller, publishedAt, available]
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        title:
+          type: string
+        price:
+          $ref: "#/components/schemas/Money"
+        unit:
+          type: string
+        region:
+          $ref: "#/components/schemas/GhanaRegion"
+        district:
+          type: string
+        itemState:
+          type: string
+        category:
+          $ref: "#/components/schemas/ListingCategoryRef"
+        coverImageUrl:
+          type: string
+        promoted:
+          oneOf:
+            - $ref: "#/components/schemas/ListingPromotion"
+            - type: "null"
+        seller:
+          $ref: "#/components/schemas/ListingSellerRef"
+        publishedAt:
+          type: string
+          format: date-time
+        available:
+          type: boolean
+    FavoriteList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/FavoriteListing"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
     PayoutAccountType:
       type: string
       description: A payout account type.

@@ -22,6 +22,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/crypto"
 	"github.com/dezmymachine/farmish-backend/internal/database"
 	"github.com/dezmymachine/farmish-backend/internal/delivery"
+	"github.com/dezmymachine/farmish-backend/internal/engagement"
 	httpapi "github.com/dezmymachine/farmish-backend/internal/http"
 	"github.com/dezmymachine/farmish-backend/internal/http/handlers"
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
@@ -213,6 +214,8 @@ func run() error {
 	// listener are built with the router below, wherever the API serves.
 	messagingSvc := messaging.New(pool, usersSvc, sellersSvc, mediaSvc)
 	messagingSvc.AttachLogger(log)
+	engagementSvc := engagement.New(pool, ordersSvc, usersSvc, mediaSvc)
+	engagementSvc.AttachLogger(log)
 	notifySender := notify.SMS(notify.LogOnly{Log: log})
 	if cfg.Notify.SMSEnabled {
 		notifySender = notify.NewMNotify(cfg.Notify.APIKey, cfg.Notify.Sender, "")
@@ -295,6 +298,7 @@ func run() error {
 			OrderActions:  ordersSvc,
 			Payouts:       payoutsSvc,
 			Messages:      messagingSvc,
+			Engagement:    engagementSvc,
 			Hub:           hub,
 			Turnstile:     turnstile.New(cfg.TurnstileSecret),
 			IPLimiter:     ipLimiter,

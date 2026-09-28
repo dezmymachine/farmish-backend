@@ -96,7 +96,11 @@ func (s Server) GetPublicSeller(ctx context.Context, req api.GetPublicSellerRequ
 	case err != nil:
 		return nil, err
 	}
-	return api.GetPublicSeller200JSONResponse(toPublicSeller(p)), nil
+	rating, err := s.ratingOf(ctx, p.UserID)
+	if err != nil {
+		return nil, err
+	}
+	return api.GetPublicSeller200JSONResponse(toPublicSeller(p, rating)), nil
 }
 
 // ListAdminSellers returns the verification review queue for one status.
@@ -202,10 +206,11 @@ func toSellerProfile(p sellers.Profile) api.SellerProfile {
 	return out
 }
 
-func toPublicSeller(p sellers.PublicProfile) api.PublicSeller {
+func toPublicSeller(p sellers.PublicProfile, rating api.SellerRating) api.PublicSeller {
 	return api.PublicSeller{
 		UserId: p.UserID, BusinessName: p.BusinessName, Region: p.Region,
 		District: p.District, Bio: p.Bio, Verified: p.Verified, MemberSince: p.MemberSince,
+		Rating: rating,
 	}
 }
 

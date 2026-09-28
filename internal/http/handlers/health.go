@@ -56,6 +56,8 @@ type Server struct {
 	Payouts PayoutStore
 	// Messages owns buyer-seller conversations.
 	Messages MessageStore
+	// Engagement owns reviews and favorites.
+	Engagement EngagementStore
 	// Views enqueues the listing view count. Nil disables counting, which
 	// keeps the read path working without a job queue.
 	Views listings.ViewCounter

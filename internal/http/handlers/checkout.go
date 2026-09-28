@@ -209,7 +209,11 @@ func (s Server) GetOrder(ctx context.Context, req api.GetOrderRequestObject) (ap
 	case err != nil:
 		return nil, err
 	}
-	return api.GetOrder200JSONResponse(toOrderDetail(detail, isSeller)), nil
+	rating, err := s.ratingOf(ctx, detail.SellerID)
+	if err != nil {
+		return nil, err
+	}
+	return api.GetOrder200JSONResponse(toOrderDetail(detail, isSeller, rating)), nil
 }
 
 // toCheckoutInput converts the contract body to the domain cart, rejecting
@@ -257,7 +261,8 @@ func toOrderSummary(order orders.Summary) api.OrderSummary {
 
 // toOrderDetail shapes one order for the caller's role: the seller sees the
 // recipient and the commission; the buyer sees the seller's public profile.
-func toOrderDetail(detail orders.Detail, isSeller bool) api.OrderDetail {
+// Both see the seller's rating.
+func toOrderDetail(detail orders.Detail, isSeller bool, rating api.SellerRating) api.OrderDetail {
 	out := api.OrderDetail{
 		Id: detail.ID, CheckoutId: detail.CheckoutID, BuyerId: detail.BuyerID,
 		SellerId: detail.SellerID, SellerName: detail.SellerName,

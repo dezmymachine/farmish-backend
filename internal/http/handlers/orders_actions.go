@@ -108,7 +108,11 @@ func (s Server) sellerDetail(ctx context.Context, callerID, orderID uuid.UUID) (
 	if err != nil {
 		return api.OrderDetail{}, err
 	}
-	return toOrderDetail(detail, true), nil
+	rating, err := s.ratingOf(ctx, detail.SellerID)
+	if err != nil {
+		return api.OrderDetail{}, err
+	}
+	return toOrderDetail(detail, true, rating), nil
 }
 
 // buyerDetail answers with the moved order shaped for the buyer, who just
@@ -118,7 +122,11 @@ func (s Server) buyerDetail(ctx context.Context, callerID, orderID uuid.UUID) ap
 	if err != nil {
 		return api.OrderDetail{}
 	}
-	return toOrderDetail(detail, false)
+	rating, err := s.ratingOf(ctx, detail.SellerID)
+	if err != nil {
+		return api.OrderDetail{}
+	}
+	return toOrderDetail(detail, false, rating)
 }
 
 // AcceptOrder is the seller accepting a paid order.
