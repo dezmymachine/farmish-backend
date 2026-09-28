@@ -16,6 +16,9 @@ import (
 
 // EngagementStore is the part of engagement.Service these handlers use.
 type EngagementStore interface {
+	CreateReport(ctx context.Context, reporterID uuid.UUID, listingID, reportedUserID *uuid.UUID, reason, description string) (engagement.Report, error)
+	ListReports(ctx context.Context, status string, limit, offset int32) ([]engagement.ReportView, int64, error)
+	ResolveReport(ctx context.Context, adminID, reportID uuid.UUID, status, action, note string, reviewID *uuid.UUID, listings engagement.ListingStore) (engagement.Report, error)
 	CreateReview(ctx context.Context, buyerID, orderID, listingID uuid.UUID, rating int16, comment string) (engagement.Review, error)
 	ListReviews(ctx context.Context, listingID uuid.UUID, limit, offset int32) ([]engagement.Review, int64, engagement.Rating, error)
 	SellerRating(ctx context.Context, sellerID uuid.UUID) (engagement.Rating, error)

@@ -66,6 +66,8 @@ tags:
     description: Buyer-seller conversations. Realtime push over WebSocket, Phase 19.
   - name: engagement
     description: Reviews, favorites and reports, Phase 20.
+  - name: supply
+    description: Buyer supply requests, Phase 20b.
 paths:
   /healthz:
     get:
@@ -828,6 +830,289 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/reports:
+    post:
+      tags: [engagement]
+      operationId: createReport
+      summary: Report a listing or user
+      description: Exactly one of listingId or userId. A second open report on the same target is a 409.
+      x-farmish-rate-limit: sensitive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReportRequest"
+      responses:
+        "201":
+          description: The created report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/reports:
+    get:
+      tags: [engagement]
+      operationId: listAdminReports
+      summary: List reports for moderation
+      description: Oldest first, with a target summary per row.
+      x-farmish-role: admin
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/ReportStatus"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: A page of reports.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/reports/{id}/resolve:
+    post:
+      tags: [engagement]
+      operationId: resolveReport
+      summary: Resolve a report
+      description: |
+        Dismiss or action with an optional listing suspension or a named
+        review hide, all in one transaction and audited. Hiding needs
+        reviewId; other actions forbid it.
+      x-farmish-role: admin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveReportRequest"
+      responses:
+        "200":
+          description: The resolved report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/supply-requests:
+    post:
+      tags: [supply]
+      operationId: createSupplyRequest
+      summary: Request bulk supply
+      description: 1–20 lines over parent categories with delivery details.
+      x-farmish-rate-limit: sensitive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupplyRequest"
+      responses:
+        "201":
+          description: The created request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplyRequest"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    get:
+      tags: [supply]
+      operationId: listMySupplyRequests
+      summary: List my supply requests
+      description: Newest first, with an optional status filter.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/SupplyStatus"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: A page of my requests.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplyRequestSummaryList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/supply-requests/{id}:
+    get:
+      tags: [supply]
+      operationId: getSupplyRequest
+      summary: Get one supply request
+      description: The caller's own, with lines and the event trail. Others read as missing.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The request with its events.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplyRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/supply-requests/{id}/cancel:
+    post:
+      tags: [supply]
+      operationId: cancelSupplyRequest
+      summary: Cancel my supply request
+      description: The owner, pending requests only.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelSupplyRequest"
+      responses:
+        "200":
+          description: The cancelled request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplyRequest"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/supply-requests:
+    get:
+      tags: [supply]
+      operationId: listAdminSupplyRequests
+      summary: List all supply requests
+      description: Newest first, with an optional status filter.
+      x-farmish-role: admin
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/SupplyStatus"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: A page of requests.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplyRequestSummaryList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /v1/admin/supply-requests/{id}/status:
+    post:
+      tags: [supply]
+      operationId: setSupplyRequestStatus
+      summary: Move a supply request
+      description: Any legal admin transition, audited, with an SMS to the requester.
+      x-farmish-role: admin
+      x-farmish-rate-limit: sensitive
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetSupplyStatusRequest"
+      responses:
+        "200":
+          description: The moved request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplyRequest"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /v1/admin/reviews/{id}/hide:
@@ -4360,6 +4645,281 @@ components:
         - $ref: "#/components/schemas/RealtimeResync"
       discriminator:
         propertyName: type
+    ReportReason:
+      type: string
+      enum: [spam, fraud, prohibited_item, offensive, wrong_category, other]
+    ReportStatus:
+      type: string
+      enum: [open, actioned, dismissed]
+    ReportAction:
+      type: string
+      enum: [none, suspend_listing, hide_review]
+    CreateReportRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        listingId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        reason:
+          $ref: "#/components/schemas/ReportReason"
+        description:
+          type: string
+          maxLength: 1000
+    Report:
+      type: object
+      required: [id, reporterId, reason, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        reporterId:
+          type: string
+          format: uuid
+        listingId:
+          type: string
+          format: uuid
+        reportedUserId:
+          type: string
+          format: uuid
+        reason:
+          $ref: "#/components/schemas/ReportReason"
+        description:
+          type: string
+        status:
+          $ref: "#/components/schemas/ReportStatus"
+        action:
+          $ref: "#/components/schemas/ReportAction"
+        resolutionNote:
+          type: string
+        resolvedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    ReportTargetListing:
+      type: object
+      required: [id, title, slug]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+    ReportTargetUser:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+    ReportListItem:
+      type: object
+      required: [id, reason, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        reason:
+          $ref: "#/components/schemas/ReportReason"
+        status:
+          $ref: "#/components/schemas/ReportStatus"
+        createdAt:
+          type: string
+          format: date-time
+        listing:
+          $ref: "#/components/schemas/ReportTargetListing"
+        reportedUser:
+          $ref: "#/components/schemas/ReportTargetUser"
+    ReportList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportListItem"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
+    ResolveReportRequest:
+      type: object
+      additionalProperties: false
+      required: [status, action, note]
+      properties:
+        status:
+          type: string
+          enum: [actioned, dismissed]
+        action:
+          $ref: "#/components/schemas/ReportAction"
+        note:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        reviewId:
+          type: string
+          format: uuid
+          description: Required to hide a review, forbidden otherwise.
+    SupplyStatus:
+      type: string
+      enum: [pending, confirmed, processing, delivered, cancelled]
+    SupplyItemInput:
+      type: object
+      additionalProperties: false
+      required: [categorySlug, productName, quantity, unit]
+      properties:
+        categorySlug:
+          type: string
+        productName:
+          type: string
+          minLength: 2
+          maxLength: 100
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+        unit:
+          type: string
+    CreateSupplyRequest:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/SupplyItemInput"
+        deliveryName:
+          type: string
+          maxLength: 120
+        deliveryPhone:
+          type: string
+          description: Ghanaian number; normalised server-side.
+        deliveryAddress:
+          type: string
+          maxLength: 300
+        expectedDate:
+          type: string
+          format: date
+          description: Today or later (Africa/Accra).
+        notes:
+          type: string
+          maxLength: 1000
+    SupplyItem:
+      type: object
+      required: [categorySlug, productName, quantity, unit]
+      properties:
+        categorySlug:
+          type: string
+        productName:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+        unit:
+          type: string
+    SupplyEvent:
+      type: object
+      required: [toStatus, createdAt]
+      properties:
+        fromStatus:
+          $ref: "#/components/schemas/SupplyStatus"
+        toStatus:
+          $ref: "#/components/schemas/SupplyStatus"
+        note:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    SupplyRequestSummary:
+      type: object
+      required: [id, requestNumber, status, items, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        requestNumber:
+          type: string
+        status:
+          $ref: "#/components/schemas/SupplyStatus"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplyItem"
+        createdAt:
+          type: string
+          format: date-time
+    SupplyRequest:
+      type: object
+      required: [id, requestNumber, status, items, events, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        requestNumber:
+          type: string
+        status:
+          $ref: "#/components/schemas/SupplyStatus"
+        deliveryName:
+          type: string
+        deliveryPhone:
+          type: string
+        deliveryAddress:
+          type: string
+        expectedDate:
+          type: string
+          format: date
+        notes:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplyItem"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplyEvent"
+        createdAt:
+          type: string
+          format: date-time
+    SupplyRequestSummaryList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplyRequestSummary"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
+    CancelSupplyRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+    SetSupplyStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/SupplyStatus"
+        note:
+          type: string
+          maxLength: 500
     CreateReviewRequest:
       type: object
       additionalProperties: false

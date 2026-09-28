@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/dezmymachine/farmish-backend/internal/http/api"
 	"github.com/dezmymachine/farmish-backend/internal/http/apierror"
@@ -24,6 +25,8 @@ type ListingStore interface {
 	Renew(ctx context.Context, sellerID, id uuid.UUID) (listings.View, error)
 	MarkSold(ctx context.Context, sellerID, id uuid.UUID) (listings.View, error)
 	Archive(ctx context.Context, sellerID, id uuid.UUID) (listings.View, error)
+	// SuspendInTx moves any listing to suspended in the caller's transaction.
+	SuspendInTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) error
 }
 
 // CreateListing creates a listing for the signed-in seller.

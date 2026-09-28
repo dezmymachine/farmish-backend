@@ -23,6 +23,7 @@ import (
 	"github.com/dezmymachine/farmish-backend/internal/database"
 	"github.com/dezmymachine/farmish-backend/internal/delivery"
 	"github.com/dezmymachine/farmish-backend/internal/engagement"
+	"github.com/dezmymachine/farmish-backend/internal/supply"
 	httpapi "github.com/dezmymachine/farmish-backend/internal/http"
 	"github.com/dezmymachine/farmish-backend/internal/http/handlers"
 	"github.com/dezmymachine/farmish-backend/internal/jobs"
@@ -216,6 +217,8 @@ func run() error {
 	messagingSvc.AttachLogger(log)
 	engagementSvc := engagement.New(pool, ordersSvc, usersSvc, mediaSvc)
 	engagementSvc.AttachLogger(log)
+	supplySvc := supply.New(pool, usersSvc)
+	supplySvc.AttachLogger(log)
 	notifySender := notify.SMS(notify.LogOnly{Log: log})
 	if cfg.Notify.SMSEnabled {
 		notifySender = notify.NewMNotify(cfg.Notify.APIKey, cfg.Notify.Sender, "")
@@ -237,6 +240,7 @@ func run() error {
 	ordersSvc.AttachJobClient(jobClient)
 	payoutsSvc.AttachJobClient(jobClient)
 	messagingSvc.AttachJobClient(jobClient)
+	supplySvc.AttachJobClient(jobClient)
 
 	if cfg.RunMode.WorksJobs() {
 		// Not the signal context: cancelling Start's context would abort running
@@ -299,6 +303,7 @@ func run() error {
 			Payouts:       payoutsSvc,
 			Messages:      messagingSvc,
 			Engagement:    engagementSvc,
+			Supply:        supplySvc,
 			Hub:           hub,
 			Turnstile:     turnstile.New(cfg.TurnstileSecret),
 			IPLimiter:     ipLimiter,
