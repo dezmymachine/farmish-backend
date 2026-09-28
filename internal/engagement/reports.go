@@ -338,8 +338,8 @@ func fromReportRow(r db.Report) Report {
 		ReportedUserID: pgOrNil(r.ReportedUserID),
 		Reason:         r.Reason, Description: r.Description, Status: r.Status,
 		Action: r.Action, ResolutionNote: r.ResolutionNote,
-		ResolvedBy:     pgUserOrNil(r.ResolvedBy),
-		ResolvedAt:     r.ResolvedAt, CreatedAt: r.CreatedAt,
+		ResolvedBy: pgUserOrNil(r.ResolvedBy),
+		ResolvedAt: r.ResolvedAt, CreatedAt: r.CreatedAt,
 	}
 }
 

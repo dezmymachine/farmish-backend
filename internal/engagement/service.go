@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/dezmymachine/farmish-backend/internal/audit"
 	"github.com/dezmymachine/farmish-backend/internal/database"
 	"github.com/dezmymachine/farmish-backend/internal/db"
 	"github.com/dezmymachine/farmish-backend/internal/listings"
@@ -192,46 +191,6 @@ func (s *Service) SellerRating(ctx context.Context, sellerID uuid.UUID) (Rating,
 		return Rating{}, fmt.Errorf("seller rating: %w", err)
 	}
 	return Rating{Average: agg.Average, Count: agg.Count}, nil
-}
-
-// HideReview hides a review for moderation, with an audit event. An already
-// hidden review cannot be hidden again.
-func (s *Service) HideReview(ctx context.Context, adminID, reviewID uuid.UUID, reason string) (Review, error) {
-	trimmed := strings.TrimSpace(reason)
-	if len(trimmed) < 1 || len(trimmed) > 500 {
-		var invalid validation.Error
-		invalid.Add("reason", "must be between 1 and 500 characters")
-		return Review{}, invalid.OrNil()
-	}
-	var hidden db.Review
-	err := database.InTx(ctx, s.pool, func(tx pgx.Tx) error {
-		existing, err := db.New(tx).GetReviewByID(ctx, reviewID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("%w: %s", ErrNotFound, reviewID)
-		}
-		if err != nil {
-			return fmt.Errorf("get review: %w", err)
-		}
-		if existing.HiddenAt != nil {
-			return ErrAlreadyHidden
-		}
-		now := s.Now()
-		row, err := db.New(tx).SetReviewHidden(ctx, db.SetReviewHiddenParams{
-			ID: reviewID, HiddenAt: &now,
-		})
-		if err != nil {
-			return fmt.Errorf("hide review: %w", err)
-		}
-		hidden = row
-		return audit.Record(ctx, tx, audit.Event{
-			ActorID: &adminID, Action: "review.hide", TargetType: "review", TargetID: reviewID.String(),
-			Metadata: map[string]any{"reason": trimmed},
-		})
-	})
-	if err != nil {
-		return Review{}, err
-	}
-	return fromReviewRow(hidden), nil
 }
 
 // AddFavorite idempotently favourites a listing, bumping its counter only

@@ -7,22 +7,22 @@ import (
 
 // Template names, one per transition (DOMAIN §4's notify column).
 const (
-	TemplateOrderPaidSeller       = "order_paid_seller"
-	TemplateOrderAcceptedBuyer    = "order_accepted_buyer"
-	TemplateOrderRejectedBuyer    = "order_rejected_buyer"
-	TemplateOrderShippedBuyer     = "order_shipped_buyer"
-	TemplateOrderDeliveredBuyer   = "order_delivered_buyer"
-	TemplateOrderCompletedSeller  = "order_completed_seller"
-	TemplateOrderCancelledBuyer   = "order_cancelled_buyer"
-	TemplateOrderCancelledSeller  = "order_cancelled_seller"
-	TemplateOrderDisputedSeller   = "order_disputed_seller"
-	TemplateOrderRefundedBuyer    = "order_refunded_buyer"
-	TemplateDisputeResolvedBuyer  = "dispute_resolved_buyer"
-	TemplateDisputeResolvedSeller = "dispute_resolved_seller"
-	TemplatePayoutAccountChanged  = "payout_account_changed"
-	TemplatePayoutSent            = "payout_sent"
-	TemplatePayoutFailed          = "payout_failed"
-	TemplateMessageReceived       = "message_received"
+	TemplateOrderPaidSeller         = "order_paid_seller"
+	TemplateOrderAcceptedBuyer      = "order_accepted_buyer"
+	TemplateOrderRejectedBuyer      = "order_rejected_buyer"
+	TemplateOrderShippedBuyer       = "order_shipped_buyer"
+	TemplateOrderDeliveredBuyer     = "order_delivered_buyer"
+	TemplateOrderCompletedSeller    = "order_completed_seller"
+	TemplateOrderCancelledBuyer     = "order_cancelled_buyer"
+	TemplateOrderCancelledSeller    = "order_cancelled_seller"
+	TemplateOrderDisputedSeller     = "order_disputed_seller"
+	TemplateOrderRefundedBuyer      = "order_refunded_buyer"
+	TemplateDisputeResolvedBuyer    = "dispute_resolved_buyer"
+	TemplateDisputeResolvedSeller   = "dispute_resolved_seller"
+	TemplatePayoutAccountChanged    = "payout_account_changed"
+	TemplatePayoutSent              = "payout_sent"
+	TemplatePayoutFailed            = "payout_failed"
+	TemplateMessageReceived         = "message_received"
 	TemplateSupplyRequestPending    = "supply_request_pending"
 	TemplateSupplyRequestConfirmed  = "supply_request_confirmed"
 	TemplateSupplyRequestProcessing = "supply_request_processing"
@@ -33,22 +33,22 @@ const (
 // templates renders every message. Values are order facts the recipient
 // already knows; no names, phones or addresses are interpolated.
 var templates = map[string]string{
-	TemplateOrderPaidSeller:       "Farmish: you have a new paid order {{.orderIdShort}}. Accept it within 48 hours or it is cancelled and refunded.",
-	TemplateOrderAcceptedBuyer:    "Farmish: order {{.orderIdShort}} was accepted. We will message you when it ships.",
-	TemplateOrderRejectedBuyer:    "Farmish: order {{.orderIdShort}} was declined by the seller. Your payment is being refunded.",
-	TemplateOrderShippedBuyer:     "Farmish: order {{.orderIdShort}} is on its way.",
-	TemplateOrderDeliveredBuyer:   "Farmish: order {{.orderIdShort}} was delivered. Confirm receipt within 3 days or open a dispute.",
-	TemplateOrderCompletedSeller:  "Farmish: order {{.orderIdShort}} is complete. Your earnings were released to your balance.",
-	TemplateOrderCancelledBuyer:   "Farmish: order {{.orderIdShort}} was cancelled. Your payment is being refunded.",
-	TemplateOrderCancelledSeller:  "Farmish: order {{.orderIdShort}} was cancelled by the buyer.",
-	TemplateOrderDisputedSeller:   "Farmish: the buyer opened a dispute on order {{.orderIdShort}}. Our team will review it.",
-	TemplateOrderRefundedBuyer:    "Farmish: your refund for order {{.orderIdShort}} has been processed.",
-	TemplateDisputeResolvedBuyer:  "Farmish: the dispute on order {{.orderIdShort}} was resolved ({{.outcome}}). We will message you about next steps.",
-	TemplateDisputeResolvedSeller: "Farmish: the dispute on order {{.orderIdShort}} was resolved ({{.outcome}}). Released earnings appear in your balance.",
-	TemplatePayoutAccountChanged:  "Farmish: your payout account was changed. If this wasn't you, contact support.",
-	TemplatePayoutSent:            "Farmish: GHS {{.amount}} sent to your payout account.",
-	TemplatePayoutFailed:          "Farmish: your payout of GHS {{.amount}} failed. The amount is back in your balance.",
-	TemplateMessageReceived:       "Farmish: you have a new message about {{.title}}.",
+	TemplateOrderPaidSeller:         "Farmish: you have a new paid order {{.orderIdShort}}. Accept it within 48 hours or it is cancelled and refunded.",
+	TemplateOrderAcceptedBuyer:      "Farmish: order {{.orderIdShort}} was accepted. We will message you when it ships.",
+	TemplateOrderRejectedBuyer:      "Farmish: order {{.orderIdShort}} was declined by the seller. Your payment is being refunded.",
+	TemplateOrderShippedBuyer:       "Farmish: order {{.orderIdShort}} is on its way.",
+	TemplateOrderDeliveredBuyer:     "Farmish: order {{.orderIdShort}} was delivered. Confirm receipt within 3 days or open a dispute.",
+	TemplateOrderCompletedSeller:    "Farmish: order {{.orderIdShort}} is complete. Your earnings were released to your balance.",
+	TemplateOrderCancelledBuyer:     "Farmish: order {{.orderIdShort}} was cancelled. Your payment is being refunded.",
+	TemplateOrderCancelledSeller:    "Farmish: order {{.orderIdShort}} was cancelled by the buyer.",
+	TemplateOrderDisputedSeller:     "Farmish: the buyer opened a dispute on order {{.orderIdShort}}. Our team will review it.",
+	TemplateOrderRefundedBuyer:      "Farmish: your refund for order {{.orderIdShort}} has been processed.",
+	TemplateDisputeResolvedBuyer:    "Farmish: the dispute on order {{.orderIdShort}} was resolved ({{.outcome}}). We will message you about next steps.",
+	TemplateDisputeResolvedSeller:   "Farmish: the dispute on order {{.orderIdShort}} was resolved ({{.outcome}}). Released earnings appear in your balance.",
+	TemplatePayoutAccountChanged:    "Farmish: your payout account was changed. If this wasn't you, contact support.",
+	TemplatePayoutSent:              "Farmish: GHS {{.amount}} sent to your payout account.",
+	TemplatePayoutFailed:            "Farmish: your payout of GHS {{.amount}} failed. The amount is back in your balance.",
+	TemplateMessageReceived:         "Farmish: you have a new message about {{.title}}.",
 	TemplateSupplyRequestPending:    "Farmish: supply request {{.number}} received. We will confirm it shortly.",
 	TemplateSupplyRequestConfirmed:  "Farmish: supply request {{.number}} confirmed.",
 	TemplateSupplyRequestProcessing: "Farmish: supply request {{.number}} is being processed.",

@@ -319,7 +319,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 ### Phase 20b: Reports & supply requests · [spec](docs/phases/phase-20b.md)
 - **Depends on:** 16, 9
 - **Done when:** one open report per target, resolving can suspend a listing, and the supply-request status machine is tested with notifications.
-- [ ] Phase 20b
+- [x] Phase 20b
 
 ### Phase 21: Observability & hardening · [spec](docs/phases/phase-21.md)
 - **Depends on:** 18b, 19, 20a, 20b
@@ -378,6 +378,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-27 | Phase 18b: batched payout execution with verify-before-retry sends, late-success-to-admin, fresh-row admin retries, transfer-reference webhook keying scoped to transfer events, GHS text formatting without floats | ADR-0030 |
 | 2026-09-28 | Phase 19: REST writes plus push-only sockets (first-frame auth, pg_notify fan-out in-tx, Broadcast resync, gorilla with CVE watch, raw route outside codegen, empty-Origin allowed) | ADR-0031 |
 | 2026-09-28 | Phase 20a: order-bound reviews with buyer/stranger separation, terminal audited hides, idempotent favorites with exact counters, ratings on public surfaces | ADR-0032 |
+| 2026-09-28 | Phase 20b: listing/user reports with one-open-per-target and suspend/hide resolution, supply requests with the legacy-missing status machine, per-transition SMS and memoized spec parsing that saved the CI gate | ADR-0033 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
@@ -407,6 +408,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-27 | 18b | Phase 18b commits | `make ci` green. Daily batched payouts from `seller_payable` via Paystack Transfers: per-seller execute with advisory lock and `payout_initiated` posting, send with verify-before-retry, webhook settlement with late-success-to-admin, daily stuck reconciliation, seller balance/history and admin list/retry. Full CI caught an over-broad webhook keying change (scoped to transfer events, ADR-0030). Manual QA proved balance/history/retry shapes plus the signed webhook accept and `rejected:unknown_reference` recording. See ADR-0030 and `docs/reviews/phase-18b.md` |
 | 2026-09-28 | 19 | Phase 19 commits | `make ci` green. Buyer-seller conversations (REST: start/list/history/send/read with cursor pagination, unread counts, throttled SMS nudges) plus push-only WebSocket delivery (first-frame auth, participant-only fan-out via pg_notify, resync, slow-consumer drops, expiry, caps, 1001 shutdown). CI caught nothing new after the keying-scope lesson of 18b. Manual QA with real sockets proved ready, live message.created both sides, read events with byMe, origin refusal and SIGTERM drop with clean shutdown. See ADR-0031 and `docs/reviews/phase-19.md` |
 | 2026-09-28 | 20a | Phase 20a commits | `make ci` green. Order-bound reviews (completed-only, unique per order/listing/reviewer, hidden excluded from aggregates), idempotent favorites with exact counters incl. concurrent adds, seller ratings on public surfaces. Manual QA against the running API verified create/duplicate-409, public list with summary, idempotent favorite 204s with counter 1, flagged unavailable, hide with exclusion, and zero PII in logs. See ADR-0032 and `docs/reviews/phase-20a.md` |
+| 2026-09-28 | 20b | Phase 20b commits | `make ci` green. Reports (exactly-one-target, one open per reporter/target, admin resolve with suspend/hide/dismiss plus audits) and supply requests (parent-category lines, unit/phone/date validation, collision-retried SUP numbers, full status table with per-move SMS). CI timed out until the parsed spec was memoized (10:07 → 3:21). Manual QA verified report/suspend, supply create/cancel/admin moves and zero PII in logs. See ADR-0033 and `docs/reviews/phase-20b.md` |
 
 ## 10. Backlog (not scheduled)
 - Document the River test-fixture full-registry rule in `docs/ENGINEERING_GUIDE.md`: a `Work:true` test client whose registry lacks a worker kind its flow enqueues stalls the available job (seen with `notify.sms` on River v0.47.0). Found in Phase 16
