@@ -407,7 +407,7 @@ func TestMessagingEndpoints_WebSocket(t *testing.T) {
 // so frames are checked as raw JSON instead of HTTP responses.
 func assertRealtimeContract(t *testing.T, raw []byte) {
 	t.Helper()
-	spec, err := api.GetSpec()
+	spec, err := api.CachedSpec()
 	if err != nil {
 		t.Fatal(err)
 	}

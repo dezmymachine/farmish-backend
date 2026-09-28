@@ -99,7 +99,7 @@ func serve(t *testing.T, h http.Handler, req *http.Request) *httptest.ResponseRe
 // assertContract validates a recorded response against api/openapi.yaml.
 func assertContract(t *testing.T, req *http.Request, w *httptest.ResponseRecorder) {
 	t.Helper()
-	spec, err := api.GetSpec()
+	spec, err := api.CachedSpec()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func assertContract(t *testing.T, req *http.Request, w *httptest.ResponseRecorde
 // assertErrorEnvelope checks body against the spec's Error schema and code.
 func assertErrorEnvelope(t *testing.T, body []byte, code string) api.Error {
 	t.Helper()
-	spec, err := api.GetSpec()
+	spec, err := api.CachedSpec()
 	if err != nil {
 		t.Fatal(err)
 	}

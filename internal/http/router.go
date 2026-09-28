@@ -84,7 +84,7 @@ type UserService interface {
 // NewRouter returns the Gin engine with middleware and every operation in
 // api/openapi.yaml registered through the generated strict server.
 func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, error) {
-	spec, err := api.GetSpec()
+	spec, err := api.CachedSpec()
 	if err != nil {
 		return nil, fmt.Errorf("load openapi spec: %w", err)
 	}
@@ -93,7 +93,7 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 		return nil, err
 	}
 	// Separate spec copy: each middleware adjusts its own for routing.
-	authSpec, err := api.GetSpec()
+	authSpec, err := api.CachedSpec()
 	if err != nil {
 		return nil, fmt.Errorf("load openapi spec: %w", err)
 	}
@@ -116,7 +116,7 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 	if sharedLimiter == nil {
 		sharedLimiter = ratelimit.NewMemory()
 	}
-	limitSpec, err := api.GetSpec()
+	limitSpec, err := api.CachedSpec()
 	if err != nil {
 		return nil, fmt.Errorf("load openapi spec: %w", err)
 	}
@@ -124,7 +124,7 @@ func NewRouter(cfg config.Config, log *slog.Logger, deps Deps) (*gin.Engine, err
 	if err != nil {
 		return nil, err
 	}
-	turnstileSpec, err := api.GetSpec()
+	turnstileSpec, err := api.CachedSpec()
 	if err != nil {
 		return nil, fmt.Errorf("load openapi spec: %w", err)
 	}
