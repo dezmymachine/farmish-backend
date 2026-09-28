@@ -15,6 +15,8 @@ api/worker split stays safe.
 `git log --oneline 5b2bfdb..HEAD` output (plus the docs commit below):
 
 ```text
+b966626 Phase 19: deterministic slow-consumer drop and test hardening
+f4831be Phase 19: coalesce missing cover image key
 0c36160 Phase 19: tidy gorilla/websocket as direct dependency
 91a3e31 Phase 19: messaging and realtime tests
 a5aab34 Phase 19: messaging domain, realtime hub, contract and wiring
@@ -57,7 +59,7 @@ smoke: migrate ok, /healthz ok, redis limits ok, /v1/me 401 -> 200 with token, /
 ci: all checks passed
 ```
 
-Mid-phase the gate caught: tidy drift on the new dep, bodyclose/errcheck/gosec findings in tests and service, and an over-broad test helper. Full CI also caught the earlier webhook-keying lesson from 18b before this phase started.
+Mid-phase work fixed three real bugs the tests surfaced: `resync` published to a nil user list reached nobody (new `Hub.Broadcast`), the slow-consumer drop closed TCP before flushing 1013 (the writer now owns the close), and gorilla only answers pings while the app reads (test sockets drain continuously; production browsers read to render). A coalesce was needed for imageless cover keys. The gate also caught tidy drift, bodyclose/errcheck/gosec findings, and an over-broad test helper.
 
 ## Manual QA
 
