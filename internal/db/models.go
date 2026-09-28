@@ -147,6 +147,12 @@ type Dispute struct {
 	UpdatedAt      time.Time
 }
 
+type Favorite struct {
+	UserID    uuid.UUID
+	ListingID uuid.UUID
+	CreatedAt time.Time
+}
+
 type LedgerAccount struct {
 	ID        int64
 	Code      string
@@ -362,6 +368,19 @@ type Refund struct {
 	AttemptedAt      *time.Time
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+}
+
+type Review struct {
+	ID         uuid.UUID
+	OrderID    uuid.UUID
+	ListingID  uuid.UUID
+	SellerID   uuid.UUID
+	ReviewerID uuid.UUID
+	Rating     int16
+	Comment    *string
+	HiddenAt   *time.Time
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 type RiverJob struct {

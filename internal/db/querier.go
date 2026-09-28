@@ -16,12 +16,14 @@ type Querier interface {
 	AddOrderRefundedPesewas(ctx context.Context, arg AddOrderRefundedPesewasParams) (Order, error)
 	// Marks the object attached, but only while it is still pending.
 	AttachMediaObject(ctx context.Context, id uuid.UUID) (MediaObject, error)
+	BumpFavoriteCount(ctx context.Context, arg BumpFavoriteCountParams) error
 	CompleteWebhookEvent(ctx context.Context, arg CompleteWebhookEventParams) error
 	CountAdminPayouts(ctx context.Context, arg CountAdminPayoutsParams) (int64, error)
 	// A listing's category must be a leaf (or a parent with no children).
 	CountCategoryChildren(ctx context.Context, parentID pgtype.UUID) (int64, error)
 	CountConversationsByParticipant(ctx context.Context, buyerID uuid.UUID) (int64, error)
 	CountDisputes(ctx context.Context, status *string) (int64, error)
+	CountFavoritesByUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountInFlightPayoutsForSeller(ctx context.Context, sellerID uuid.UUID) (int64, error)
 	// Refunds that may still move money for an order. The escrow release waits
 	// while any exists (Phase 17b partial resolutions).
@@ -36,6 +38,7 @@ type Querier interface {
 	// The caller's unread: others' messages newer than their read marker, or all
 	// of them when they never marked read.
 	CountUnread(ctx context.Context, arg CountUnreadParams) (int64, error)
+	CountVisibleReviewsByListing(ctx context.Context, listingID uuid.UUID) (int64, error)
 	// Creates an account, or returns no row when code already exists. Dynamic
 	// seller and promotion-credit accounts use this path; the caller selects the
 	// existing row after losing the race.
@@ -45,6 +48,8 @@ type Querier interface {
 	// already posted. That missing row is the caller's idempotency signal.
 	CreateLedgerTransaction(ctx context.Context, arg CreateLedgerTransactionParams) (LedgerTransaction, error)
 	DeleteAttribute(ctx context.Context, arg DeleteAttributeParams) (uuid.UUID, error)
+	// Idempotent remove: the caller drops the counter only when a row went away.
+	DeleteFavorite(ctx context.Context, arg DeleteFavoriteParams) (int64, error)
 	DeleteListing(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	DeleteListingAttributes(ctx context.Context, listingID uuid.UUID) error
 	DeleteListingImages(ctx context.Context, listingID uuid.UUID) error
@@ -72,6 +77,7 @@ type Querier interface {
 	GetConversationForUpdate(ctx context.Context, id uuid.UUID) (Conversation, error)
 	GetDisputeByID(ctx context.Context, id uuid.UUID) (Dispute, error)
 	GetDisputeForUpdate(ctx context.Context, id uuid.UUID) (Dispute, error)
+	GetFavorite(ctx context.Context, arg GetFavoriteParams) (Favorite, error)
 	// The newest message of a conversation, for summaries. Returns no row when
 	// the conversation has no messages yet.
 	GetLastMessage(ctx context.Context, conversationID uuid.UUID) (Message, error)
@@ -86,6 +92,9 @@ type Querier interface {
 	// whatsapp_e164 are the seller's own values: they leave the building only
 	// when the matching show_* flag is true.
 	GetListingContactDetails(ctx context.Context, id uuid.UUID) (GetListingContactDetailsRow, error)
+	// Existence gate for favorites: any listing may be favourited, including
+	// inactive ones (they show flagged).
+	GetListingForFavorite(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	// The listing a conversation starts from: its seller, status and title for
 	// the checks and the summary. Expired counts as inactive: the public reads
 	// filter expires_at the same way.
@@ -126,6 +135,7 @@ type Querier interface {
 	GetRefundForUpdate(ctx context.Context, id uuid.UUID) (Refund, error)
 	// Matches a refund webhook once Paystack's id has been stored by the job.
 	GetRefundForUpdateByPaystackRefundID(ctx context.Context, paystackRefundID *string) (Refund, error)
+	GetReviewByID(ctx context.Context, id uuid.UUID) (Review, error)
 	GetSellerProfile(ctx context.Context, userID uuid.UUID) (SellerProfile, error)
 	GetSellerProfileForUpdate(ctx context.Context, userID uuid.UUID) (SellerProfile, error)
 	GetUserByFirebaseUID(ctx context.Context, firebaseUid string) (User, error)
@@ -146,6 +156,9 @@ type Querier interface {
 	// Returns no row when the order already has a dispute: the buyer cannot open
 	// a second case (the unique order_id enforces it).
 	InsertDispute(ctx context.Context, arg InsertDisputeParams) (Dispute, error)
+	// Idempotent add: returns no row when already favourited. The caller bumps
+	// the counter only on a returned row, in the same transaction.
+	InsertFavorite(ctx context.Context, arg InsertFavoriteParams) (Favorite, error)
 	InsertListing(ctx context.Context, arg InsertListingParams) (Listing, error)
 	InsertListingAttribute(ctx context.Context, arg InsertListingAttributeParams) error
 	InsertListingImage(ctx context.Context, arg InsertListingImageParams) error
@@ -174,6 +187,9 @@ type Querier interface {
 	// partial unique index is the idempotency guard, and the caller treats a
 	// missing row as "already recorded".
 	InsertRefund(ctx context.Context, arg InsertRefundParams) (Refund, error)
+	// Records a review. Returns no row when this reviewer already reviewed this
+	// listing in this order: the caller treats that as already_reviewed.
+	InsertReview(ctx context.Context, arg InsertReviewParams) (Review, error)
 	// Returns no row if a concurrent request created the user first.
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
 	// Returns no row when (provider, event_key) already exists: that is a replay,
@@ -210,6 +226,10 @@ type Querier interface {
 	ListExpiredPendingCheckouts(ctx context.Context, arg ListExpiredPendingCheckoutsParams) ([]Checkout, error)
 	// Installed Postgres extensions; used by tests to assert migration 000001.
 	ListExtensions(ctx context.Context) ([]string, error)
+	// The caller's favourited listings, newest favourited first, including
+	// inactive ones: the available flag tells the client which are browsable.
+	// The projection mirrors SearchListings so summaries map the same way.
+	ListFavoriteListings(ctx context.Context, arg ListFavoriteListingsParams) ([]ListFavoriteListingsRow, error)
 	// The webhook fallback match, before a refund's paystack_refund_id is known:
 	// the order's payment reference plus the refunded amount, restricted to
 	// refunds still in flight. A multi-seller checkout shares one reference, so
@@ -262,6 +282,7 @@ type Querier interface {
 	ListUnacceptedPaidOrders(ctx context.Context, arg ListUnacceptedPaidOrdersParams) ([]Order, error)
 	// Several accounts may share an email (no account linking in v1).
 	ListUsersByEmail(ctx context.Context, email *string) ([]User, error)
+	ListVisibleReviewsByListing(ctx context.Context, arg ListVisibleReviewsByListingParams) ([]Review, error)
 	// Serialises one seller's payout execution against concurrent sweeps.
 	LockPayoutSeller(ctx context.Context, dollar_1 string) (interface{}, error)
 	// Serializes one buyer's credit balance changes for the transaction. The
@@ -299,6 +320,9 @@ type Querier interface {
 	//     unpromoted (DOMAIN §6).
 	//
 	SearchListings(ctx context.Context, arg SearchListingsParams) ([]SearchListingsRow, error)
+	// The seller's aggregate over visible reviews: the average to one decimal
+	// and the count. Average is 0 when there are no visible reviews.
+	SellerRating(ctx context.Context, sellerID uuid.UUID) (SellerRatingRow, error)
 	SetCheckoutPayment(ctx context.Context, arg SetCheckoutPaymentParams) error
 	SetCheckoutStatus(ctx context.Context, arg SetCheckoutStatusParams) error
 	SetConversationLastMessage(ctx context.Context, arg SetConversationLastMessageParams) error
@@ -362,6 +386,8 @@ type Querier interface {
 	// Any status except processed may still move; processed is final, so a
 	// replayed webhook or a job retry can never reopen a settled refund.
 	SetRefundStatus(ctx context.Context, arg SetRefundStatusParams) error
+	// Hides a review for moderation. Returns no row when already hidden.
+	SetReviewHidden(ctx context.Context, arg SetReviewHiddenParams) (Review, error)
 	// Stores a (new) encrypted ID and (re)submits the profile for verification.
 	SetSellerIdentity(ctx context.Context, arg SetSellerIdentityParams) (SellerProfile, error)
 	// Records an admin verification decision (reviewed_at = now()).

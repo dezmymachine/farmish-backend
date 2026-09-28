@@ -87,6 +87,20 @@ func (s *Service) Get(ctx context.Context, callerID, orderID uuid.UUID) (Detail,
 	return detail, row.SellerID == callerID, nil
 }
 
+// BuyerOf returns one order's buyer id. Unlike Get it performs no party
+// check: callers use it to tell "no such order" (404) from "not yours"
+// (403) without leaking anything else.
+func (s *Service) BuyerOf(ctx context.Context, orderID uuid.UUID) (uuid.UUID, error) {
+	row, err := db.New(s.pool).GetOrderByID(ctx, orderID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.UUID{}, fmt.Errorf("%w: %s", ErrNotFound, orderID)
+	}
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("get order: %w", err)
+	}
+	return row.BuyerID, nil
+}
+
 // detailUnchecked returns one order's detail without the party check, for the
 // admin surfaces (disputes, admin order view). Callers must require the admin
 // role before calling it.
