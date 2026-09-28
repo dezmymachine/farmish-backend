@@ -119,7 +119,7 @@ func EncodeCursor(createdAt time.Time, id uuid.UUID) string {
 func DecodeCursor(cursor string) (time.Time, uuid.UUID, error) {
 	raw, err := base64.RawURLEncoding.DecodeString(cursor)
 	if err != nil {
-		return time.Time{}, uuid.UUID{}, fmt.Errorf("%w: %v", ErrBadCursor, err)
+		return time.Time{}, uuid.UUID{}, fmt.Errorf("%w: %s", ErrBadCursor, err.Error())
 	}
 	parts := strings.SplitN(string(raw), "|", 2)
 	if len(parts) != 2 {
@@ -127,11 +127,11 @@ func DecodeCursor(cursor string) (time.Time, uuid.UUID, error) {
 	}
 	at, err := time.Parse(time.RFC3339Nano, parts[0])
 	if err != nil {
-		return time.Time{}, uuid.UUID{}, fmt.Errorf("%w: %v", ErrBadCursor, err)
+		return time.Time{}, uuid.UUID{}, fmt.Errorf("%w: %s", ErrBadCursor, err.Error())
 	}
 	id, err := uuid.Parse(parts[1])
 	if err != nil {
-		return time.Time{}, uuid.UUID{}, fmt.Errorf("%w: %v", ErrBadCursor, err)
+		return time.Time{}, uuid.UUID{}, fmt.Errorf("%w: %s", ErrBadCursor, err.Error())
 	}
 	return at, id, nil
 }

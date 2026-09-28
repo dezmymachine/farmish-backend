@@ -63,13 +63,6 @@ func (s *Service) AttachJobClient(client *jobs.Client) { s.jobs = client }
 // AttachLogger gives the service its logger.
 func (s *Service) AttachLogger(l *slog.Logger) { s.log = l }
 
-func (s *Service) logger() *slog.Logger {
-	if s.log == nil {
-		return slog.Default()
-	}
-	return s.log
-}
-
 // StartConversation opens (or reuses) the buyer's conversation for a listing
 // and appends the first message. created reports whether the row is new
 // (201) or existing (200).
@@ -100,15 +93,17 @@ func (s *Service) StartConversation(ctx context.Context, buyerID, listingID uuid
 		row, err := q.InsertConversation(ctx, db.InsertConversationParams{
 			ListingID: listingID, BuyerID: buyerID, SellerID: listing.SellerID,
 		})
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("insert conversation: %w", err)
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
+			// The unique index already held this conversation: append.
 			row, err = q.GetConversationByListingBuyer(ctx, db.GetConversationByListingBuyerParams{
 				ListingID: listingID, BuyerID: buyerID,
 			})
 			if err != nil {
 				return fmt.Errorf("get existing conversation: %w", err)
 			}
-		} else if err != nil {
-			return fmt.Errorf("insert conversation: %w", err)
 		} else {
 			created = true
 		}
@@ -245,13 +240,13 @@ func (s *Service) GetMessages(ctx context.Context, callerID, conversationID uuid
 	}
 	out := make([]Message, 0, len(rows))
 	for _, r := range rows {
-		if int32(len(out)) >= limit {
+		if len(out) >= int(limit) {
 			break
 		}
 		out = append(out, fromMessageRow(r))
 	}
 	var next *string
-	if int32(len(rows)) > limit && len(out) > 0 {
+	if len(rows) > int(limit) && len(out) > 0 {
 		last := out[len(out)-1]
 		cursor := EncodeCursor(last.CreatedAt, last.ID)
 		next = &cursor
@@ -337,8 +332,9 @@ func (s *Service) summarize(ctx context.Context, convo Conversation, callerID uu
 			ID: convo.ListingID, Slug: listing.Slug, Title: listing.Title,
 		},
 	}
-	if listing.CoverKey != "" && s.media != nil {
-		if url := s.media.PublicURL(listing.CoverKey); url != "" {
+	coverKey, _ := listing.CoverKey.(string)
+	if coverKey != "" && s.media != nil {
+		if url := s.media.PublicURL(coverKey); url != "" {
 			summary.Listing.CoverImageURL = &url
 		}
 	}
@@ -358,11 +354,12 @@ func (s *Service) summarize(ctx context.Context, convo Conversation, callerID uu
 		summary.Counterpart = Counterpart{UserID: convo.BuyerID, Name: name}
 	}
 	last, err := q.GetLastMessage(ctx, convo.ID)
-	if errors.Is(err, pgx.ErrNoRows) {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
 		last = db.Message{}
-	} else if err != nil {
+	case err != nil:
 		return Summary{}, fmt.Errorf("get last message: %w", err)
-	} else {
+	default:
 		summary.LastMessage = &LastMessage{
 			Body: Truncate(last.Body), CreatedAt: last.CreatedAt, FromMe: last.SenderID == callerID,
 		}

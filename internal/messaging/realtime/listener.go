@@ -56,7 +56,7 @@ func (l *Listener) Run(ctx context.Context) error {
 		if l.backoff < time.Minute {
 			l.backoff *= 2
 		}
-		l.hub.Publish(nil, Frame{Type: "resync"})
+		l.hub.Broadcast(Frame{Type: "resync"})
 		l.backoff = time.Second
 	}
 }

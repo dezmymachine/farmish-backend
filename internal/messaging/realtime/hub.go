@@ -118,6 +118,9 @@ type Client struct {
 	once      sync.Once
 	userID    uuid.UUID
 	hub       *Hub
+	// registered reports whether add() counted this client in the
+	// shutdown WaitGroup. Guarded by the hub mutex.
+	registered bool
 }
 
 // add registers a client, enforcing the per-user cap. False means the cap
@@ -137,6 +140,7 @@ func (h *Hub) add(c *Client) bool {
 		h.clients[c.userID] = set
 	}
 	set[c] = struct{}{}
+	c.registered = true
 	h.wg.Add(1)
 	return true
 }
@@ -145,6 +149,8 @@ func (h *Hub) add(c *Client) bool {
 // channel wakes the writer, and the closed connection unblocks the reader.
 func (h *Hub) remove(c *Client) {
 	h.mu.Lock()
+	registered := c.registered
+	c.registered = false
 	if set := h.clients[c.userID]; set != nil {
 		delete(set, c)
 		if len(set) == 0 {
@@ -155,7 +161,9 @@ func (h *Hub) remove(c *Client) {
 	c.once.Do(func() {
 		close(c.done)
 		_ = c.conn.Close()
-		h.wg.Done()
+		if registered {
+			h.wg.Done()
+		}
 	})
 }
 
@@ -180,6 +188,34 @@ func (h *Hub) Publish(userIDs []uuid.UUID, frame Frame) {
 	if !h.closed {
 		for _, id := range userIDs {
 			for c := range h.clients[id] {
+				select {
+				case c.send <- raw:
+				default:
+					slow = append(slow, c)
+				}
+			}
+		}
+	}
+	h.mu.Unlock()
+	for _, c := range slow {
+		c.requestClose(CloseTryAgain, "slow consumer, reconnect")
+		h.remove(c)
+	}
+}
+
+// Broadcast sends a frame to every connected socket (resync): it is the
+// only publish path that is not addressed to named users.
+func (h *Hub) Broadcast(frame Frame) {
+	raw, err := json.Marshal(frame)
+	if err != nil {
+		h.log.Error("marshal realtime frame", slog.String("error", err.Error()))
+		return
+	}
+	var slow []*Client
+	h.mu.Lock()
+	if !h.closed {
+		for _, set := range h.clients {
+			for c := range set {
 				select {
 				case c.send <- raw:
 				default:

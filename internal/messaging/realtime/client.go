@@ -55,7 +55,7 @@ func (c *Client) readPump(ctx context.Context, authn Authenticator) {
 		return c.conn.SetReadDeadline(nextDeadline(h.now(), h.opts.PongWait, exp))
 	})
 	for {
-		c.conn.SetReadDeadline(nextDeadline(h.now(), h.opts.PongWait, exp))
+		_ = c.conn.SetReadDeadline(nextDeadline(h.now(), h.opts.PongWait, exp))
 		_, raw, err := c.conn.ReadMessage()
 		if err != nil {
 			if expired(h.now(), exp) {
