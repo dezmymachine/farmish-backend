@@ -10,9 +10,9 @@ This is the canonical instruction file for AI coding agents (Muse Spark, Claude,
 
 ## Current state (update this section when a phase completes)
 
-- **Done:** Phases 0–20b (skeleton, Postgres 18 + migrations + sqlc, OpenAPI 3.1 contract + codegen + validation, Firebase auth + users, River jobs, rate limiting + Turnstile, phone hardening + step-up re-auth, profiles & seller onboarding, catalog, media uploads on R2, listings CRUD, search & browse, payments core with Paystack and webhooks, ledger foundation, promotions, checkout foundations, checkout payment & escrow hold, fulfilment state machine & notifications, escrow release & refunds, disputes & ledger reconciliation, seller payout accounts, payout execution, messaging with realtime push, reviews & favorites, reports & supply requests), plus Upstash Redis for shared rate limits (ADR-0012).
-- **Next:** **Phase 21** (`docs/phases/phase-21.md`) (Observability & hardening; depends on 18b, 19, 20a, 20b).
-- **Owner decisions** are recorded in `docs/DOMAIN.md` §2–3 (ADR-0013), the Phase 12 path and view-hash decisions in ADR-0018/0019, the Phase 13a webhook decisions in ADR-0020/0021, the Phase 14 promotion-snapshot and renewal-shape decisions in ADR-0022/0023, the Phase 15a mixed-category commission rule in ADR-0024, and the Phase 15b late-payment settlement rule in ADR-0025, the Phase 16 mNotify endpoint verification in ADR-0026, the Phase 17a refund lifecycle and reconciliation in ADR-0027, the Phase 17b dispute resolution mechanics in ADR-0028, and the Phase 18a payout account resolution in ADR-0029, the Phase 18b payout execution in ADR-0030, the Phase 19 realtime messaging in ADR-0031, the Phase 20a reviews and favorites in ADR-0032, and the Phase 20b reports and supply in ADR-0033.
+- **Done:** Phases 0–21 (skeleton, Postgres 18 + migrations + sqlc, OpenAPI 3.1 contract + codegen + validation, Firebase auth + users, River jobs, rate limiting + Turnstile, phone hardening + step-up re-auth, profiles & seller onboarding, catalog, media uploads on R2, listings CRUD, search & browse, payments core with Paystack and webhooks, ledger foundation, promotions, checkout foundations, checkout payment & escrow hold, fulfilment state machine & notifications, escrow release & refunds, disputes & ledger reconciliation, seller payout accounts, payout execution, messaging with realtime push, reviews & favorites, reports & supply requests, observability & hardening), plus Upstash Redis for shared rate limits (ADR-0012).
+- **Next:** **Phase 22** (`docs/phases/phase-22.md`) (Deploy & contract freeze; needs the owner for accounts, DNS and live keys).
+- **Owner decisions** are recorded in `docs/DOMAIN.md` §2–3 (ADR-0013), the Phase 12 path and view-hash decisions in ADR-0018/0019, the Phase 13a webhook decisions in ADR-0020/0021, the Phase 14 promotion-snapshot and renewal-shape decisions in ADR-0022/0023, the Phase 15a mixed-category commission rule in ADR-0024, and the Phase 15b late-payment settlement rule in ADR-0025, the Phase 16 mNotify endpoint verification in ADR-0026, the Phase 17a refund lifecycle and reconciliation in ADR-0027, the Phase 17b dispute resolution mechanics in ADR-0028, and the Phase 18a payout account resolution in ADR-0029, the Phase 18b payout execution in ADR-0030, the Phase 19 realtime messaging in ADR-0031, the Phase 20a reviews and favorites in ADR-0032, the Phase 20b reports and supply in ADR-0033, and the Phase 21 observability choices in ADR-0034 (alerts are in `docs/runbooks/alerts.md`).
 
 ## What this is
 
@@ -93,6 +93,7 @@ Run from this repo:
 | `make test` | All tests with `-race`, DB/auth/Redis required |
 | `make lint` / `make fmt` | golangci-lint v2 / gofumpt + goimports |
 | `make ci` | **The gate:** tidy-check, fmt-check, api-lint, generate-check, sqlc-check, lint, test, vuln, smoke |
+| `make loadtest` | k6 smoke load test (browse, checkout, webhook replays) against a local API and a Paystack stub; not part of `make ci` |
 | `make grant-admin EMAIL=x` | Make a user admin (DB role + Firebase claim) |
 | `scripts/dev-token.sh <email> <pw>` | ID token for curl (emulator by default) |
 

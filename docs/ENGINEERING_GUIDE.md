@@ -227,7 +227,9 @@ See `internal/config/config.go`.
   - **Warn:** degraded behaviour.
   - **Error:** something failed that needs attention.
 - Use structured attrs: `slog.String("order_id", id.String())`.
-- **Never** log tokens, full phones (`maskPhone("+233241234567") = "+233*****4567"`, to be added in `internal/geo` or `pkg/redact` in Phase 7), account numbers, ID numbers, or raw webhook bodies. Log `event`, `reference` and `status` instead.
+- **Never** log tokens, full phones (`redact.Phone("+233241234567") = "+233*****4567"`; `geo.MaskPhone` is the same function), account numbers, ID numbers, or raw webhook bodies. Log `event`, `reference` and `status` instead.
+- **Redaction is a backstop, not a licence.** `logger.New` wraps its handler in `redact.Handler` (`pkg/redact`), which replaces the value of keys such as `phone`, `token`, `authorization`, `id_number`, `email`, `secret` and `account_number`, and scrubs JWTs, bearer credentials and `+233…` numbers found inside any string. Still mask at the call site: `TestLogs_NoSecretsOrPII` reads the logs from the raw handler, so a leak the redactor would hide still fails it. A new sensitive key goes in `pkg/redact`'s list.
+- **Metrics:** record with the package-level collectors in `internal/metrics` (`metrics.PayoutsTotal.WithLabelValues(...).Inc()`). Label values come from a fixed set (status enums, route templates, rule names), never from a request or a user. A new series is listed in `docs/runbooks/alerts.md` when it backs an alert.
 
 ## 11. External services (Paystack, mNotify, R2)
 

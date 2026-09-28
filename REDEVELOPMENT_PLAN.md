@@ -324,7 +324,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 ### Phase 21: Observability & hardening · [spec](docs/phases/phase-21.md)
 - **Depends on:** 18b, 19, 20a, 20b
 - **Done when:** k6 thresholds pass locally, there are no secrets, OTPs or phones in a log sample, metrics are exposed, and audit coverage is tested.
-- [ ] Phase 21
+- [x] Phase 21
 
 ### Phase 22: Deploy (Railway + Neon + Upstash + Cloudflare) & contract freeze · [spec](docs/phases/phase-22.md)
 - **Depends on:** 21 (needs the owner for accounts, DNS and live keys)
@@ -344,7 +344,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 - [ ] **F9 Launch:** SEO, performance, accessibility, monitoring, production deploy, legacy redirects.
 
 ## 7. Environment variables (backend)
-`APP_ENV`, `PORT`, `LOG_LEVEL`, `SHUTDOWN_TIMEOUT` (total SIGTERM-to-exit budget), `RUN_MODE` (`all|api|worker`), `JOBS_MAX_WORKERS`, `DATABASE_URL`, `DB_MAX_CONNS`, `DB_STATEMENT_TIMEOUT`, `CORS_ORIGINS`, `FIREBASE_PROJECT_ID`, `FIREBASE_CREDENTIALS_JSON`, `FIREBASE_AUTH_EMULATOR_HOST` (dev/test only, refused in staging/production), `TURNSTILE_SECRET`, `TRUSTED_PROXIES`, `TRUST_CLOUDFLARE`, `REDIS_URL` (optional, `rediss://`), `REDIS_TIMEOUT`, `MNOTIFY_API_KEY`, `MNOTIFY_SENDER` (Phase 16), `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `DATA_ENCRYPTION_KEY`, `R2_ENDPOINT` (MinIO override), `PAYSTACK_BASE_URL`, `PAYSTACK_CALLBACK_URL`, `PAYSTACK_FEE_BPS` (195), `PAYSTACK_TRANSFER_FEE_PESEWAS` (0 until confirmed), `CHECKOUT_EXPIRY_MINUTES` (30), `ESCROW_AUTO_COMPLETE_DAYS` (3), `SELLER_ACCEPT_TIMEOUT_HOURS` (48), `PAYOUT_MIN_PESEWAS` (2000), `NOTIFY_SMS_ENABLED`, `METRICS_ADDR` (Phase 21). Each phase spec lists its variables; add them to `internal/config`, `.env.example` and this list when implementing.
+`APP_ENV`, `PORT`, `LOG_LEVEL`, `SHUTDOWN_TIMEOUT` (total SIGTERM-to-exit budget), `RUN_MODE` (`all|api|worker`), `JOBS_MAX_WORKERS`, `DATABASE_URL`, `DB_MAX_CONNS`, `DB_STATEMENT_TIMEOUT`, `CORS_ORIGINS`, `FIREBASE_PROJECT_ID`, `FIREBASE_CREDENTIALS_JSON`, `FIREBASE_AUTH_EMULATOR_HOST` (dev/test only, refused in staging/production), `TURNSTILE_SECRET`, `TRUSTED_PROXIES`, `TRUST_CLOUDFLARE`, `REDIS_URL` (optional, `rediss://`), `REDIS_TIMEOUT`, `MNOTIFY_API_KEY`, `MNOTIFY_SENDER` (Phase 16), `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `DATA_ENCRYPTION_KEY`, `R2_ENDPOINT` (MinIO override), `PAYSTACK_BASE_URL`, `PAYSTACK_CALLBACK_URL`, `PAYSTACK_FEE_BPS` (195), `PAYSTACK_TRANSFER_FEE_PESEWAS` (0 until confirmed), `CHECKOUT_EXPIRY_MINUTES` (30), `ESCROW_AUTO_COMPLETE_DAYS` (3), `SELLER_ACCEPT_TIMEOUT_HOURS` (48), `PAYOUT_MIN_PESEWAS` (2000), `NOTIFY_SMS_ENABLED`, `MNOTIFY_LOW_BALANCE` (200 credits), `METRICS_ADDR` (Phase 21). Each phase spec lists its variables; add them to `internal/config`, `.env.example` and this list when implementing.
 
 ## 8. Decisions log
 | Date | Decision | ADR |
@@ -379,6 +379,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-28 | Phase 19: REST writes plus push-only sockets (first-frame auth, pg_notify fan-out in-tx, Broadcast resync, gorilla with CVE watch, raw route outside codegen, empty-Origin allowed) | ADR-0031 |
 | 2026-09-28 | Phase 20a: order-bound reviews with buyer/stranger separation, terminal audited hides, idempotent favorites with exact counters, ratings on public surfaces | ADR-0032 |
 | 2026-09-28 | Phase 20b: listing/user reports with one-open-per-target and suspend/hide resolution, supply requests with the legacy-missing status machine, per-transition SMS and memoized spec parsing that saved the CI gate | ADR-0033 |
+| 2026-09-28 | Phase 21: private `/metrics` listener with route-template labels, log redaction by key and value proven against the raw call sites, audit gaps closed under a table-driven coverage test, per-user k6 load test against a production-guarded Paystack stub, mNotify key kept out of transport errors, daily mNotify balance check | ADR-0034 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
@@ -409,6 +410,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-28 | 19 | Phase 19 commits | `make ci` green. Buyer-seller conversations (REST: start/list/history/send/read with cursor pagination, unread counts, throttled SMS nudges) plus push-only WebSocket delivery (first-frame auth, participant-only fan-out via pg_notify, resync, slow-consumer drops, expiry, caps, 1001 shutdown). CI caught nothing new after the keying-scope lesson of 18b. Manual QA with real sockets proved ready, live message.created both sides, read events with byMe, origin refusal and SIGTERM drop with clean shutdown. See ADR-0031 and `docs/reviews/phase-19.md` |
 | 2026-09-28 | 20a | Phase 20a commits | `make ci` green. Order-bound reviews (completed-only, unique per order/listing/reviewer, hidden excluded from aggregates), idempotent favorites with exact counters incl. concurrent adds, seller ratings on public surfaces. Manual QA against the running API verified create/duplicate-409, public list with summary, idempotent favorite 204s with counter 1, flagged unavailable, hide with exclusion, and zero PII in logs. See ADR-0032 and `docs/reviews/phase-20a.md` |
 | 2026-09-28 | 20b | Phase 20b commits | `make ci` green. Reports (exactly-one-target, one open per reporter/target, admin resolve with suspend/hide/dismiss plus audits) and supply requests (parent-category lines, unit/phone/date validation, collision-retried SUP numbers, full status table with per-move SMS). CI timed out until the parsed spec was memoized (10:07 → 3:21). Manual QA verified report/suspend, supply create/cancel/admin moves and zero PII in logs. See ADR-0033 and `docs/reviews/phase-20b.md` |
+| 2026-09-28 | 21 | Phase 21 commits | `make ci` green. Private `/metrics` listener (HTTP by route template, DB pool, River depth and events, payment/payout/refund counters, ledger violations, rate-limit denials and fallbacks) with the listener bound at boot; log redaction by key and value proven by a test that reads the raw logs of a phone sign-in, checkout, dispute, refund and payout run; audit rows for payment success, refund queued/processed, payout created/succeeded, dispute opened and admin role changes under a table-driven coverage test; security headers on every response; `make loadtest` (browse p95 36 ms, checkout p95 23 ms, webhook replays p95 4 ms, 0% failed) against a local API and a production-guarded Paystack stub; `docs/runbooks/alerts.md` with ten alerts; a daily mNotify balance check, and mNotify transport errors no longer carry the API key. See ADR-0034 |
 
 ## 10. Backlog (not scheduled)
 - Document the River test-fixture full-registry rule in `docs/ENGINEERING_GUIDE.md`: a `Work:true` test client whose registry lacks a worker kind its flow enqueues stalls the available job (seen with `notify.sms` on River v0.47.0). Found in Phase 16
@@ -423,6 +425,11 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 - Redis-backed caching (via `internal/redisx`) when a phase needs it
 - River UI for admins (needs a browser session/cookie auth flow; `RequireAuth` + `RequireAdmin` already exist)
 - Seller reserve/holdback against chargebacks
+- Make the listing search read survive a live listing with no image row: `cover_key` is scanned into a plain string, so one such listing 500s every search that returns it. Publishing requires an image, so only a bad write can cause it. Found by the Phase 21 load test (ADR-0034)
+- Count the money metrics after commit instead of inside the transaction, if a phantom double count under a serialization retry ever pages someone. Needs an after-commit hook (ADR-0034)
+- Verify the mNotify balance response body with a live key: the route was probed, the success shape decoded tolerantly (ADR-0034). Owner task once `MNOTIFY_API_KEY` exists
+- Open a dispute atomically: `orders.Service.Dispute` moves the order to `disputed` in one transaction and inserts the dispute row and its `dispute.opened` audit in a second, so a crash between them leaves a disputed order with no dispute. Noticed in Phase 21
+- Run `make loadtest` in the restored GitHub Actions workflow (it is not part of `make ci`: about two minutes plus an image pull)
 - `ledger.CheckoutPaid` with an actual Paystack fee of exactly 0 emits a zero `paystack_fees` leg that `Post` rejects; settlement would stall if Paystack ever reports a zero fee. Found in Phase 18b fixture work
 
 ## 11. Open items / risks
@@ -435,7 +442,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 - **Client IP behind Railway + Cloudflare (Phase 22):** find the Railway edge's source addresses for `TRUSTED_PROXIES`, set `TRUST_CLOUDFLARE=true`, verify the logged `client_ip`, and consider restricting the origin to Cloudflare (ADR-0011).
 - **Upstash:** free tier is 500K commands/month; watch usage in the console. Keep the Upstash DB in the Railway region (a ~200ms round trip would hit the fallback timeout). Rotate the credential that was pasted into a chat before any deployment (ADR-0012).
 - **Chargebacks after release:** the platform bears the loss. See the reserve backlog item.
-- **mNotify (transactional SMS):** sender ID `FARMISH` approval (ship with the default sender) and low-balance alerting.
+- **mNotify (transactional SMS):** sender ID `FARMISH` approval (ship with the default sender). Low-balance alerting exists since Phase 21 (`notify.check_balance`, `MNOTIFY_LOW_BALANCE`); confirm its response shape with the live key.
 - **Firebase phone auth:**
   - requires the **Blaze (billing) plan**; each SMS is charged
   - SMS-pumping abuse: restrict the SMS region policy to Ghana, enable App Check, set a GCP budget alert (Phase 7)
