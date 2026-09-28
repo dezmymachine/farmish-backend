@@ -308,7 +308,7 @@ func toListingDetail(d listings.PublicDetail, rating api.SellerRating) api.Listi
 		QuantityAvailable: d.QuantityAvailable, MinOrderQty: d.MinOrderQty,
 		IsNegotiable: d.IsNegotiable, Area: d.Area, DeliveryOptions: delivery,
 		Images: images, Attributes: attributes, ExpiresAt: derefTime(d.ExpiresAt),
-		FavoriteCount: d.FavoriteCount,
+		FavoriteCount: d.FavoriteCount, Rating: rating,
 	}
 	if d.Promo != nil {
 		out.Promoted = &api.ListingPromotion{Tier: api.ListingPromotionTier(d.Promo.Tier)}

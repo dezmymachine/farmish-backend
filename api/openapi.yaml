@@ -705,7 +705,7 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
-  /v1/orders/{orderId}/reviews:
+  /v1/orders/{id}/reviews:
     post:
       tags: [engagement]
       operationId: createReview
@@ -715,12 +715,7 @@ paths:
         else is a 409; a listing outside the order is a 400.
       x-farmish-rate-limit: sensitive
       parameters:
-        - name: orderId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+        - $ref: "#/components/parameters/OrderId"
       requestBody:
         required: true
         content:
@@ -2778,7 +2773,7 @@ components:
         detail a buyer needs. It never carries a phone number, an email
         address or any other contact detail: those come from the contact
         endpoint, and only when the seller opted in.
-      required: [id, slug, title, price, unit, region, district, itemState, category, promoted, seller, publishedAt, description, quantityAvailable, minOrderQty, isNegotiable, deliveryOptions, images, attributes, expiresAt, favoriteCount]
+      required: [id, slug, title, price, unit, region, district, itemState, category, promoted, seller, publishedAt, description, quantityAvailable, minOrderQty, isNegotiable, deliveryOptions, images, attributes, expiresAt, favoriteCount, rating]
       properties:
         id:
           type: string
@@ -2842,6 +2837,9 @@ components:
           type: integer
           format: int32
           minimum: 0
+        rating:
+          $ref: "#/components/schemas/SellerRating"
+          description: The seller's aggregate over visible reviews.
     ListingSearchResult:
       type: object
       required: [items, meta]

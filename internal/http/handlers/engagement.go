@@ -43,7 +43,7 @@ func (s Server) CreateReview(ctx context.Context, req api.CreateReviewRequestObj
 	}
 	// The validator enforces 1–5 before reaching here, so the narrowing is safe.
 	rating := int16(req.Body.Rating) //nolint:gosec // G115: validated 1-5 by the contract
-	review, err := s.Engagement.CreateReview(ctx, u.ID, req.OrderId, req.Body.ListingId, rating, comment)
+	review, err := s.Engagement.CreateReview(ctx, u.ID, req.Id, req.Body.ListingId, rating, comment)
 	var verr *validation.Error
 	switch {
 	case err == nil:
@@ -98,7 +98,7 @@ func (s Server) ListListingReviews(ctx context.Context, req api.ListListingRevie
 	for _, item := range items {
 		out = append(out, api.PublicReview{
 			Id: item.ID, Rating: int32(item.Rating), //nolint:gosec // G115: rating is 1-5 by CHECK
-			Comment: item.Comment,
+			Comment:      item.Comment,
 			ReviewerName: s.Engagement.ReviewerName(ctx, item.ReviewerID), CreatedAt: item.CreatedAt,
 		})
 	}

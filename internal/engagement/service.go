@@ -330,8 +330,8 @@ func toPublicSummary(row db.ListFavoriteListingsRow, media CoverStore) listings.
 	out := listings.PublicSummary{
 		ID: row.ID, Slug: row.Slug, Title: row.Title, PricePesewas: row.PricePesewas,
 		Unit: row.Unit, Region: row.Region, District: row.District, ItemState: row.ItemState,
-		Category: listings.CategoryRef{Slug: row.CategorySlug, Name: row.CategoryName},
-		Seller:   listings.SellerRef{Name: row.SellerName, Verified: row.SellerVerified},
+		Category:    listings.CategoryRef{Slug: row.CategorySlug, Name: row.CategoryName},
+		Seller:      listings.SellerRef{Name: row.SellerName, Verified: row.SellerVerified},
 		PublishedAt: derefTime(row.PublishedAt),
 	}
 	if key, ok := row.CoverKey.(string); ok && key != "" && media != nil {
