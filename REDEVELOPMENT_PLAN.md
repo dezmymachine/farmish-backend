@@ -332,7 +332,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 - [ ] Phase 22
 
 ### Frontend phases · [spec](docs/phases/frontend.md) (start after Phase 22 freezes the contract; F0–F2 may start after Phase 12)
-- [ ] **F0 Scaffold:** TanStack Start, TS strict, Tailwind v4 + shadcn, lint/test/e2e, `pnpm ci`, and a deploy-target ADR.
+- [x] **F0 Scaffold:** TanStack Start, TS strict, Tailwind v4 + shadcn, lint/test/e2e, `pnpm ci`, and a deploy-target ADR.
 - [ ] **F1 API client:** types generated from `api/openapi.yaml` (openapi-typescript + openapi-fetch), auth header, error envelope, `formatMoney`.
 - [ ] **F2 Auth:** Firebase social/email/phone (`signInWithPhoneNumber` + `RecaptchaVerifier`), a re-auth dialog, route guards.
 - [ ] **F3 Browse:** home, categories, search with filters, listing detail.
@@ -380,6 +380,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-28 | Phase 20a: order-bound reviews with buyer/stranger separation, terminal audited hides, idempotent favorites with exact counters, ratings on public surfaces | ADR-0032 |
 | 2026-09-28 | Phase 20b: listing/user reports with one-open-per-target and suspend/hide resolution, supply requests with the legacy-missing status machine, per-transition SMS and memoized spec parsing that saved the CI gate | ADR-0033 |
 | 2026-09-28 | Phase 21: private `/metrics` listener with route-template labels, log redaction by key and value proven against the raw call sites, audit gaps closed under a table-driven coverage test, per-user k6 load test against a production-guarded Paystack stub, mNotify key kept out of transport errors, daily mNotify balance check | ADR-0034 |
+| 2026-10-09 | F0 scaffold choices (Cloudflare target, ESLint+Prettier, Spectrum-visual-only theming, pinned toolchain) | ADR-0035 |
 
 ## 9. Progress log
 | Date | Phase | PR/commit | Notes |
@@ -411,6 +412,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-28 | 20a | Phase 20a commits | `make ci` green. Order-bound reviews (completed-only, unique per order/listing/reviewer, hidden excluded from aggregates), idempotent favorites with exact counters incl. concurrent adds, seller ratings on public surfaces. Manual QA against the running API verified create/duplicate-409, public list with summary, idempotent favorite 204s with counter 1, flagged unavailable, hide with exclusion, and zero PII in logs. See ADR-0032 and `docs/reviews/phase-20a.md` |
 | 2026-09-28 | 20b | Phase 20b commits | `make ci` green. Reports (exactly-one-target, one open per reporter/target, admin resolve with suspend/hide/dismiss plus audits) and supply requests (parent-category lines, unit/phone/date validation, collision-retried SUP numbers, full status table with per-move SMS). CI timed out until the parsed spec was memoized (10:07 → 3:21). Manual QA verified report/suspend, supply create/cancel/admin moves and zero PII in logs. See ADR-0033 and `docs/reviews/phase-20b.md` |
 | 2026-09-28 | 21 | Phase 21 commits | `make ci` green. Private `/metrics` listener (HTTP by route template, DB pool, River depth and events, payment/payout/refund counters, ledger violations, rate-limit denials and fallbacks) with the listener bound at boot; log redaction by key and value proven by a test that reads the raw logs of a phone sign-in, checkout, dispute, refund and payout run; audit rows for payment success, refund queued/processed, payout created/succeeded, dispute opened and admin role changes under a table-driven coverage test; security headers on every response; `make loadtest` (browse p95 36 ms, checkout p95 23 ms, webhook replays p95 4 ms, 0% failed) against a local API and a production-guarded Paystack stub; `docs/runbooks/alerts.md` with ten alerts; a daily mNotify balance check, and mNotify transport errors no longer carry the API key. See ADR-0034 |
+| 2026-10-09 | F0 | Frontend F0 commit | `pnpm ci` green (typecheck, lint, format, 4 unit tests, build, Playwright smoke). SSR home with `/healthz` badge (graceful unreachable fallback verified by curl). Spectrum-visual-only theme + `docs/design-system.md`. See ADR-0035 and `docs/reviews/frontend-F0.md` |
 
 ## 10. Backlog (not scheduled)
 - Document the River test-fixture full-registry rule in `docs/ENGINEERING_GUIDE.md`: a `Work:true` test client whose registry lacks a worker kind its flow enqueues stalls the available job (seen with `notify.sms` on River v0.47.0). Found in Phase 16
