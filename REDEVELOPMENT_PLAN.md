@@ -333,7 +333,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 
 ### Frontend phases · [spec](docs/phases/frontend.md) (start after Phase 22 freezes the contract; F0–F2 may start after Phase 12)
 - [x] **F0 Scaffold:** TanStack Start, TS strict, Tailwind v4 + shadcn, lint/test/e2e, `pnpm ci`, and a deploy-target ADR.
-- [ ] **F1 API client:** types generated from `api/openapi.yaml` (openapi-typescript + openapi-fetch), auth header, error envelope, `formatMoney`.
+- [x] **F1 API client:** types generated from `api/openapi.yaml` (openapi-typescript + openapi-fetch), auth header, error envelope, `formatMoney`.
 - [ ] **F2 Auth:** Firebase social/email/phone (`signInWithPhoneNumber` + `RecaptchaVerifier`), a re-auth dialog, route guards.
 - [ ] **F3 Browse:** home, categories, search with filters, listing detail.
 - [ ] **F4 Sell:** seller onboarding, category-driven listing form, R2 uploads, my listings.
@@ -413,6 +413,7 @@ farmish-frontend (TanStack Start) ──HTTPS──▶ Cloudflare (DNS/CDN/WAF/T
 | 2026-09-28 | 20b | Phase 20b commits | `make ci` green. Reports (exactly-one-target, one open per reporter/target, admin resolve with suspend/hide/dismiss plus audits) and supply requests (parent-category lines, unit/phone/date validation, collision-retried SUP numbers, full status table with per-move SMS). CI timed out until the parsed spec was memoized (10:07 → 3:21). Manual QA verified report/suspend, supply create/cancel/admin moves and zero PII in logs. See ADR-0033 and `docs/reviews/phase-20b.md` |
 | 2026-09-28 | 21 | Phase 21 commits | `make ci` green. Private `/metrics` listener (HTTP by route template, DB pool, River depth and events, payment/payout/refund counters, ledger violations, rate-limit denials and fallbacks) with the listener bound at boot; log redaction by key and value proven by a test that reads the raw logs of a phone sign-in, checkout, dispute, refund and payout run; audit rows for payment success, refund queued/processed, payout created/succeeded, dispute opened and admin role changes under a table-driven coverage test; security headers on every response; `make loadtest` (browse p95 36 ms, checkout p95 23 ms, webhook replays p95 4 ms, 0% failed) against a local API and a production-guarded Paystack stub; `docs/runbooks/alerts.md` with ten alerts; a daily mNotify balance check, and mNotify transport errors no longer carry the API key. See ADR-0034 |
 | 2026-10-09 | F0 | Frontend F0 commit | `pnpm ci` green (typecheck, lint, format, 4 unit tests, build, Playwright smoke). SSR home with `/healthz` badge (graceful unreachable fallback verified by curl). Spectrum-visual-only theme + `docs/design-system.md`. See ADR-0035 and `docs/reviews/frontend-F0.md` |
+| 2026-10-09 | F1 | Frontend F1 commit | `pnpm ci` green (drift check, 21 unit tests, build, smoke). Generated types (72 paths), lazy Bearer client, `qk` keys + tiers, QueryClient auth net, money/errors libs, `docs/data-fetching.md`. See `docs/reviews/frontend-F1.md` |
 
 ## 10. Backlog (not scheduled)
 - Document the River test-fixture full-registry rule in `docs/ENGINEERING_GUIDE.md`: a `Work:true` test client whose registry lacks a worker kind its flow enqueues stalls the available job (seen with `notify.sms` on River v0.47.0). Found in Phase 16
