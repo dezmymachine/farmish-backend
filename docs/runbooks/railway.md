@@ -103,3 +103,7 @@ Railway's variables. Variable names and defaults follow plan §7 and
 - After the first deploy: `/readyz` green, logged `client_ip` correct,
   `make seed` run against prod (catalog), owner admin granted with
   `make grant-admin`.
+
+## Deploy log
+
+- 2026-10-10: redeploy trigger after Dockerfile cache-mount fix (no code change).
