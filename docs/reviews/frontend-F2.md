@@ -128,3 +128,13 @@ none (contract read-only; F3+ waits for the Phase 22 freeze).
 ## Backlog additions
 
 none (F9 already owns monitoring/redirects; no new items found).
+
+## Follow-up (2026-10-10, frontend commits)
+
+Owner testing caught a "Loading your account…" flash before the
+logged-out redirect on `/account`. Fixed the same day: a `session-hint`
+localStorage flag lets the guard redirect synchronously when no session
+can exist (null render while a hinted session restores, so hydration
+still matches), plus `refreshUser()` after sign-in so fresh sessions
+never bounce through sign-in. Verified with 25ms DOM polling (zero
+flashes) and a full `pnpm run ci` (47 unit, 6 e2e passed).
