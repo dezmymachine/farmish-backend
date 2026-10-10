@@ -134,7 +134,9 @@ none (F9 already owns monitoring/redirects; no new items found).
 Owner testing caught a "Loading your account…" flash before the
 logged-out redirect on `/account`. Fixed the same day: a `session-hint`
 localStorage flag lets the guard redirect synchronously when no session
-can exist (null render while a hinted session restores, so hydration
-still matches), plus `refreshUser()` after sign-in so fresh sessions
-never bounce through sign-in. Verified with 25ms DOM polling (zero
-flashes) and a full `pnpm run ci` (47 unit, 6 e2e passed).
+can exist, plus `refreshUser()` after sign-in so fresh sessions never
+bounce through sign-in. A follow-up then restored the loading line
+everywhere (blank reads as broken) behind a mount gate, which is what
+actually keeps the first client paint identical to SSR — redirecting a
+paint early reintroduces the hydration mismatch. Verified with DOM
+polling and full `pnpm run ci` runs (47 unit, 6 e2e passed).
